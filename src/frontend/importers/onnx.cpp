@@ -484,6 +484,21 @@ static void parse_graph_node(const onnx::NodeProto &node,
   std::cout << "------------------[node end]--------------------" << std::endl;
 }
 
+static void parse_graph_data(const onnx::TensorProto &initializer,
+                             mlir::MLIRContext *context) {
+  std::cout << std::endl;
+  std::cout << "------------------[data begin]------------------" << std::endl;
+  std::cout << "Name: \x1B[31m" << initializer.name() << "\033[0m\t\t"
+            << std::endl;
+  std::cout << "    DataType: " << onnx_datatype_tostr(initializer.data_type())
+            << std::endl;
+
+  onnx_tensorproto_to_mlir(initializer, context);
+
+  std::cout << "------------------[data end]--------------------" << std::endl;
+  std::cout << std::endl;
+}
+
 /*
 // Sort graph into lexicographically smallest topological ordering.
 // Returns true if sorted succesfully and false otherwise.
@@ -618,21 +633,15 @@ ONNXImporter::ONNXImporter() {
 
 void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
   std::cout << std::endl;
+
+  // nodes
   for (const auto &node : graph_proto.node()) {
     parse_graph_node(node, mlirCtx.get());
   }
-  printf("\n\n");
-  for (const auto &initializer : graph_proto.initializer()) {
-    printf("ENTRY [%s] size:[%i]\n", initializer.name().c_str(),
-           initializer.dims().size());
-    printf("DIM");
-    /// https://github.com/onnx/onnx/blob/main/docs/IR.md
-    for (const auto &d : initializer.dims()) {
-      printf(" %lu", d);
-    }
-    printf("\n");
 
-    printf("\n");
+  // initializers
+  for (const auto &initializer : graph_proto.initializer()) {
+    parse_graph_data(initializer, mlirCtx.get());
   }
 }
 
