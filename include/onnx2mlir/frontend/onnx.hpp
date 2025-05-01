@@ -48,8 +48,8 @@ public:
 protected:
   void import(const std::string &filepath) override;
 private:
-  // parse the graph inputs & outputs
-  void parse_graph_inputs_outputs(const onnx::GraphProto &graph_proto);
+  // parse the graph ins & outs
+  void parse_graph_io(const onnx::GraphProto &graph_proto);
   // parse the graph nodes
   void parse_graph_nodes(const onnx::GraphProto &graph_proto);
 };

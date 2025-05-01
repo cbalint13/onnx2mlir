@@ -55,10 +55,9 @@ onnx_attrtype_tostr(const onnx::AttributeProto_AttributeType attr_type) {
   }
 }
 
-// Helper function to convert int32_t (TensorProto_DataType) to a string
 static std::string onnx_datatype_tostr(const int32_t data_type_int) {
-  onnx::TensorProto::DataType data_type =
-      static_cast<onnx::TensorProto::DataType>(data_type_int);
+  auto data_type = static_cast<onnx::TensorProto::DataType>(data_type_int);
+
   switch (data_type) {
   case onnx::TensorProto::FLOAT:
     return "FLOAT";
@@ -113,9 +112,7 @@ static std::string onnx_datatype_tostr(const int32_t data_type_int) {
 
 static mlir::Type onnx_datatype_to_mlir_type(const int32_t data_type_int,
                                              mlir::MLIRContext *context) {
-  // Cast the integer to the ONNX enum type
-  onnx::TensorProto::DataType onnx_type =
-      static_cast<onnx::TensorProto::DataType>(data_type_int);
+  auto onnx_type = static_cast<onnx::TensorProto::DataType>(data_type_int);
 
   switch (onnx_type) {
   case onnx::TensorProto::FLOAT:
@@ -406,7 +403,6 @@ void parse_node_attributes(const onnx::AttributeProto &attribute,
         << std::endl;
     std::cout << "ERROR: Parsing of this type is not implemented." << std::endl;
     exit(-1);
-    break;
   case onnx::AttributeProto::FLOATS:
     std::cout << "    Value (Floats): [";
     for (int i = 0; i < attribute.floats_size(); ++i) {
@@ -464,21 +460,18 @@ void parse_node_attributes(const onnx::AttributeProto &attribute,
               << std::endl;
     std::cout << "ERROR: Parsing of this type is not implemented." << std::endl;
     exit(-1);
-    break;
   case onnx::AttributeProto::TYPE_PROTOS:
     std::cout << "    Value (Type Protos): (Type Proto details not printed in "
                  "this function)"
               << std::endl;
     std::cout << "ERROR: Parsing of this type is not implemented." << std::endl;
     exit(-1);
-    break;
   case onnx::AttributeProto::UNDEFINED:
   default:
     std::cout << "    Value: (Unsupported or Undefined Attribute Type)"
               << std::endl;
     std::cout << "ERROR: Parsing of this type is not implemented." << std::endl;
     exit(-1);
-    break;
   }
 }
 
@@ -661,8 +654,7 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
   }
 }
 
-void ONNXImporter::parse_graph_inputs_outputs(
-    const onnx::GraphProto &graph_proto) {
+void ONNXImporter::parse_graph_io(const onnx::GraphProto &graph_proto) {
 
   std::vector<mlir::Type> inputs;
 
@@ -748,7 +740,11 @@ void ONNXImporter::import(const std::string &filepath) {
    * MLIR ONNX
    */
 
-  parse_graph_inputs_outputs(graph_proto);
+  // contrust func ins & outs
+  parse_graph_io(graph_proto);
+
+  // pupulate body operators
+  parse_graph_nodes(graph_proto);
 
   // auto func = module->lookupSymbol<mlir::func::FuncOp>("main");
   // mlir::Block *block = func.addEntryBlock();
