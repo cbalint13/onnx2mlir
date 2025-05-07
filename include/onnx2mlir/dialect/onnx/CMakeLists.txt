@@ -3,13 +3,14 @@ add_mlir_doc(OnnxDialect OnnxDialect onnx/ -gen-dialect-doc)
 add_mlir_doc(OnnxOps OnnxOps onnx/ -gen-op-doc)
 add_mlir_doc(OnnxTypes OnnxTypes onnx/ -gen-type-doc)
 
+set(ONNX_MLIR_OPS_GEN "${CMAKE_SOURCE_DIR}/tools/gen_onnx_dia.py")
 set(ONNX_MLIR_OPS_INC "${CMAKE_CURRENT_SOURCE_DIR}/OnnxOps.td.inc")
 
 add_custom_command(
   OUTPUT ${ONNX_MLIR_OPS_INC}
-  COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/gen_onnx_dia.py
-  ARGS
-    ${ONNX_MLIR_OPS_INC}
+  COMMAND ${Python3_EXECUTABLE} ${ONNX_MLIR_OPS_GEN}
+  ARGS ${ONNX_MLIR_OPS_INC}
+  DEPENDS ${ONNX_MLIR_OPS_GEN}
   COMMENT "Generating ONNX MLIR Ops using gen_onnx_dia.py"
 )
 
