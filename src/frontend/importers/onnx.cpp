@@ -316,7 +316,7 @@ onnx_tensorproto_to_mlir(const onnx::TensorProto &tensor,
 }
 
 static mlir::Type
-onnx_valuetype_to_mlir_type(const onnx::ValueInfoProto &value_proto,
+onnx_valueinfo_to_mlir_type(const onnx::ValueInfoProto &value_proto,
                             mlir::MLIRContext *context) {
   const auto &type_proto = value_proto.type();
 
@@ -341,8 +341,7 @@ onnx_valuetype_to_mlir_type(const onnx::ValueInfoProto &value_proto,
           dataShape.push_back(dim.dim_value());
         } else if (dim.has_dim_param()) {
           std::cout << dim.dim_param();
-          std::cout << "ERROR: Tensor has no dimension value." << std::endl;
-          exit(-1);
+          dataShape.push_back(1);
         } else {
           std::cout << "?";
           std::cout << "ERROR: Tensor has unknown dimension." << std::endl;
@@ -371,33 +370,36 @@ onnx_valuetype_to_mlir_type(const onnx::ValueInfoProto &value_proto,
   }
 }
 
-static mlir::ElementsAttr
-parse_node_attribute(const onnx::AttributeProto &attribute,
-                     mlir::MLIRContext *context,
-                     const mlir::Attribute &eAttr = {}) {
+static mlir::Attribute get_node_attribute(const onnx::AttributeProto &attribute,
+                                          mlir::MLIRContext *context,
+                                          const mlir::Attribute &eAttr = {}) {
   std::cout << "    Name: " << attribute.name() << std::endl;
   std::cout << "    Type: " << onnx_attrtype_tostr(attribute.type())
             << std::endl;
 
-  mlir::ElementsAttr denseAttrs;
+  mlir::OpBuilder builder(context);
+
+  mlir::StringAttr strAttr;
+  mlir::ElementsAttr denseAttr;
 
   switch (attribute.type()) {
   case onnx::AttributeProto::FLOAT:
-    denseAttrs = get_mlir_tensor(std::vector<float>({attribute.f()}),
-                                 llvm::ArrayRef<long int>({1}),
-                                 mlir::Float32Type::get(context), eAttr);
+    denseAttr = get_mlir_tensor(std::vector<float>({attribute.f()}),
+                                llvm::ArrayRef<long int>({1}),
+                                mlir::Float32Type::get(context), eAttr);
     break;
   case onnx::AttributeProto::INT:
-    denseAttrs = get_mlir_tensor(std::vector<long int>({attribute.i()}),
-                                 llvm::ArrayRef<long int>({1}),
-                                 mlir::IntegerType::get(context, 64), eAttr);
+    denseAttr = get_mlir_tensor(std::vector<long int>({attribute.i()}),
+                                llvm::ArrayRef<long int>({1}),
+                                mlir::IntegerType::get(context, 64), eAttr);
     break;
   case onnx::AttributeProto::STRING:
     std::cout << "    Value: \"" << attribute.s() << "\"" << std::endl;
+    strAttr = mlir::StringAttr::get(context, attribute.s());
     break;
   case onnx::AttributeProto::TENSOR:
     std::cout << "    Value (Tensor):" << std::endl;
-    denseAttrs = onnx_tensorproto_to_mlir(attribute.t(), context, eAttr);
+    denseAttr = onnx_tensorproto_to_mlir(attribute.t(), context, eAttr);
     break;
   case onnx::AttributeProto::GRAPH:
     std::cout
@@ -406,12 +408,12 @@ parse_node_attribute(const onnx::AttributeProto &attribute,
     std::cout << "ERROR: Parsing of this type is not implemented." << std::endl;
     exit(-1);
   case onnx::AttributeProto::FLOATS:
-    denseAttrs = get_mlir_tensor(
+    denseAttr = get_mlir_tensor(
         attribute.floats(), llvm::ArrayRef<long int>({attribute.floats_size()}),
         mlir::Float32Type::get(context), eAttr);
     break;
   case onnx::AttributeProto::INTS:
-    denseAttrs = get_mlir_tensor(
+    denseAttr = get_mlir_tensor(
         attribute.ints(), llvm::ArrayRef<long int>({attribute.ints_size()}),
         mlir::IntegerType::get(context, 64), eAttr);
     break;
@@ -468,15 +470,22 @@ parse_node_attribute(const onnx::AttributeProto &attribute,
     exit(-1);
   }
 
-  mlir::OpPrintingFlags flags;
-  flags.elideLargeElementsAttrs(16);
-  llvm::outs() << "      Data: ";
-  mlir::AsmState state(context, flags);
-  denseAttrs.print(llvm::outs(), state);
-  llvm::outs() << "\n";
-  llvm::outs().flush();
+  if (denseAttr) {
+    mlir::OpPrintingFlags flags;
+    flags.elideLargeElementsAttrs(16);
+    llvm::outs() << "      Data: ";
+    mlir::AsmState state(context, flags);
+    denseAttr.print(llvm::outs(), state);
+    llvm::outs() << "\n";
+    llvm::outs().flush();
+  }
 
-  return denseAttrs;
+  if (denseAttr)
+    return denseAttr;
+  else if (strAttr)
+    return strAttr;
+
+  return nullptr;
 }
 
 static void print_graph_node(const onnx::NodeProto &node,
@@ -508,7 +517,7 @@ static void print_graph_node(const onnx::NodeProto &node,
 
   // Op attributes
   for (const auto &attribute : node.attribute()) {
-    parse_node_attribute(attribute, context);
+    get_node_attribute(attribute, context);
   }
 
   std::cout << "------------------[node end]--------------------" << std::endl;
@@ -529,24 +538,21 @@ static void print_graph_data(const onnx::TensorProto &initializer,
   std::cout << std::endl;
 }
 
-static mlir::Operation *createOnnxOp(mlir::OpBuilder &builder,
-                                     const std::string &opName,
-                                     std::vector<mlir::Type> &types,
-                                     std::vector<mlir::Value> &values,
-                                     std::vector<mlir::NamedAttribute> &attrs) {
-
+static mlir::Operation *
+createOnnxOp(mlir::OpBuilder &builder, const std::string &opName,
+             const std::vector<mlir::Type> &types = {},
+             const std::vector<mlir::Value> &values = {},
+             const std::vector<mlir::NamedAttribute> &attrs = {}) {
+  // setup operation
   mlir::StringAttr opNameStr = builder.getStringAttr("onnx2mlir.onnx." + opName);
   mlir::OperationState state(builder.getUnknownLoc(), opNameStr);
 
-  for (auto type : types) {
+  for (auto type : types)
     state.addTypes(type);
-  }
-  for (auto value : values) {
+  for (auto value : values)
     state.addOperands(value);
-  }
-  for (auto attr : attrs) {
+  for (auto attr : attrs)
     state.addAttributes(attr);
-  }
 
   mlir::Operation *op = builder.create(state);
 
@@ -573,6 +579,7 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
   std::cout << std::endl;
 
   // i/o map storage
+  std::map<std::string, std::shared_ptr<onnx::ValueInfoProto>> vis;
   std::multimap<std::string, std::shared_ptr<onnx::NodeProto>> node_inputs;
   std::multimap<std::string, std::shared_ptr<onnx::NodeProto>> node_outputs;
 
@@ -592,6 +599,11 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
         node_outputs.insert({output_name, node_ptr});
       }
     }
+  }
+  // map value infos
+  for (const auto &vi : graph_proto.value_info()) {
+    auto vi_ptr = std::make_shared<onnx::ValueInfoProto>(vi);
+    vis.insert({vi.name(), vi_ptr});
   }
 
   // initializers map storage
@@ -639,134 +651,161 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
 
   mlir::OpBuilder builder(mlirCtx.get());
 
-  // map ops outputs
-  std::map<std::string, std::shared_ptr<mlir::Operation *>> ops_outputs;
+  // map ops i/o
+  std::map<std::string, std::shared_ptr<mlir::Operation *>> ops_by_name;
+  std::multimap<std::string, std::shared_ptr<mlir::Operation *>> ops_by_inputs;
+  std::multimap<std::string, std::shared_ptr<mlir::Operation *>> ops_by_outputs;
 
   // add constant nodes
   for (const auto &node : graph_proto.node()) {
     if (node.op_type() == "Constant") {
       // DEBUG
-      print_graph_node(node, mlirCtx.get());
+      // print_graph_node(node, mlirCtx.get());
+
+      // attributes
+      std::vector<mlir::NamedAttribute> attrs;
+      auto value = get_node_attribute(node.attribute()[0], mlirCtx.get());
+      mlir::NamedAttribute attr(node.attribute()[0].name(), value);
+      attrs.push_back(attr);
+      // origin
       auto nameVal = builder.getStringAttr(node.name());
-      mlir::NamedAttribute namedAttr("onnx.node.name", nameVal);
-      mlir::Attribute encodedAttr = builder.getDictionaryAttr(namedAttr);
-      auto denseAttr =
-          //          parse_node_attribute(node.attribute()[0], mlirCtx.get(),
-          //          encodedAttr);
-          parse_node_attribute(node.attribute()[0], mlirCtx.get());
+      mlir::NamedAttribute label("onnx.node.name", nameVal);
+      attrs.push_back(label);
+      // result type
+      auto types = std::vector<mlir::Type>(
+          {mlir::dyn_cast<mlir::DenseElementsAttr>(value).getType()});
 
-      //      auto op = builder.create<onnx2mlir::dialect::onnx::ConstantOp>(
-      //          builder.getUnknownLoc(), denseAttr.getType(), denseAttr);
+      auto op = createOnnxOp(builder, "Constant", types, {}, attrs);
 
-      mlir::StringAttr opName = builder.getStringAttr("onnx2mlir.onnx.Constant");
-      mlir::OperationState state(builder.getUnknownLoc(), opName);
-
-      //      auto prop = state.getOrAddProperties();
-
-      mlir::ValueRange operands = {};
-      mlir::TypeRange resultTypes = denseAttr.getType();
-      mlir::ArrayRef<mlir::NamedAttribute> attr = {
-          builder.getNamedAttr("value", denseAttr)};
-
-      //      state.addOperands(operands);
-      //      state.addTypes(resultTypes);
-      //      state.addAttributes(attr);
-      //      state.addAttributes(namedAttr);
-
-      mlir::Operation *op = builder.create(state);
-
-      block->push_back(op);
-      // store output
-      //      auto res_ptr = std::make_shared<mlir::Operation *>(op);
-      //      ops_outputs.insert({node.output()[0], res_ptr});
-    }
-  }
-  /*
-    // add the initializers
-    for (const auto &initializer : graph_proto.initializer()) {
-      // DEBUG
-      // parse_graph_data(initializer, mlirCtx.get());
-      auto nameVal = builder.getStringAttr(initializer.name());
-      mlir::NamedAttribute namedAttr("onnx.init.name", nameVal);
-      mlir::Attribute encodedAttr = builder.getDictionaryAttr(namedAttr);
-      auto denseAttr =
-          onnx_tensorproto_to_mlir(initializer, mlirCtx.get(), encodedAttr);
-      auto op = builder.create<onnx2mlir::dialect::onnx::ConstantOp>(
-          builder.getUnknownLoc(), denseAttr.getType(), denseAttr);
       block->push_back(op);
       // store output
       auto res_ptr = std::make_shared<mlir::Operation *>(op);
-      ops_outputs.insert({initializer.name(), res_ptr});
+      ops_by_outputs.insert({node.output()[0], res_ptr});
     }
+  }
+  // add the initializers
+  for (const auto &initializer : graph_proto.initializer()) {
+    // DEBUG
+    // parse_graph_data(initializer, mlirCtx.get());
 
+    // attributes
+    std::vector<mlir::NamedAttribute> attrs;
+    auto value = onnx_tensorproto_to_mlir(initializer, mlirCtx.get());
+    mlir::NamedAttribute attr("value", value);
+    attrs.push_back(attr);
+    // origin
+    auto nameVal = builder.getStringAttr(initializer.name());
+    mlir::NamedAttribute labels("onnx.init.name", nameVal);
+    attrs.push_back(labels);
+    // result type
+    auto types = std::vector<mlir::Type>({value.getType()});
 
-    mlir::Value arg0 = *func_inputs.begin()->second;
+    auto op = createOnnxOp(builder, "Constant", types, {}, attrs);
 
-    for (const auto &node : graph_proto.node()) {
-      if ((node.op_type() != "Constant") &&
-          (node.op_type() != "Concat") &&
-          (node.op_type() != "Resize") &&
-          (node.op_type() != "Einsum") &&
-  //        (node.op_type() != "Conv") &&
-          (node.op_type() != "Slice")
-         ) {
+    block->push_back(op);
+    // map to i/o
+    auto res_ptr = std::make_shared<mlir::Operation *>(op);
+    ops_by_outputs.insert({initializer.name(), res_ptr});
+  }
+
+  // add nodes
+  for (const auto &node : graph_proto.node()) {
+    if (node.op_type() != "Constant") {
+      // DEBUG
+      // print_graph_node(node, mlirCtx.get());
+      // attributes
+      std::vector<mlir::NamedAttribute> attrs;
+      for (const auto &attribute : node.attribute()) {
+        auto value = get_node_attribute(attribute, mlirCtx.get());
+        mlir::NamedAttribute attr(attribute.name(), value);
+        attrs.push_back(attr);
+      }
+      // origin
+      auto nameVal = builder.getStringAttr(node.name());
+      mlir::NamedAttribute labels("onnx.node.name", nameVal);
+      attrs.push_back(labels);
+      printf("DBG [%s]\n", node.op_type().c_str());
+      // result types
+      std::vector<mlir::Type> types;
+      for (const auto &out : node.output()) {
+        auto it = vis.find(out);
+        if (it != vis.end()) {
+          auto type = onnx_valueinfo_to_mlir_type(*(it->second), mlirCtx.get());
+          types.push_back(type);
+        }
+      }
+
+      // operands (dummy)
+      std::vector<mlir::Value> operands;
+      for (int i = 0; i < node.input().size(); ++i) {
+        auto arg = *func_inputs.begin()->second;
+        operands.push_back(arg);
+      }
+
+      auto op = createOnnxOp(builder, node.op_type(), types, operands, attrs);
+      block->push_back(op);
+
+      // map to i/o
+      auto op_ptr = std::make_shared<mlir::Operation *>(op);
+      for (const auto &inp : node.input())
+        ops_by_inputs.insert({inp, op_ptr});
+      for (const auto &out : node.output())
+        ops_by_outputs.insert({out, op_ptr});
+      ops_by_name.insert({node.name(), op_ptr});
+    }
+  }
+
+  // set nodes inputs
+  for (const auto &node : graph_proto.node()) {
+
+    if (node.input().size() == 0)
+      continue;
+
+    auto node_op = *ops_by_name[node.name()];
+
+    // set all operands inputs
+    for (int idx = 0; idx < node.input().size(); ++idx) {
+
+      // unused
+      if (node.input()[idx].size() == 0)
+        continue;
+
+      // map node input to main func input
+      auto f_it = func_inputs.find(node.input()[idx]);
+      if (f_it != func_inputs.end()) {
         print_graph_node(node, mlirCtx.get());
+        printf("DBG node.input[%s]\n", node.input()[idx].c_str());
+        printf("HERE tie to func\n");
+        mlir::Value arg = *(f_it->second);
 
+        arg.print(llvm::outs());
 
-        printf("DBG [%s][%i]\n", node.op_type().c_str(), node.input().size());
-        std::vector<mlir::Value> valRange;
-        for (const auto &input_name : node.input()) {
-          if (input_name.size()) {
-            valRange.push_back(arg0);
-          } else {
-          }
-        }
-        auto op = onnx2mlir::dialect::onnx::createOnnxOp(node.op_type(), builder,
-  arg0.getType(), valRange); block->push_back(op);
-  //      break;
+        node_op->setOperand(idx, arg);
+      }
+
+      // map node input to upper node output
+      auto o_it = ops_by_outputs.find(node.input()[idx]);
+      if (o_it != ops_by_outputs.end()) {
+        print_graph_node(node, mlirCtx.get());
+        printf("DBG node.input[%s]\n", node.input()[idx].c_str());
+        printf("HERE tie to ops num_oper[%i]\n", node_op->getNumOperands());
+        auto op = *(o_it->second);
+        mlir::Value arg = op->getOpResult(0);
+
+        arg.print(llvm::outs());
+
+        node_op->setOperand(idx, arg);
+        continue;
       }
     }
-  */
-  /*
-    // add nodes
-    // start with main inputs
-    for (const auto &in : func_inputs) {
 
-      onnx::NodeProto node;
-      std::string inp_name = in.first;
-
-      while (true) {
-        // search nodes with the input
-        for (auto [it, rend] = node_inputs.equal_range(inp_name); it != rend;
-             ++it) {
-          node = *it->second;
-          print_graph_node(node, mlirCtx.get());
-
-          // TODO: add this Op to MLIR graph
-
-          auto arg0 = *func_inputs[inp_name];
-          auto arg1 = *ops_outputs["/Constant_output_0"];
-          auto op = builder.create<onnx2mlir::dialect::onnx::UnsqueezeOp>(
-              builder.getUnknownLoc(), arg0.getType(), arg0, arg0);
-          // change to real
-          op.getOperation()->getOpOperand(1).assign(arg1->getOpResult(0));
-          block->push_back(op);
-
-          inp_name = node.output()[0];
-        }
-
-  //      // erase processed
-        node_inputs.erase(old_name);
-        printf("DBG [%lu]\n", node_inputs.size());
-
-        // terminate
-        if (func_outputs.count(inp_name)) {
-          // TODO: stop+ret when node.output() == func_outputs
-          break;
-        }
+    // erase unused inputs
+    for (int idx = 0; idx < node.input().size(); ++idx) {
+      if (node.input()[idx].size() == 0) {
+        node_op->eraseOperand(idx);
       }
     }
-  */
+  }
 }
 
 void ONNXImporter::parse_graph_io(const onnx::GraphProto &graph_proto) {
@@ -779,7 +818,7 @@ void ONNXImporter::parse_graph_io(const onnx::GraphProto &graph_proto) {
     std::cout << "  Name: " << input.name() << std::endl;
     if (input.has_type()) {
       std::cout << "  Type: " << onnx_typecase_tostr(input.type().value_case());
-      inputs.push_back(onnx_valuetype_to_mlir_type(input, mlirCtx.get()));
+      inputs.push_back(onnx_valueinfo_to_mlir_type(input, mlirCtx.get()));
     } else {
       std::cout << "ERROR: Type Not Specified.";
       exit(-1);
@@ -796,7 +835,7 @@ void ONNXImporter::parse_graph_io(const onnx::GraphProto &graph_proto) {
     if (output.has_type()) {
       std::cout << "  Type: "
                 << onnx_typecase_tostr(output.type().value_case());
-      outputs.push_back(onnx_valuetype_to_mlir_type(output, mlirCtx.get()));
+      outputs.push_back(onnx_valueinfo_to_mlir_type(output, mlirCtx.get()));
     } else {
       std::cout << "ERROR: Type Not Specified.";
       exit(-1);

@@ -139,7 +139,7 @@ def main():
   # iterate Ops
   for schema in defs.get_all_schemas_with_history():
 
-#   if schema.name == "Adagrad":
+#   if schema.name == "Resize":
 #   if schema.name == "Constant":
    #if schema.name == "NonMaxSuppression":
 #   if (schema.name == "Add") or \
