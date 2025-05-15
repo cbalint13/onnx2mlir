@@ -23,14 +23,15 @@
  *****************************************************************************/
 
 /*!
- * \file OnnxTypes.hpp
+ * \file OnnxInterface.hpp
  *
  */
 
-#ifndef ONNX2MLIR_DIALECT_ONNX_ONNXTYPES_HPP_
-#define ONNX2MLIR_DIALECT_ONNX_ONNXTYPES_HPP_
+#ifndef ONNX2MLIR_DIALECT_ONNX_ONNXINTERFACE_HPP_
+#define ONNX2MLIR_DIALECT_ONNX_ONNXINTERFACE_HPP_
 
-#define GET_TYPEDEF_CLASSES
-#include "onnx2mlir/dialect/onnx/OnnxTypes.h.inc"
+#include <mlir/IR/OpDefinition.h>
+
+#include "onnx2mlir/dialect/onnx/OnnxInterface.h.inc"
 
 #endif // ONNX2MLIR_DIALECT_ONNX_ONNXTYPES_HPP_

@@ -30,16 +30,24 @@
 #ifndef ONNX2MLIR_FRONTEND_ONNXDIALECT_TD_
 #define ONNX2MLIR_FRONTEND_ONNXDIALECT_TD_
 
+include "mlir/IR/DialectBase.td"
 include "mlir/IR/OpBase.td"
 
 def Onnx_Dialect : Dialect {
   let name = "onnx";
   let summary = "A dialect for ONNX representation";
   let cppNamespace = "::onnx2mlir::dialect::onnx";
+  let useDefaultTypePrinterParser = 1;
+  let useDefaultAttributePrinterParser = 0;
   let extraClassDeclaration = [{
     private:
       void registerOps();
       void registerTypes();
+    public:
+      ::mlir::Attribute parseAttribute(::mlir::DialectAsmParser &parser,
+                                     ::mlir::Type type) const override;
+      void printAttribute(::mlir::Attribute attr,
+                          ::mlir::DialectAsmPrinter &printer) const override;
     }];
 }
 

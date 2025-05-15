@@ -1,6 +1,7 @@
-#include "mlir/IR/Builders.h"
-#include "mlir/IR/DialectImplementation.h"
-#include "llvm/ADT/TypeSwitch.h"
+#include <mlir/IR/Builders.h>
+#include <mlir/IR/DialectImplementation.h>
+#include <mlir/IR/Types.h>
+#include <llvm/ADT/TypeSwitch.h>
 
 #include "onnx2mlir/dialect/onnx/OnnxDialect.hpp"
 #include "onnx2mlir/dialect/onnx/OnnxTypes.hpp"

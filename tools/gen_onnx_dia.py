@@ -139,9 +139,9 @@ def main():
   # iterate Ops
   for schema in defs.get_all_schemas_with_history():
 
-#   if schema.name == "Resize":
+#   if schema.name == "Slice":
 #   if schema.name == "Constant":
-   #if schema.name == "NonMaxSuppression":
+#   if schema.name == "NonMaxSuppression":
 #   if (schema.name == "Add") or \
 #      (schema.name == "Constant") or \
 #      (schema.name == "Split") or \
@@ -151,10 +151,15 @@ def main():
     if schema.since_version != max(ops_versions[schema.name]):
       continue
 
+    opinterfaces = "Pure, OperandCountInfo"
+    if schema.name == "Constant":
+      opinterfaces += ", ConstantLike"
+
     # definition
     inc.write(f'\n')
     inc.write(f'/// {schema.name} [v{schema.since_version}]\n')
-    inc.write(f'def Onnx_{schema.name}Op : Onnx_Op<"{schema.name}", []> {{\n')
+#    inc.write(f'def Onnx_{schema.name}Op : Onnx_Op<"{schema.name}", [Pure, OpInterface<"OperandCountInfo">]> {{\n')
+    inc.write(f'def Onnx_{schema.name}Op : Onnx_Op<"{schema.name}", [{opinterfaces}]> {{\n')
     inc.write(f'  let summary = "ONNX {schema.name} operation";\n')
     inc.write(f'  let description = [{{\n')
     doctxt = "\n".join([("  " + line.lstrip()) if line else "" for line in schema.doc.splitlines() if line])
@@ -191,6 +196,21 @@ def main():
         % (('\n'+' '*21 if idx+1 != len(schema.outputs) else ''))
     mlir_types_str = mlir_types_str[:-1] if mlir_types_str[-1] == ',' else mlir_types_str
     inc.write(f'{mlir_types_str});\n')
+
+#    inc.write(f'  let extraClassDefinition = [{{\n')
+#    inc.write(f'    int getDefinedOperandCount() {{\n')
+#    inc.write(f'      return %i;\n' % len(schema.inputs))
+#    inc.write(f'    }}\n')
+#    inc.write(f'  }}];\n')
+
+    inc.write(f'  let extraClassDeclaration = [{{\n')
+    inc.write(f'    int getDefinedOperandCount() {{\n')
+    inc.write(f'      return %i;\n' % len(schema.inputs))
+    inc.write(f'    }}\n')
+#    inc.write(f'    int getDefinedResults() {{\n')
+#    inc.write(f'      return %i;\n' % len(schema.outputs))
+#    inc.write(f'    }}\n')
+    inc.write(f'  }}];\n')
 
     inc.write(f'}}\n')
 

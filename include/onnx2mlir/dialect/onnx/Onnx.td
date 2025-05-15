@@ -31,7 +31,9 @@
 #define ONNX2MLIR_FRONTEND_ONNX_TD_
 
 include "onnx2mlir/dialect/onnx/OnnxDialect.td"
+include "onnx2mlir/dialect/onnx/OnnxInterface.td"
 include "onnx2mlir/dialect/onnx/OnnxTypes.td"
+include "onnx2mlir/dialect/onnx/OnnxAttrs.td"
 include "onnx2mlir/dialect/onnx/OnnxOps.td"
 
 #endif // ONNX2MLIR_FRONTEND_ONNX_TD_

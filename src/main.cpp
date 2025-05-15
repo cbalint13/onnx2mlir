@@ -13,6 +13,7 @@
 #include <mlir/IR/Verifier.h>
 
 #include "onnx2mlir/dialect/onnx/OnnxDialect.hpp"
+#include "onnx2mlir/dialect/onnx/OnnxInterface.hpp"
 #include "onnx2mlir/dialect/onnx/OnnxOps.hpp"
 
 #include "onnx2mlir/frontend/onnx.hpp"

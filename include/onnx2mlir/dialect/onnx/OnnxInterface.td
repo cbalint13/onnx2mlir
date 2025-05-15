@@ -23,14 +23,25 @@
  *****************************************************************************/
 
 /*!
- * \file OnnxTypes.hpp
+ * \file OnnxInterface.td
  *
  */
 
-#ifndef ONNX2MLIR_DIALECT_ONNX_ONNXTYPES_HPP_
-#define ONNX2MLIR_DIALECT_ONNX_ONNXTYPES_HPP_
+#ifndef ONNX2MLIR_FRONTEND_ONNXINTERFACE_TD_
+#define ONNX2MLIR_FRONTEND_ONNXINTERFACE_TD_
 
-#define GET_TYPEDEF_CLASSES
-#include "onnx2mlir/dialect/onnx/OnnxTypes.h.inc"
+include "mlir/IR/OpBase.td"
 
-#endif // ONNX2MLIR_DIALECT_ONNX_ONNXTYPES_HPP_
+def OperandCountInfo : OpInterface<"OperandCountInfo"> {
+  let description = [{
+    An interface to query custom operand count information for an operation type.
+  }];
+
+  let cppNamespace = "::onnx2mlir::dialect::onnx";
+
+  let methods = [
+    InterfaceMethod<"Get defined operands count", "int", "getDefinedOperandCount", (ins)>
+  ];
+}
+
+#endif // ONNX2MLIR_FRONTEND_ONNXINTERFACE_TD_
