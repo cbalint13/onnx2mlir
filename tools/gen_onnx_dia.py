@@ -145,9 +145,16 @@ def main():
   parser = argparse.ArgumentParser(
     description="MLIR ONNX ops generator."
   )
+
   parser.add_argument(
     "output_mlir_ops_inc",
     help="Path to the MLIR ops file to be generated."
+  )
+
+  parser.add_argument(
+    "-debug",
+    action="store_true",
+    help="Enable debug mode"
   )
 
   args = parser.parse_args()
@@ -226,7 +233,7 @@ def main():
 
     inc.write(f'}}\n')
 
-    if debug:
+    if args.debug:
       print("\n====================[%s]=======================\n" % schema.name)
       print(dir(schema.outputs))
       print("DBG [%s][%s][%s] [%s]" % (schema.domain, schema.support_level, schema.name, schema.since_version))
