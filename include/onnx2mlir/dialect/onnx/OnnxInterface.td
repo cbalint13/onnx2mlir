@@ -32,15 +32,16 @@
 
 include "mlir/IR/OpBase.td"
 
-def OperandCountInfo : OpInterface<"OperandCountInfo"> {
+def OPCountInfo : OpInterface<"OPCountInfo"> {
   let description = [{
-    An interface to query custom operand count information for an operation type.
+    An interface to query custom count information for an operation type.
   }];
 
   let cppNamespace = "::onnx2mlir::dialect::onnx";
 
   let methods = [
-    InterfaceMethod<"Get defined operands count", "int", "getDefinedOperandCount", (ins)>
+    InterfaceMethod<"Get defined operand count", "int", "getDefinedOperandCount", (ins)>,
+    InterfaceMethod<"Get defined result count", "int", "getDefinedResultCount", (ins)>
   ];
 }
 

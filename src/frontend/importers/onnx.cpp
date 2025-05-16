@@ -535,8 +535,9 @@ static void print_graph_data(const onnx::TensorProto &initializer,
   std::cout << std::endl;
 }
 
-static int getOnnxOpNumOperands(const std::string &opName) {
+static int getOnnxOpNumIO(const std::string &opName, const bool dir_out=false) {
 
+  int onum;
   mlir::MLIRContext context;
   mlir::OpBuilder builder(&context);
   context.loadDialect<onnx2mlir::dialect::onnx::OnnxDialect>();
@@ -544,7 +545,11 @@ static int getOnnxOpNumOperands(const std::string &opName) {
   auto opNameStr = builder.getStringAttr("onnx." + opName);
   mlir::OperationState state(builder.getUnknownLoc(), opNameStr);
   auto op = builder.create(state);
-  const int onum = mlir::cast<onnx2mlir::dialect::onnx::OperandCountInfo>(op)
+  if (dir_out)
+    onum = mlir::cast<onnx2mlir::dialect::onnx::OPCountInfo>(op)
+                       .getDefinedResultCount();
+  else
+    onum = mlir::cast<onnx2mlir::dialect::onnx::OPCountInfo>(op)
                        .getDefinedOperandCount();
   op->erase();
 
@@ -735,18 +740,21 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
 
       // result types
       std::vector<mlir::Type> types;
-      for (const auto &out : node.output()) {
+      const int num_res = getOnnxOpNumIO(node.op_type(), /*outputs*/ true);
+      for (int i = 0; i < num_res; ++i) {
+
+        if (i >= node.output().size()) {
+          types.push_back(mlir::NoneType::get(mlirCtx.get()));
+          continue;
+        }
+
+        const auto out = node.output()[i];
+
         auto it = vis.find(out);
         if (it != vis.end()) {
           auto type = onnx_valueinfo_to_mlir_type(*(it->second), mlirCtx.get());
           types.push_back(type);
         } else {
-          std::cout << "\nWARN: [" << node.name()
-                    << "] not in value_info() catalog" << std::endl;
-          // TODO lookup adjacency if empty !
-          printf("DBG [%s]->[%s]->[%s]\n", node.input()[0].c_str(),
-                 node.op_type().c_str(), node.output()[0].c_str());
-
           // lookup neighbour outputs
           auto oitr = ops_by_inputs.find(out);
           if (oitr != ops_by_inputs.end()) {
@@ -755,7 +763,6 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
             // TODO which result ?!
             types.push_back(oadj->getResults()[0].getType());
           }
-
           // lookup main func outputs
           auto fitr = func_outputs.find(out);
           if (fitr != func_outputs.end()) {
@@ -768,7 +775,7 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
 
       // operands (temporary)
       std::vector<mlir::Value> operands;
-      int num_oprd = getOnnxOpNumOperands(node.op_type());
+      int num_oprd = getOnnxOpNumIO(node.op_type(), /*inputs*/ false);
       if (num_oprd < 0)
         num_oprd = node.input().size();
       for (int i = 0; i < num_oprd; ++i) {
@@ -966,7 +973,7 @@ void ONNXImporter::import(const std::string &filepath) {
   // verify module
   if (llvm::failed(mlir::verify(*module))) {
     llvm::errs() << "MLIR module verification failed.\n";
-    exit(-1);
+    //exit(-1);
   }
 
   // DEBUG

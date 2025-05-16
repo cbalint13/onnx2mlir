@@ -179,7 +179,7 @@ def main():
     if schema.since_version != max(ops_versions[schema.name]):
       continue
 
-    opinterfaces = "Pure, OperandCountInfo"
+    opinterfaces = "Pure, OPCountInfo"
     if schema.name == "Constant":
       opinterfaces += ", ConstantLike"
 
@@ -218,7 +218,7 @@ def main():
     # results
     out_types_str = "  let results = (outs "
     for idx, out in enumerate(schema.outputs):
-      opt = None if (schema.name != "Constant") else onnx.defs.OpSchema.FormalParameterOption.Optional
+      opt = out.option if (schema.name != "Constant") else onnx.defs.OpSchema.FormalParameterOption.Optional
       mlir_types = get_mlir_types_from_str(out, schema.type_constraints, opt)
       out_types_str += f'{mlir_types}:${out.name},%s' \
         % (('\n'+' '*21 if idx+1 != len(schema.outputs) else ''))
@@ -228,6 +228,9 @@ def main():
     inc.write(f'  let extraClassDeclaration = [{{\n')
     inc.write(f'    int getDefinedOperandCount() {{\n')
     inc.write(f'      return %i;\n' % (-1 if "Variadic" in inp_types_str else len(schema.inputs)))
+    inc.write(f'    }}\n')
+    inc.write(f'    int getDefinedResultCount() {{\n')
+    inc.write(f'      return %i;\n' % len(schema.outputs))
     inc.write(f'    }}\n')
     inc.write(f'  }}];\n')
 
