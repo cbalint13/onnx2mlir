@@ -65,7 +65,7 @@ def get_mlir_types_from_str(type_strs, schema_constraints, option = None):
   if option == onnx.defs.OpSchema.FormalParameterOption.Optional:
     mlir_types += ', NoneType'
 
-  if len(attr_constraints) > 1:
+  if ", " in mlir_types:
     mlir_types = f"AnyTypeOf<[{mlir_types}]>"
 
   if option == onnx.defs.OpSchema.FormalParameterOption.Variadic:
@@ -76,7 +76,7 @@ def get_mlir_types_from_str(type_strs, schema_constraints, option = None):
 def get_mlir_attrs_from_str(attr):
 
   onnx_to_mlir_attrs = {
-    "INT": "SI64Attr",
+    "INT": "I64Attr",
     "INTS": "I64ArrayAttr",
     "FLOAT": "F32Attr",
     "FLOATS": "F32ArrayAttr",
@@ -170,46 +170,38 @@ def main():
     inc.write(f'\n')
 
     # arguments
-    mlir_types_str = "  let arguments = (ins "
+    inp_types_str = "  let arguments = (ins "
     if len(schema.inputs):
       for inp in schema.inputs:
         mlir_types = get_mlir_types_from_str(inp, schema.type_constraints, inp.option)
-        mlir_types_str += f'{mlir_types}:${inp.name},\n' + (' '*23)
+        inp_types_str += f'{mlir_types}:${inp.name},\n' + (' '*23)
 
     # attributes
     if len(schema.attributes):
       for idx, attr in enumerate(sorted(schema.attributes)):
         mlir_attr = get_mlir_attrs_from_str(schema.attributes[attr])
         if mlir_attr is not None:
-          mlir_types_str += f'{mlir_attr}:${attr},\n' + (' '*23)
+          inp_types_str += f'{mlir_attr}:${attr},\n' + (' '*23)
 
     # trim last comma
-    if len(mlir_types_str):
-      mlir_types_str = mlir_types_str[:mlir_types_str.rfind(',')]
-    inc.write(f'{mlir_types_str});\n')
+    if len(inp_types_str):
+      inp_types_str = inp_types_str[:inp_types_str.rfind(',')]
+    inc.write(f'{inp_types_str});\n')
 
     # results
-    mlir_types_str = "  let results = (outs "
+    out_types_str = "  let results = (outs "
     for idx, out in enumerate(schema.outputs):
-      mlir_types = get_mlir_types_from_str(out, schema.type_constraints)
-      mlir_types_str += f'{mlir_types}:${out.name},%s' \
+      opt = None if (schema.name != "Constant") else onnx.defs.OpSchema.FormalParameterOption.Optional
+      mlir_types = get_mlir_types_from_str(out, schema.type_constraints, opt)
+      out_types_str += f'{mlir_types}:${out.name},%s' \
         % (('\n'+' '*21 if idx+1 != len(schema.outputs) else ''))
-    mlir_types_str = mlir_types_str[:-1] if mlir_types_str[-1] == ',' else mlir_types_str
-    inc.write(f'{mlir_types_str});\n')
-
-#    inc.write(f'  let extraClassDefinition = [{{\n')
-#    inc.write(f'    int getDefinedOperandCount() {{\n')
-#    inc.write(f'      return %i;\n' % len(schema.inputs))
-#    inc.write(f'    }}\n')
-#    inc.write(f'  }}];\n')
+    out_types_str = out_types_str[:-1] if out_types_str[-1] == ',' else out_types_str
+    inc.write(f'{out_types_str});\n')
 
     inc.write(f'  let extraClassDeclaration = [{{\n')
     inc.write(f'    int getDefinedOperandCount() {{\n')
-    inc.write(f'      return %i;\n' % len(schema.inputs))
+    inc.write(f'      return %i;\n' % (-1 if "Variadic" in inp_types_str else len(schema.inputs)))
     inc.write(f'    }}\n')
-#    inc.write(f'    int getDefinedResults() {{\n')
-#    inc.write(f'      return %i;\n' % len(schema.outputs))
-#    inc.write(f'    }}\n')
     inc.write(f'  }}];\n')
 
     inc.write(f'}}\n')

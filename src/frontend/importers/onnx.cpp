@@ -8,8 +8,8 @@
 
 #include "onnx/common/constants.h"
 #include <onnx/common/version.h>
-#include <onnx/defs/schema.h>
 #include <onnx/defs/operator_sets.h>
+#include <onnx/defs/schema.h>
 #include <onnx/shape_inference/implementation.h>
 #include <onnx/version_converter/convert.h>
 
@@ -127,34 +127,34 @@ static mlir::Type onnx_datatype_to_mlir_type(const int32_t data_type_int,
   switch (onnx_type) {
   case onnx::TensorProto::FLOAT:
     return mlir::Float32Type::get(context);
-  case onnx::TensorProto::UINT8:
-    return mlir::IntegerType::get(context, 8, mlir::IntegerType::Unsigned);
+  case onnx::TensorProto::INT4:
+    return mlir::IntegerType::get(context, 4);
   case onnx::TensorProto::INT8:
-    return mlir::IntegerType::get(context, 8);
-  case onnx::TensorProto::UINT16:
-    return mlir::IntegerType::get(context, 16, mlir::IntegerType::Unsigned);
+    return mlir::IntegerType::get(context, 8, mlir::IntegerType::Signless);
   case onnx::TensorProto::INT16:
-    return mlir::IntegerType::get(context, 16);
+    return mlir::IntegerType::get(context, 16, mlir::IntegerType::Signless);
   case onnx::TensorProto::INT32:
-    return mlir::IntegerType::get(context, 32);
+    return mlir::IntegerType::get(context, 32, mlir::IntegerType::Signless);
   case onnx::TensorProto::INT64:
-    return mlir::IntegerType::get(context, 64);
-  case onnx::TensorProto::STRING:
-    return mlir::NoneType::get(context);
+    return mlir::IntegerType::get(context, 64, mlir::IntegerType::Signless);
   case onnx::TensorProto::BOOL:
     return mlir::IntegerType::get(context, 1);
-  case onnx::TensorProto::FLOAT16:
-    return mlir::Float16Type::get(context);
-  case onnx::TensorProto::DOUBLE:
-    return mlir::Float64Type::get(context);
+  case onnx::TensorProto::UINT4:
+    return mlir::IntegerType::get(context, 4, mlir::IntegerType::Unsigned);
+  case onnx::TensorProto::UINT8:
+    return mlir::IntegerType::get(context, 8, mlir::IntegerType::Unsigned);
+  case onnx::TensorProto::UINT16:
+    return mlir::IntegerType::get(context, 16, mlir::IntegerType::Unsigned);
   case onnx::TensorProto::UINT32:
     return mlir::IntegerType::get(context, 32, mlir::IntegerType::Unsigned);
   case onnx::TensorProto::UINT64:
     return mlir::IntegerType::get(context, 64, mlir::IntegerType::Unsigned);
-  case onnx::TensorProto::COMPLEX64:
-    return mlir::ComplexType::get(mlir::Float32Type::get(context));
-  case onnx::TensorProto::COMPLEX128:
-    return mlir::ComplexType::get(mlir::Float64Type::get(context));
+  case onnx::TensorProto::STRING:
+    return mlir::NoneType::get(context);
+  case onnx::TensorProto::FLOAT16:
+    return mlir::Float16Type::get(context);
+  case onnx::TensorProto::DOUBLE:
+    return mlir::Float64Type::get(context);
   case onnx::TensorProto::BFLOAT16:
     return mlir::BFloat16Type::get(context);
   case onnx::TensorProto::FLOAT8E4M3FN:
@@ -165,12 +165,12 @@ static mlir::Type onnx_datatype_to_mlir_type(const int32_t data_type_int,
     return mlir::Float8E5M2Type::get(context);
   case onnx::TensorProto::FLOAT8E5M2FNUZ:
     return mlir::Float8E5M2FNUZType::get(context);
-  case onnx::TensorProto::UINT4:
-    return mlir::IntegerType::get(context, 4, mlir::IntegerType::Unsigned);
-  case onnx::TensorProto::INT4:
-    return mlir::IntegerType::get(context, 4);
   case onnx::TensorProto::FLOAT4E2M1:
     return mlir::Float4E2M1FNType::get(context);
+  case onnx::TensorProto::COMPLEX64:
+    return mlir::ComplexType::get(mlir::Float32Type::get(context));
+  case onnx::TensorProto::COMPLEX128:
+    return mlir::ComplexType::get(mlir::Float64Type::get(context));
   case onnx::TensorProto::UNDEFINED:
     return mlir::NoneType::get(context);
   default:
@@ -511,6 +511,22 @@ static void print_graph_data(const onnx::TensorProto &initializer,
   std::cout << std::endl;
 }
 
+static int getOnnxOpNumOperands(const std::string &opName) {
+
+  mlir::MLIRContext context;
+  mlir::OpBuilder builder(&context);
+  context.loadDialect<onnx2mlir::dialect::onnx::OnnxDialect>();
+
+  auto opNameStr = builder.getStringAttr("onnx." + opName);
+  mlir::OperationState state(builder.getUnknownLoc(), opNameStr);
+  auto op = builder.create(state);
+  const int onum = mlir::cast<onnx2mlir::dialect::onnx::OperandCountInfo>(op)
+                       .getDefinedOperandCount();
+  op->erase();
+
+  return onum;
+}
+
 static mlir::Operation *
 createOnnxOp(mlir::OpBuilder &builder, const std::string &opName,
              const std::vector<mlir::Type> &types = {},
@@ -521,9 +537,6 @@ createOnnxOp(mlir::OpBuilder &builder, const std::string &opName,
   mlir::StringAttr opNameStr = builder.getStringAttr("onnx." + opName);
   mlir::OperationState state(builder.getUnknownLoc(), opNameStr);
 
-//  auto ops = mlir::cast<onnx2mlir::dialect::onnx::OperandCountInfo>(state);
-
-
   for (auto type : types)
     state.addTypes(type);
   for (auto value : values)
@@ -532,9 +545,6 @@ createOnnxOp(mlir::OpBuilder &builder, const std::string &opName,
     state.addAttributes(attr);
 
   mlir::Operation *op = builder.create(state);
-
-  auto opw = mlir::cast<onnx2mlir::dialect::onnx::OperandCountInfo>(op);
-  printf("OPDBG [%s] num_in[%i]\n", opName.c_str(), opw.getDefinedOperandCount());
 
   return op;
 }
@@ -560,48 +570,16 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
 
   // i/o map storage
   std::map<std::string, std::shared_ptr<onnx::ValueInfoProto>> vis;
-//  std::multimap<std::string, std::shared_ptr<onnx::NodeProto>> node_inputs;
-//  std::multimap<std::string, std::shared_ptr<onnx::NodeProto>> node_outputs;
-/*
-  for (const auto &node : graph_proto.node()) {
-    // DEBUG
-    // print_graph_node(node, mlirCtx.get());
-    auto node_ptr = std::make_shared<onnx::NodeProto>(node);
-    // map the inputs
-    for (const auto &input_name : node.input()) {
-      if (input_name.size()) {
-        node_inputs.insert({input_name, node_ptr});
-      }
-    }
-    // map the outputs
-    for (const auto &output_name : node.output()) {
-      if (output_name.size()) {
-        node_outputs.insert({output_name, node_ptr});
-      }
-    }
-  }
-*/
-  // map value infos
+
+  // map inferred value infos
   for (const auto &vi : graph_proto.value_info()) {
     auto vi_ptr = std::make_shared<onnx::ValueInfoProto>(vi);
-
-    printf("\n\nVIS [%s]\n", vi.name().c_str());
-    auto type = onnx_valueinfo_to_mlir_type(vi, mlirCtx.get());
-    type.print(llvm::outs());
-
     vis.insert({vi.name(), vi_ptr});
   }
 
-  // initializers map storage
-  std::map<std::string, std::shared_ptr<onnx::TensorProto>> node_inits;
-
-  // map the initializers
-  for (const auto &initializer : graph_proto.initializer()) {
-    // DEBUG
-    // print_graph_data(initializer, mlirCtx.get());
-    auto data_ptr = std::make_shared<onnx::TensorProto>(initializer);
-    node_inits.insert({initializer.name(), data_ptr});
-  }
+  /*
+   * Main function
+   */
 
   // get main func
   auto func = module->lookupSymbol<mlir::func::FuncOp>("main");
@@ -610,7 +588,6 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
 
   // args storage
   std::map<std::string, std::shared_ptr<mlir::Value>> func_inputs;
-  // std::map<std::string, mlir::Value> func_inputs;
   std::map<std::string, std::shared_ptr<mlir::Type>> func_outputs;
 
   // map func inputs argument
@@ -620,22 +597,18 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
     if (attr.size()) {
       auto arg_ptr = std::make_shared<mlir::Value>(arg);
       func_inputs.insert({attr.getValue().str(), arg_ptr});
-      // func_inputs.insert({attr.getValue().str(), arg});
     }
   }
+
   // map func results argument
   for (unsigned int i = 0; i < func.getNumResults(); i++) {
-     mlir::Type res = func.getFunctionType().getResult(i);
-//    printf("\n\nFUNC res[%i][%lu]\n\n", func.getNumResults(), res.size());
-//    func.print(llvm::outs());
-//    exit(-1);
+    mlir::Type res = func.getFunctionType().getResult(i);
     auto attr = func.getResultAttrOfType<mlir::StringAttr>(i, "onnx.name");
     if (attr.size()) {
       auto res_ptr = std::make_shared<mlir::Type>(res);
       func_outputs.insert({attr.getValue().str(), res_ptr});
     }
   }
-//  exit(-1);
 
   /*
    * Build the MLIR graph
@@ -643,7 +616,7 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
 
   mlir::OpBuilder builder(mlirCtx.get());
 
-  // map ops i/o
+  // map mlir ops i/o
   std::map<std::string, std::shared_ptr<mlir::Operation *>> ops_by_name;
   std::multimap<std::string, std::shared_ptr<mlir::Operation *>> ops_by_inputs;
   std::multimap<std::string, std::shared_ptr<mlir::Operation *>> ops_by_outputs;
@@ -675,6 +648,7 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
       ops_by_outputs.insert({node.output()[0], res_ptr});
     }
   }
+
   // add the initializers
   for (const auto &initializer : graph_proto.initializer()) {
     // DEBUG
@@ -700,6 +674,22 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
     ops_by_outputs.insert({initializer.name(), res_ptr});
   }
 
+  // add NoneType constant
+  mlir::Operation *notype;
+  {
+    std::vector<mlir::NamedAttribute> attrs;
+    // origin
+    auto nameVal = builder.getStringAttr("NoneType");
+    mlir::NamedAttribute labels("mlir.value", nameVal);
+    attrs.push_back(labels);
+    // result type
+    mlir::Type noneType = mlir::NoneType::get(mlirCtx.get());
+    auto types = std::vector<mlir::Type>({noneType});
+
+    notype = createOnnxOp(builder, "Constant", types, {}, attrs);
+    block->push_back(notype);
+  }
+
   // add nodes
   for (const auto &node : graph_proto.node()) {
     if (node.op_type() != "Constant") {
@@ -713,6 +703,7 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
         mlir::NamedAttribute attr(attribute.name(), value);
         attrs.push_back(attr);
       }
+
       // origin
       auto nameVal = builder.getStringAttr(node.name());
       mlir::NamedAttribute labels("onnx.node.name", nameVal);
@@ -726,11 +717,13 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
           auto type = onnx_valueinfo_to_mlir_type(*(it->second), mlirCtx.get());
           types.push_back(type);
         } else {
-          std::cout << "\nWARN: [" << node.name() << "] not in value_info() catalog" << std::endl;
+          std::cout << "\nWARN: [" << node.name()
+                    << "] not in value_info() catalog" << std::endl;
           // TODO lookup adjacency if empty !
-          printf("DBG [%s]->[%s]->[%s]\n", node.input()[0].c_str(), node.op_type().c_str(), node.output()[0].c_str());
+          printf("DBG [%s]->[%s]->[%s]\n", node.input()[0].c_str(),
+                 node.op_type().c_str(), node.output()[0].c_str());
 
-          // lookup ops outputs
+          // lookup neighbour outputs
           auto oitr = ops_by_inputs.find(out);
           if (oitr != ops_by_inputs.end()) {
             auto oadj = *oitr->second;
@@ -739,7 +732,7 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
             types.push_back(oadj->getResults()[0].getType());
           }
 
-          // lookup func outputs
+          // lookup main func outputs
           auto fitr = func_outputs.find(out);
           if (fitr != func_outputs.end()) {
             auto fadj = *fitr->second;
@@ -749,22 +742,13 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
         }
       }
 
-//      mlir::OperationName opName("onnx.Slice", mlirCtx.get());
-//      auto registeredInfo = mlir::RegisteredOperationName::lookup(opName.getTypeID(), mlirCtx.get());
-//      auto abstractOp = registeredInfo->getAbstractOperation();
-/*
-      const std::string domain = "";
-      const onnx::OpSchemaRegistry* registry = onnx::OpSchemaRegistry::Instance();
-      int latest_version = onnx::OpSchemaRegistry::GetLatestOpSetVersion(domain);
-      const onnx::OpSchema* schema = registry->GetSchema(node.op_type(), latest_version, domain);
-      int num_formal_inputs = schema->inputs().size();
-*/
-
       // operands (temporary)
       std::vector<mlir::Value> operands;
-      for (int i = 0; i < node.input().size(); ++i) {
-        auto arg = *func_inputs.begin()->second;
-        operands.push_back(arg);
+      int num_oprd = getOnnxOpNumOperands(node.op_type());
+      if (num_oprd < 0)
+        num_oprd = node.input().size();
+      for (int i = 0; i < num_oprd; ++i) {
+        operands.push_back(notype->getResult(0));
       }
 
       auto op = createOnnxOp(builder, node.op_type(), types, operands, attrs);
@@ -777,20 +761,13 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
       for (const auto &out : node.output())
         ops_by_outputs.insert({out, op_ptr});
       ops_by_name.insert({node.name(), op_ptr});
-
-    if (node.op_type() == "Slice") {
-      printf("\n\nDBG [%s][%i]\n\n", node.name().c_str(), node.input().size());
-      op->print(llvm::outs());
-      exit(-1);
     }
-
-    }
-
   }
 
   // set nodes inputs
   for (const auto &node : graph_proto.node()) {
 
+    // skip on no inputs
     if (node.input().size() == 0)
       continue;
 
@@ -806,51 +783,52 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
       // map node input to main func input
       auto f_it = func_inputs.find(node.input()[idx]);
       if (f_it != func_inputs.end()) {
-        print_graph_node(node, mlirCtx.get());
+        // DEBUG
+        // print_graph_node(node, mlirCtx.get());
         mlir::Value arg = *(f_it->second);
-
-        //arg.print(llvm::outs());
-
         node_op->setOperand(idx, arg);
       }
 
       // map node input to upper node output
       auto o_it = ops_by_outputs.find(node.input()[idx]);
       if (o_it != ops_by_outputs.end()) {
-        print_graph_node(node, mlirCtx.get());
+        // DEBUG
+        // print_graph_node(node, mlirCtx.get());
+
         auto op = *(o_it->second);
         mlir::Value arg = op->getOpResult(0);
-
-        //arg.print(llvm::outs());
-
         node_op->setOperand(idx, arg);
         continue;
       }
     }
-
-    // erase unused inputs
-    for (int idx = 0; idx < node.input().size(); ++idx) {
-      if (node.input()[idx].size() == 0) {
-        node_op->eraseOperand(idx);
-      }
-    }
+    /*
+        // erase unused inputs
+        for (int idx = 0; idx < getOnnxOpNumOperands(node.op_type()); ++idx) {
+          if (node.input().size() >= idx) {
+            printf("DBG inputs erase [%i][%i] op[%i]\n", node.input().size(),
+       idx, node_op->getNumOperands()); node_op->eraseOperand(idx); continue;
+          }
+          if (node.input()[idx].size() == 0) {
+            node_op->eraseOperand(idx);
+          }
+        }
+    */
   }
 
   // map func outputs
+  mlir::SmallVector<mlir::Value> ret_values;
   for (const auto &out : func_outputs) {
     auto o_it = ops_by_outputs.find(out.first);
-    mlir::SmallVector<mlir::Value> values;
 
     if (o_it != ops_by_outputs.end()) {
       auto op = *(o_it->second);
-      //printf("OUTPUT out[%s] [%i]\n", out.first.c_str(), op->getNumResults());
       mlir::Value val = op->getOpResult(0);
-      values.push_back(val);
+      ret_values.push_back(val);
     }
-    auto ret = builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc(), values);
-    block->push_back(ret);
   }
-
+  auto ret =
+      builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc(), ret_values);
+  block->push_back(ret);
 }
 
 void ONNXImporter::parse_graph_io(const onnx::GraphProto &graph_proto) {
@@ -976,7 +954,7 @@ void ONNXImporter::import(const std::string &filepath) {
   // verify module
   if (llvm::failed(mlir::verify(*module))) {
     llvm::errs() << "Module verification failed!\n";
-    exit(-1);
+    // exit(-1);
   }
 
   // DEBUG
