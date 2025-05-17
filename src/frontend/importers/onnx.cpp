@@ -856,6 +856,10 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
   auto ret =
       builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc(), ret_values);
   block->push_back(ret);
+
+  // remove NoType Constant if unused
+  if (notype->getResults()[0].use_empty())
+    notype->erase();
 }
 
 void ONNXImporter::parse_graph_io(const onnx::GraphProto &graph_proto) {
