@@ -219,7 +219,8 @@ static mlir::Type OnnxToMlir_Type(const onnx::ValueInfoProto &value_proto,
 
   // value data type
   switch (type_proto.value_case()) {
-  case onnx::TypeProto::kTensorType: {
+  case onnx::TypeProto::kTensorType:
+  case onnx::TypeProto::kSparseTensorType: {
     std::vector<int64_t> dataShape;
     const auto &tensor_type = type_proto.tensor_type();
     auto elemType = OnnxToMlir_dType(tensor_type.elem_type(), ctx);
@@ -232,7 +233,7 @@ static mlir::Type OnnxToMlir_Type(const onnx::ValueInfoProto &value_proto,
         } else if (dim.has_dim_param()) {
           dataShape.push_back(mlir::ShapedType::kDynamic);
         } else {
-          llvm::errs() << "ERROR: Tensor has unknown dimension.\n";
+          llvm::errs() << "ERROR: Tensor has invalid dimension.\n";
           exit(-1);
         }
       }
@@ -242,7 +243,6 @@ static mlir::Type OnnxToMlir_Type(const onnx::ValueInfoProto &value_proto,
     }
     return mlir::RankedTensorType::get(dataShape, elemType);
   }
-  case onnx::TypeProto::kSparseTensorType:
   case onnx::TypeProto::kSequenceType:
   case onnx::TypeProto::kMapType:
   case onnx::TypeProto::kOptionalType:
@@ -286,12 +286,13 @@ OnnxToMlir_Attr(const onnx::AttributeProto &attribute, mlir::MLIRContext *ctx,
   case onnx::AttributeProto::STRINGS:
     return mlir::NamedAttribute(attribute.name(),
                                 getMlirArray(ctx, attribute.strings()));
-  case onnx::AttributeProto::TENSORS:
-    // TODO
-    for (int i = 0; i < attribute.tensors_size(); ++i) {
-      OnnxToMlir_Tensor(attribute.tensors(i), ctx, eAttr);
-    }
-    break;
+  case onnx::AttributeProto::TENSORS: {
+    llvm::SmallVector<mlir::Attribute> attrVec;
+    for (int i = 0; i < attribute.tensors_size(); ++i)
+      attrVec.push_back(OnnxToMlir_Tensor(attribute.tensors(i), ctx, eAttr));
+    return mlir::NamedAttribute(attribute.name(),
+                                mlir::ArrayAttr::get(ctx, attrVec));
+  }
   case onnx::AttributeProto::GRAPHS:
     llvm::errs()
         << "ERROR: Parsing GRAPHS attribute type is not implemented.\n";
