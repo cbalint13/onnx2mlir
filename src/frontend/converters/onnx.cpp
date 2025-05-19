@@ -24,7 +24,7 @@
 
 /*!
  * \file src/frontend/converters/onnx.cpp
- *
+ * \brief Onnx converter implementation
  */
 
 #include "onnx2mlir/frontend/onnx.hpp"

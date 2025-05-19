@@ -24,7 +24,7 @@
 
 /*!
  * \file include/onnx2mlir/dialect/Onnx.td
- *
+ * \brief Onnx dialect main composition
  */
 
 #ifndef ONNX2MLIR_FRONTEND_ONNX_TD_

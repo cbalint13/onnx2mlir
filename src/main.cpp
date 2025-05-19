@@ -24,7 +24,7 @@
 
 /*!
  * \file src/main.cpp
- *
+ * \brief Main compiler program
  */
 
 #include "onnx2mlir/frontend/onnx.hpp"

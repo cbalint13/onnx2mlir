@@ -24,7 +24,7 @@
 
 /*!
  * \file include/onnx2mlir/dialect/onnx/OnnxInterface.hpp
- *
+ * \brief Onnx dialect interfaces declaration
  */
 
 #ifndef ONNX2MLIR_DIALECT_ONNX_ONNXINTERFACE_HPP_

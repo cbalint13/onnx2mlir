@@ -24,7 +24,7 @@
 
 /*!
  * \file src/dialect/onnx/ir/onnx_inerface.cpp
- *
+ * \brief Onnx dialect interfaces inplementation
  */
 
 #include "onnx2mlir/dialect/onnx/OnnxInterface.hpp"

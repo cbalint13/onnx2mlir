@@ -26,6 +26,7 @@
 
 ##
 ## \file tools/gen_onnx_dia.py
+## \brief A tool to generate Onnx operator tablegen defintions
 ##
 
 

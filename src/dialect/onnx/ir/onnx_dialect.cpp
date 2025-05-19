@@ -24,7 +24,7 @@
 
 /*!
  * \file src/dialect/onnx/ir/onnx_dialect.cpp
- *
+ * \brief Onnx dialect implementation
  */
 
 #include "onnx2mlir/dialect/onnx/OnnxDialect.hpp"

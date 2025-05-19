@@ -24,7 +24,7 @@
 
 /*!
  * \file include/onnx2mlir/dialect/onnx/OnnxAttrs.hpp
- *
+ * \brief Onnx dialect attributes declaration
  */
 
 #ifndef ONNX2MLIR_DIALECT_ONNX_ONNXATTRS_HPP_

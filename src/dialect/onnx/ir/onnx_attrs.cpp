@@ -24,7 +24,7 @@
 
 /*!
  * \file src/dialect/onnx/ir/onnx_attrs.cpp
- *
+ * \brief Onnx dialect attributes implementation
  */
 
 #include <mlir/AsmParser/AsmParser.h>

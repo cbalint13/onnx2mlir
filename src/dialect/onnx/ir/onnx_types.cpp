@@ -24,7 +24,7 @@
 
 /*!
  * \file src/dialect/onnx/ir/onnx_types.cpp
- *
+ * \brief Onnx dialect types implementation
  */
 
 #include <mlir/IR/Builders.h>

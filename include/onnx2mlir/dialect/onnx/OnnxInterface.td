@@ -24,7 +24,7 @@
 
 /*!
  * \file include/onnx2mlir/dialect/onnx/OnnxInterface.td
- *
+ * \brief Onnx dialect interfaces definition
  */
 
 #ifndef ONNX2MLIR_FRONTEND_ONNXINTERFACE_TD_

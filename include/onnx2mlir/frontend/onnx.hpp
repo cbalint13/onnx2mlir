@@ -24,7 +24,7 @@
 
 /*!
  * \file include/onnx2mlir/frontend/onnx.hpp
- *
+ * \brief Onnx frontend declarations
  */
 
 #ifndef ONNX2MLIR_FRONTEND_ONNX_HPP_

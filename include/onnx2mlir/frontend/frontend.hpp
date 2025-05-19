@@ -24,7 +24,7 @@
 
 /*!
  * \file include/onnx2mlir/frontend/frontend.hpp
- *
+ * \brief Generic frontend declarations
  */
 
 #ifndef ONNX2MLIR_FRONTEND_IMPORTER_HPP_
