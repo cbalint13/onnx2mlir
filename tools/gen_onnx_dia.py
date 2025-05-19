@@ -26,7 +26,7 @@
 
 ##
 ## \file tools/gen_onnx_dia.py
-## \brief A tool to generate Onnx operator tablegen defintions
+## \brief A tool to generate Onnx operators tablegen definition
 ##
 
 
@@ -184,9 +184,10 @@ def main():
   # iterate Ops
   for schema in defs.get_all_schemas_with_history():
 
-    # use latest version Op
+    opname = schema.name
+    # older Op versioning
     if schema.since_version != max(ops_versions[schema.name]):
-      continue
+      opname += f"_V{schema.since_version}"
 
     opinterfaces = "Pure, OPCountInfo"
     if schema.name == "Constant":
@@ -195,8 +196,8 @@ def main():
     # definition
     inc.write(f'\n')
     inc.write(f'/// {schema.name} [v{schema.since_version}]\n')
-    inc.write(f'def Onnx_{schema.name}Op : Onnx_Op<"{schema.name}", [{opinterfaces}]> {{\n')
-    inc.write(f'  let summary = "ONNX {schema.name} operation";\n')
+    inc.write(f'def Onnx_{opname}Op : Onnx_Op<"{opname}", [{opinterfaces}]> {{\n')
+    inc.write(f'  let summary = "ONNX {opname} operation [v{schema.since_version}]";\n')
     inc.write(f'  let description = [{{\n')
 
     # shorted doc text
@@ -208,19 +209,25 @@ def main():
     inc.write(f'\n')
 
     # arguments
+    inp_names = []
     inp_types_str = "  let arguments = (ins "
     prefill = ' ' * len(inp_types_str)
     if len(schema.inputs):
       for inp in schema.inputs:
         mlir_types = get_mlir_types_from_str(inp, schema.type_constraints, inp.option)
-        inp_types_str += f'{mlir_types}:${inp.name},\n' + prefill
+        inp_name = inp.name
+        if (inp_name in inp_names): inp_name = "input_" + inp_name
+        inp_types_str += f'{mlir_types}:${inp_name},\n' + prefill
+        inp_names.append(inp.name)
 
     # attributes
     if len(schema.attributes):
       for idx, attr in enumerate(sorted(schema.attributes)):
         mlir_attr = get_mlir_attrs_from_str(schema.attributes[attr])
         if mlir_attr is not None:
-          inp_types_str += f'{mlir_attr}:${attr},\n' + prefill
+          inp_attr = attr
+          if (inp_attr in inp_names): inp_attr = "input_" + inp_attr
+          inp_types_str += f'{mlir_attr}:${inp_attr},\n' + prefill
 
     if len(inp_types_str):
       # trim last comma
@@ -233,7 +240,9 @@ def main():
     for idx, out in enumerate(schema.outputs):
       opt = out.option if (schema.name != "Constant") else onnx.defs.OpSchema.FormalParameterOption.Optional
       mlir_types = get_mlir_types_from_str(out, schema.type_constraints, opt)
-      out_types_str += f'{mlir_types}:${out.name},\n' + prefill
+      out_name = out.name.replace(".","")
+      if (out_name in inp_names): out_name = "output_" + out_name
+      out_types_str += f'{mlir_types}:${out_name},\n' + prefill
 
     if len(out_types_str):
       # trim last comma
