@@ -507,6 +507,22 @@ ONNXImporter::ONNXImporter(const std::map<std::string, std::string> &options)
   module = mlir::ModuleOp::create(builder.getUnknownLoc());
 }
 
+const std::string ONNXImporter::get_versioned_name(const std::string &OpName) {
+  // const 1,3,9,23
+  // opset_ver = 11
+  int maxversion = -1;
+  int subversion = -1;
+  for (const int &ver : ops_versions[OpName]) {
+    if (maxversion < ver)
+      maxversion = ver;
+    if (ver <= model_opset_version)
+      subversion = ver;
+  }
+  if (maxversion > model_opset_version)
+    return OpName + "_V" + std::to_string(subversion);
+  return OpName;
+}
+
 void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
   // i/o map storage
   std::map<std::string, std::shared_ptr<onnx::ValueInfoProto>> vis;
@@ -563,7 +579,9 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
 
   // Step 1, add constant nodes
   for (const auto &node : graph_proto.node()) {
-    if (!checkOnnxOpExists(mlirCtx.get(), node.op_type())) {
+    // check operator
+    const auto opFullName = get_versioned_name(node.op_type());
+    if (!checkOnnxOpExists(mlirCtx.get(), opFullName)) {
       llvm::errs() << "ERROR: operation [" << node.op_type()
                    << "] not registered.\n";
       exit(-1);
@@ -582,7 +600,8 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
       auto types = std::vector<mlir::Type>(
           {mlir::dyn_cast<mlir::ElementsAttr>(attr->getValue()).getType()});
 
-      auto op = createOnnxOp(&builder, "Constant", types, {}, attrs);
+      const auto cstFullName = get_versioned_name("Constant");
+      auto op = createOnnxOp(&builder, cstFullName, types, {}, attrs);
 
       block->push_back(op);
       // store output
@@ -605,7 +624,8 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
     // result type
     auto types = std::vector<mlir::Type>({value.getType()});
 
-    auto op = createOnnxOp(&builder, "Constant", types, {}, attrs);
+    const auto cstFullName = get_versioned_name("Constant");
+    auto op = createOnnxOp(&builder, cstFullName, types, {}, attrs);
 
     block->push_back(op);
     // map to i/o
@@ -625,7 +645,8 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
     mlir::Type noneType = mlir::NoneType::get(mlirCtx.get());
     auto types = std::vector<mlir::Type>({noneType});
 
-    notype = createOnnxOp(&builder, "Constant", types, {}, attrs);
+    const auto cstFullName = get_versioned_name("Constant");
+    notype = createOnnxOp(&builder, cstFullName, types, {}, attrs);
     block->push_back(notype);
   }
 
@@ -686,7 +707,8 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
         operands.push_back(notype->getResult(0));
       }
       // Pass 4, create the operation
-      auto op = createOnnxOp(&builder, node.op_type(), types, operands, attrs);
+      const auto opFullName = get_versioned_name(node.op_type());
+      auto op = createOnnxOp(&builder, opFullName, types, operands, attrs);
       block->push_back(op);
       // Pass 5, map the operation by i/o
       auto op_ptr = std::make_shared<mlir::Operation *>(op);
@@ -793,14 +815,16 @@ void ONNXImporter::import(const std::string &filepath) {
   llvm::outs() << "ONNX engine version: " << onnx::LAST_RELEASE_VERSION << "\n";
   llvm::outs() << "ONNX engine IR version: " << onnx::IR_VERSION << "\n";
 
-  int last_op_version = -1;
-  auto all_schemas = onnx::OpSchemaRegistry::get_all_schemas();
+  // get ops versioning
+  engine_opset_version = -1;
+  auto all_schemas = onnx::OpSchemaRegistry::get_all_schemas_with_history();
   for (const auto &schema : all_schemas) {
-    if (last_op_version < schema.SinceVersion())
-      last_op_version = schema.SinceVersion();
+    if (engine_opset_version < schema.SinceVersion())
+      engine_opset_version = schema.SinceVersion();
+    ops_versions[schema.Name()].push_back(schema.SinceVersion());
   }
 
-  llvm::outs() << "ONNX engine last opset version: " << last_op_version << "\n";
+  llvm::outs() << "ONNX engine opset version: " << engine_opset_version << "\n";
 
   std::ifstream model_file(filepath, std::ios::binary);
 
@@ -809,38 +833,49 @@ void ONNXImporter::import(const std::string &filepath) {
     exit(-1);
   }
 
-  onnx::ModelProto model_import;
   /// parse onnx binary
+  onnx::ModelProto model_import;
   if (!model_import.ParseFromIstream(&model_file)) {
     llvm::errs() << "ERROR: ONNX model file parsing error.\n";
     exit(-1);
   }
 
-  int OpSetVer = -1;
+  model_opset_version = -1;
   /// see https://github.com/onnx/onnx/blob/main/onnx/docs/Versioning.md
   for (auto it = model_import.opset_import().begin();
        it != model_import.opset_import().end(); ++it) {
     if (it->domain() == "" || it->domain() == "ai.onnx") {
-      OpSetVer = it->version();
+      model_opset_version = it->version();
       break;
     }
   }
+
   llvm::outs() << "\n";
+  llvm::outs() << "Model path: " << filepath << "\n";
   llvm::outs() << "Model IR version: " << model_import.ir_version() << "\n";
-  llvm::outs() << "Model OPSET conversion: " << OpSetVer << " -> "
-               << last_op_version << "\n";
+  llvm::outs() << "Model OPset version: " << model_opset_version << "\n";
   llvm::outs() << "\n";
 
   /// convert model
-  //  auto model_proto =
-  //      onnx::version_conversion::ConvertVersion(model_import,
-  //      last_op_version);
+  onnx::ModelProto model_proto;
+  if (opt_args.count("--onnx-convert-ops") > 0) {
+    int convert_version = engine_opset_version;
+    if (opt_args["--onnx-convert-ops"].size() > 0)
+      convert_version = std::stoi(opt_args["--onnx-convert-ops"]);
+    llvm::outs() << "Model OPSET conversion: " << model_opset_version << " -> "
+                 << convert_version << "\n";
+    try {
+      model_proto = onnx::version_conversion::ConvertVersion(model_import,
+                                                             convert_version);
+      model_opset_version = convert_version;
+    } catch (const std::exception &e) {
+      llvm::errs() << "ERROR: Conversion failure [" << e.what() << "]\n";
+      exit(-1);
+    }
+  } else {
+    model_proto = model_import;
+  }
 
-  // TODO:
-  // 1. do not convert (unless explict option)
-  // 2. enumerate all Ops versioned and choose smart
-
-  auto model_proto = model_import;
   /// infer shapes
   onnx::shape_inference::InferShapes(model_proto);
 
