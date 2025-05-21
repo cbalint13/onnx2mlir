@@ -1,3 +1,6 @@
+
+
+# Onnx dialect tablegen
 set(LLVM_TARGET_DEFINITIONS Onnx.td)
 mlir_tablegen(Onnx.h.inc -gen-op-decls -attrdefs-dialect=onnx)
 mlir_tablegen(Onnx.cpp.inc -gen-op-defs -attrdefs-dialect=onnx)
@@ -8,6 +11,7 @@ mlir_tablegen(OnnxTypes.cpp.inc -gen-typedef-defs -typedefs-dialect=onnx)
 mlir_tablegen(OnnxAttrs.h.inc -gen-attrdef-decls -attrdefs-dialect=onnx)
 mlir_tablegen(OnnxAttrs.cpp.inc -gen-attrdef-defs -attrdefs-dialect=onnx)
 add_public_tablegen_target(MLIROnnxIncGen)
+set_output_directory(MLIROnnxIncGen test)
 add_dependencies(mlir-headers MLIROnnxIncGen)
 
 set(LLVM_TARGET_DEFINITIONS OnnxInterface.td)
@@ -44,3 +48,18 @@ add_custom_target(generate_onnx_ops ALL
 )
 
 add_dependencies(MLIROnnxIncGen generate_onnx_ops)
+
+# Onnx dialect library
+add_mlir_dialect_library(onnx2mlir_onnx_dialect
+  OBJECT
+    ir/onnx_attrs.cpp
+    ir/onnx_dialect.cpp
+    ir/onnx_interface.cpp
+    ir/onnx_ops.cpp
+    ir/onnx_types.cpp
+    support/onnx_shapes.cpp
+  DEPENDS
+    MLIROnnxIncGen
+  LINK_LIBS PUBLIC
+    MLIR
+)

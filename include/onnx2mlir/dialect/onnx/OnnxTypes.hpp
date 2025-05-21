@@ -31,6 +31,6 @@
 #define INCLUDE_ONNX2MLIR_DIALECT_ONNX_ONNXTYPES_HPP_
 
 #define GET_TYPEDEF_CLASSES
-#include "onnx2mlir/dialect/onnx/OnnxTypes.h.inc"
+#include "dialect/onnx/OnnxTypes.h.inc"
 
 #endif // INCLUDE_ONNX2MLIR_DIALECT_ONNX_ONNXTYPES_HPP_

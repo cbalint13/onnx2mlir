@@ -23,32 +23,26 @@
  *****************************************************************************/
 
 /*!
- * \file include/onnx2mlir/dialect/onnx/OnnxDialect.td
- * \brief Onnx dialect declaration
+ * \file src/dialect/onnx/OnnxInterface.td
+ * \brief Onnx dialect interfaces definition
  */
 
-#ifndef ONNX2MLIR_FRONTEND_ONNXDIALECT_TD_
-#define ONNX2MLIR_FRONTEND_ONNXDIALECT_TD_
+#ifndef ONNX2MLIR_FRONTEND_ONNXINTERFACE_TD_
+#define ONNX2MLIR_FRONTEND_ONNXINTERFACE_TD_
 
-include "mlir/IR/DialectBase.td"
 include "mlir/IR/OpBase.td"
 
-def Onnx_Dialect : Dialect {
-  let name = "onnx";
-  let summary = "A dialect for ONNX representation";
+def OPCountInfo : OpInterface<"OPCountInfo"> {
+  let description = [{
+    An interface to query custom count information for an operation type.
+  }];
+
   let cppNamespace = "::onnx2mlir::dialect::onnx";
-  let useDefaultTypePrinterParser = 1;
-  let useDefaultAttributePrinterParser = 0;
-  let extraClassDeclaration = [{
-    private:
-      void registerOps();
-      void registerTypes();
-    public:
-      ::mlir::Attribute parseAttribute(::mlir::DialectAsmParser &parser,
-                                     ::mlir::Type type) const override;
-      void printAttribute(::mlir::Attribute attr,
-                          ::mlir::DialectAsmPrinter &printer) const override;
-    }];
+
+  let methods = [
+    InterfaceMethod<"Get defined operand count", "int", "getDefinedOperandCount", (ins)>,
+    InterfaceMethod<"Get defined result count", "int", "getDefinedResultCount", (ins)>
+  ];
 }
 
-#endif // ONNX2MLIR_FRONTEND_ONNXDIALECT_TD_
+#endif // ONNX2MLIR_FRONTEND_ONNXINTERFACE_TD_

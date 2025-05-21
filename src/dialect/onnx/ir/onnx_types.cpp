@@ -36,7 +36,7 @@
 #include "onnx2mlir/dialect/onnx/OnnxTypes.hpp"
 
 #define GET_TYPEDEF_CLASSES
-#include "onnx2mlir/dialect/onnx/OnnxTypes.cpp.inc" // NOLINT
+#include "dialect/onnx/OnnxTypes.cpp.inc" // NOLINT
 #undef GET_TYPEDEF_CLASSES
 
 namespace onnx2mlir::dialect::onnx {
@@ -44,7 +44,7 @@ namespace onnx2mlir::dialect::onnx {
 void OnnxDialect::registerTypes() {
   addTypes<
 #define GET_TYPEDEF_LIST
-#include "onnx2mlir/dialect/onnx/OnnxTypes.cpp.inc" // NOLINT
+#include "dialect/onnx/OnnxTypes.cpp.inc" // NOLINT
       >();
 }
 

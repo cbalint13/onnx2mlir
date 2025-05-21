@@ -23,7 +23,7 @@
  *****************************************************************************/
 
 /*!
- * \file include/onnx2mlir/dialect/onnx/OnnxOps.td
+ * \file src/dialect/onnx/OnnxOps.td
  * \brief Onnx dialect operations definition
  */
 
@@ -37,6 +37,6 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 class Onnx_Op<string mnemonic, list<Trait> traits>
     : Op<Onnx_Dialect, mnemonic, traits #[NoMemoryEffect]>;
 
-include "onnx2mlir/dialect/onnx/OnnxOps.td.inc"
+include "OnnxOps.td.inc"
 
 #endif // ONNX2MLIR_FRONTEND_ONNXOPS_TD_

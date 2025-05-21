@@ -23,7 +23,7 @@
  *****************************************************************************/
 
 /*!
- * \file include/onnx2mlir/dialect/onnx/OnnxTypes.td
+ * \file src/dialect/onnx/OnnxTypes.td
  * \brief Onnx dialect types definition
  */
 
@@ -38,7 +38,7 @@ class Onnx_Type<string name, string typeMnemonic,
   let mnemonic = typeMnemonic;
 }
 
-include "onnx2mlir/dialect/onnx/OnnxTypes.td.inc"
+include "OnnxTypes.td.inc"
 
 def StringType : Type<CPred<"mlir::isa<OnnxStringType>($_self)">, "string type">;
 

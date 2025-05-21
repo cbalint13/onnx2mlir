@@ -33,6 +33,6 @@
 #include <mlir/IR/Attributes.h>
 
 #define GET_ATTRDEF_CLASSES
-#include "onnx2mlir/dialect/onnx/OnnxAttrs.h.inc"
+#include "dialect/onnx/OnnxAttrs.h.inc"
 
 #endif // INCLUDE_ONNX2MLIR_DIALECT_ONNX_ONNXATTRS_HPP_

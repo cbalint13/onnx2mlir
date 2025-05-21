@@ -35,7 +35,7 @@
 #include "onnx2mlir/dialect/onnx/OnnxDialect.hpp"
 
 #define GET_ATTRDEF_CLASSES
-#include "onnx2mlir/dialect/onnx/OnnxAttrs.cpp.inc"
+#include "dialect/onnx/OnnxAttrs.cpp.inc"
 
 namespace onnx2mlir::dialect::onnx {
 

@@ -23,7 +23,7 @@
  *****************************************************************************/
 
 /*!
- * \file include/onnx2mlir/dialect/onnx/OnnxAttr.td
+ * \file src/dialect/onnx/OnnxAttr.td
  * \brief Onnx dialect attributes definition
  */
 

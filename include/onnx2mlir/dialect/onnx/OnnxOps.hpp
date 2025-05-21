@@ -38,6 +38,6 @@
 #include <mlir/Interfaces/SideEffectInterfaces.h>
 
 #define GET_OP_CLASSES
-#include "onnx2mlir/dialect/onnx/Onnx.h.inc"
+#include "dialect/onnx/Onnx.h.inc"
 
 #endif // INCLUDE_ONNX2MLIR_DIALECT_ONNX_ONNXOPS_HPP_

@@ -32,6 +32,6 @@
 
 #include <mlir/IR/Dialect.h>
 
-#include "onnx2mlir/dialect/onnx/OnnxDialect.h.inc"
+#include "dialect/onnx/OnnxDialect.h.inc"
 
 #endif // INCLUDE_ONNX2MLIR_DIALECT_ONNX_ONNXDIALECT_HPP_

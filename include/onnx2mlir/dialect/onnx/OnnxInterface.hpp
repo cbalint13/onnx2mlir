@@ -32,6 +32,6 @@
 
 #include <mlir/IR/OpDefinition.h>
 
-#include "onnx2mlir/dialect/onnx/OnnxInterface.h.inc"
+#include "dialect/onnx/OnnxInterface.h.inc"
 
 #endif // INCLUDE_ONNX2MLIR_DIALECT_ONNX_ONNXINTERFACE_HPP_
