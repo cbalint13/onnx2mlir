@@ -11,6 +11,7 @@ add_library(frontends OBJECT
 target_link_libraries(frontends
   PRIVATE
     onnx2mlir_onnx_dialect
+    onnx2mlir_onnx_linalg_pass
   PUBLIC
     ONNX::onnx
 )

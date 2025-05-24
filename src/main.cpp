@@ -91,5 +91,13 @@ int main(int argc, char **argv) {
   ONNXLoader->importModule(ONNXFilename);
   ONNXConverter->convertModule(ONNXLoader->getMLIRModule());
 
+  auto module = ONNXLoader->getMLIRModule();
+  // DEBUG
+  mlir::OpPrintingFlags flags;
+  flags.elideLargeElementsAttrs(16);
+  llvm::outs().enable_colors(true);
+  module->print(llvm::outs(), flags);
+  llvm::outs().enable_colors(false);
+
   return 0;
 }

@@ -23,42 +23,12 @@
  *****************************************************************************/
 
 /*!
- * \file src/frontend/converters/onnx.cpp
- * \brief Onnx converter implementation
+ * \file include/onnx2mlir/dialect/onnx/Onnx.hpp
+ * \brief Onnx dialect related declarations
  */
 
-#include <mlir/Pass/PassManager.h>
-
-#include "onnx2mlir/frontend/onnx.hpp"
-#include "onnx2mlir/conversion/onnx_passes.hpp"
-
-namespace onnx2mlir::frontend {
-
-void ONNXConverter::convert(mlir::ModuleOp *module) {
-  // context
-  auto ctx = module->getContext();
-
-  // DEBUG
-  mlir::OpPrintingFlags flags;
-  flags.elideLargeElementsAttrs(16);
-  llvm::outs().enable_colors(true);
-  module->print(llvm::outs(), flags);
-  llvm::outs().enable_colors(false);
-
-  // create pass manager
-  mlir::PassManager pm(ctx);
-
-  // add Onnx to Linalg
-  pm.addPass(::onnx2mlir::dialect::createLowerONNXToLINALGPass());
-
-  llvm::outs() << "\n";
-  llvm::outs() << "Run passes: ONNX to LINALG\n";
-
-  // run all passes
-  if (mlir::failed(pm.run(*module))) {
-    llvm::errs() << "ERROR: pass pipeline failed.\n";
-    exit(-1);
-  }
-}
-
-} // end namespace onnx2mlir::frontend
+#include "onnx2mlir/dialect/onnx/OnnxAttrs.hpp"
+#include "onnx2mlir/dialect/onnx/OnnxDialect.hpp"
+#include "onnx2mlir/dialect/onnx/OnnxInterface.hpp"
+#include "onnx2mlir/dialect/onnx/OnnxOps.hpp"
+#include "onnx2mlir/dialect/onnx/OnnxTypes.hpp"

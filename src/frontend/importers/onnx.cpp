@@ -900,13 +900,6 @@ void ONNXImporter::import(const std::string &filepath) {
     llvm::errs() << "MLIR module verification failed.\n";
     // exit(-1);
   }
-
-  // DEBUG
-  mlir::OpPrintingFlags flags;
-  flags.elideLargeElementsAttrs(16);
-  llvm::outs().enable_colors(true);
-  module->print(llvm::outs(), flags);
-  llvm::outs().enable_colors(false);
 }
 
 } // end namespace onnx2mlir::frontend

@@ -23,42 +23,22 @@
  *****************************************************************************/
 
 /*!
- * \file src/frontend/converters/onnx.cpp
- * \brief Onnx converter implementation
+ * \file src/conversion/Passes.td
+ * \brief Dialect conversion passes
  */
 
-#include <mlir/Pass/PassManager.h>
+#ifndef ONNX2MLIR_CONVERSION_PASSES_TD_
+#define ONNX2MLIR_CONVERSION_PASSES_TD_
 
-#include "onnx2mlir/frontend/onnx.hpp"
-#include "onnx2mlir/conversion/onnx_passes.hpp"
+include "mlir/Pass/PassBase.td"
 
-namespace onnx2mlir::frontend {
+def LowerONNXToLINALGPass : Pass<"lower-onnx-to-linalg", "ModuleOp"> {
+  let summary = "Lower ONNX operations to LINALG dialect operations";
+  let description = [{
+    This pass converts ONNX operations to their LINALG dialect equivalent.
+  }];
 
-void ONNXConverter::convert(mlir::ModuleOp *module) {
-  // context
-  auto ctx = module->getContext();
-
-  // DEBUG
-  mlir::OpPrintingFlags flags;
-  flags.elideLargeElementsAttrs(16);
-  llvm::outs().enable_colors(true);
-  module->print(llvm::outs(), flags);
-  llvm::outs().enable_colors(false);
-
-  // create pass manager
-  mlir::PassManager pm(ctx);
-
-  // add Onnx to Linalg
-  pm.addPass(::onnx2mlir::dialect::createLowerONNXToLINALGPass());
-
-  llvm::outs() << "\n";
-  llvm::outs() << "Run passes: ONNX to LINALG\n";
-
-  // run all passes
-  if (mlir::failed(pm.run(*module))) {
-    llvm::errs() << "ERROR: pass pipeline failed.\n";
-    exit(-1);
-  }
+  let constructor = "createLowerONNXToLINALGPass()";
 }
 
-} // end namespace onnx2mlir::frontend
+#endif // ONNX2MLIR_CONVERSION_PASSES_TD_
