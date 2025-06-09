@@ -49,72 +49,12 @@
 #include <string>
 #include <vector>
 
+#include "onnx2mlir/common/onnx.hpp"
 #include "onnx2mlir/dialect/onnx/OnnxDialect.hpp"
 #include "onnx2mlir/dialect/onnx/OnnxInterface.hpp"
 #include "onnx2mlir/dialect/onnx/OnnxOps.hpp"
 #include "onnx2mlir/frontend/onnx.hpp"
 
-static mlir::Type OnnxToMlir_dType(const int32_t data_type_int,
-                                   mlir::MLIRContext *ctx) {
-  auto onnx_type = static_cast<onnx::TensorProto::DataType>(data_type_int);
-
-  switch (onnx_type) {
-  case onnx::TensorProto::FLOAT:
-    return mlir::Float32Type::get(ctx);
-  case onnx::TensorProto::INT4:
-    return mlir::IntegerType::get(ctx, 4);
-  case onnx::TensorProto::INT8:
-    return mlir::IntegerType::get(ctx, 8);
-  case onnx::TensorProto::INT16:
-    return mlir::IntegerType::get(ctx, 16);
-  case onnx::TensorProto::INT32:
-    return mlir::IntegerType::get(ctx, 32);
-  case onnx::TensorProto::INT64:
-    return mlir::IntegerType::get(ctx, 64);
-  case onnx::TensorProto::BOOL:
-    return mlir::IntegerType::get(ctx, 1);
-  case onnx::TensorProto::UINT4:
-    return mlir::IntegerType::get(ctx, 4, mlir::IntegerType::Unsigned);
-  case onnx::TensorProto::UINT8:
-    return mlir::IntegerType::get(ctx, 8, mlir::IntegerType::Unsigned);
-  case onnx::TensorProto::UINT16:
-    return mlir::IntegerType::get(ctx, 16, mlir::IntegerType::Unsigned);
-  case onnx::TensorProto::UINT32:
-    return mlir::IntegerType::get(ctx, 32, mlir::IntegerType::Unsigned);
-  case onnx::TensorProto::UINT64:
-    return mlir::IntegerType::get(ctx, 64, mlir::IntegerType::Unsigned);
-  case onnx::TensorProto::STRING:
-    return mlir::NoneType::get(ctx);
-  case onnx::TensorProto::FLOAT16:
-    return mlir::Float16Type::get(ctx);
-  case onnx::TensorProto::DOUBLE:
-    return mlir::Float64Type::get(ctx);
-  case onnx::TensorProto::BFLOAT16:
-    return mlir::BFloat16Type::get(ctx);
-  case onnx::TensorProto::FLOAT8E4M3FN:
-    return mlir::Float8E4M3FNType::get(ctx);
-  case onnx::TensorProto::FLOAT8E4M3FNUZ:
-    return mlir::Float8E4M3FNUZType::get(ctx);
-  case onnx::TensorProto::FLOAT8E5M2:
-    return mlir::Float8E5M2Type::get(ctx);
-  case onnx::TensorProto::FLOAT8E5M2FNUZ:
-    return mlir::Float8E5M2FNUZType::get(ctx);
-  case onnx::TensorProto::FLOAT4E2M1:
-    return mlir::Float4E2M1FNType::get(ctx);
-  case onnx::TensorProto::COMPLEX64:
-    return mlir::ComplexType::get(mlir::Float32Type::get(ctx));
-  case onnx::TensorProto::COMPLEX128:
-    return mlir::ComplexType::get(mlir::Float64Type::get(ctx));
-  case onnx::TensorProto::UNDEFINED:
-    return mlir::NoneType::get(ctx);
-  default:
-    llvm::errs() << "ERROR: Unknown ONNX data type integer value: "
-                 << data_type_int << "\n";
-    exit(-1);
-  }
-
-  return nullptr;
-}
 
 template <typename shp_T, typename typ_T>
 static mlir::DenseElementsAttr
