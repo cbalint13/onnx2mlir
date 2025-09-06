@@ -15,7 +15,6 @@ endif()
 find_package(ONNX REQUIRED 1.17)
 if(ONNX_FOUND)
   message(STATUS "Found ONNX version: ${ONNX_VERSION}")
-  message(STATUS "Found ONNX includes: ${ONNX_INCLUDE_DIRS}")
 endif()
 # onnx variant
 find_path(ONNX_PROTOBUF_INCLUDE_DIR NAMES onnx/onnx.pb.h)
@@ -24,14 +23,11 @@ if(ONNX_PROTOBUF_INCLUDE_DIR)
     message(STATUS "Standard ONNX_ML=0 protobuf headers found.")
     set(ONNX_USE_ML 0)
 elseif(ONNX_PROTOBUF_ML_INCLUDE_DIR)
-    message(STATUS "Full ONNX_ML=1 protobuf headers found.")
+    message(STATUS "Extended ONNX_ML=1 protobuf headers found.")
     set(ONNX_USE_ML 1)
 else()
-    message(FATAL "ONNX protobuf header not found.")
+    message(FATAL_ERROR "ONNX protobuf header not found.")
 endif()
-
-# hardcode for tests
-set(LLVM_CONFIG "llvm-config-22" CACHE STRING "Build with LLVM set to specific llvm-config path")
 
 # use llvm config
 if (DEFINED LLVM_CONFIG)
