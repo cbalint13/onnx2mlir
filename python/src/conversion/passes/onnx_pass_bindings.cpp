@@ -23,32 +23,23 @@
  *****************************************************************************/
 
 /*!
- * \file include/onnx2mlir/conversion/conversion_passes.cpp
- * \brief MLIR conversion passes
+ * \file python/src/conversion/passes/onnx_pass_bindings.cpp
+ * \brief Onnx passes bindings to python
  */
 
-#ifndef INCLUDE_ONNX2MLIR_CONVERSION_ONNX_PASSES_HPP_
-#define INCLUDE_ONNX2MLIR_CONVERSION_ONNX_PASSES_HPP_
+#include <mlir/Bindings/Python/PybindAdaptors.h>
+#include <mlir/Pass/PassManager.h>
 
-#include <mlir/IR/BuiltinOps.h>
-#include <mlir/Pass/Pass.h>
+#include "onnx2mlir/conversion/onnx_passes.hpp"
 
-#include <memory>
 
-namespace mlir {
-#define GEN_PASS_DEF_LOWERONNXTOLINALGPASS
-#include "conversion/Passes.h.inc"
-} // namespace mlir
+//namespace py = pybind11;
+//using namespace mlir;
+//using namespace mlir::python;
 
-namespace onnx2mlir::dialect {
+PYBIND11_MODULE(_onnx2mlir_onnx_passes, m) {
+  m.doc() = "Python bindings for Onnx2Mlir ONNX passes.";
 
-/*
- *  Onnx to Linalg
- *
- */
-void registerLowerONNXToLINALGPass();
-std::unique_ptr<mlir::Pass> createLowerONNXToLINALGPass();
-
-} // namespace onnx2mlir::dialect
-
-#endif // INCLUDE_ONNX2MLIR_CONVERSION_ONNX_PASSES_HPP_
+  // Register ONNX passes on load.
+  onnx2mlir::dialect::registerLowerONNXToLINALGPass();
+}

@@ -1,6 +1,16 @@
 cmake_minimum_required(VERSION 3.15)
 project(onnx2mlir LANGUAGES C CXX)
+
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+option(BUILD_PYTHON_BINDINGS "Build with python bindings." ON)
+
+if(BUILD_PYTHON_BINDINGS)
+  set(PYBIND11_FINDPYTHON ON)
+  find_package(Python3 COMPONENTS Interpreter Development)
+  find_package(pybind11 REQUIRED)
+endif()
 
 find_package(ONNX REQUIRED 1.17)
 if(ONNX_FOUND)
@@ -20,9 +30,8 @@ else()
     message(FATAL "ONNX protobuf header not found.")
 endif()
 
-
 # hardcode for tests
-set(LLVM_CONFIG "llvm-config-21" CACHE STRING "Build with LLVM set to specific llvm-config path")
+set(LLVM_CONFIG "llvm-config-22" CACHE STRING "Build with LLVM set to specific llvm-config path")
 
 # use llvm config
 if (DEFINED LLVM_CONFIG)
@@ -63,3 +72,9 @@ include_directories(${PROJECT_SOURCE_DIR}/include)
 add_definitions(${LLVM_DEFINITIONS})
 
 add_subdirectory(src)
+
+# python bindings
+if(BUILD_PYTHON_BINDINGS)
+  include(AddMLIRPython)
+  add_subdirectory(python)
+endif()

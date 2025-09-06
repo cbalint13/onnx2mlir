@@ -1,5 +1,3 @@
-
-
 # Onnx dialect tablegen
 set(LLVM_TARGET_DEFINITIONS Onnx.td)
 mlir_tablegen(Onnx.h.inc -gen-op-decls -attrdefs-dialect=onnx)
@@ -19,6 +17,13 @@ mlir_tablegen(OnnxInterface.h.inc -gen-op-interface-decls)
 mlir_tablegen(OnnxInterface.cpp.inc -gen-op-interface-defs)
 add_public_tablegen_target(MLIROnnxInterfaceIncGen)
 add_dependencies(mlir-headers MLIROnnxInterfaceIncGen)
+
+if(BUILD_PYTHON_BINDINGS)
+  mlir_tablegen(Onnx.py.inc -gen-python-op-bindings --bind-dialect=onnx)
+  add_public_tablegen_target(MLIROnnxPythonIncGen)
+  set_output_directory(MLIROnnxPythonIncGen test)
+  add_dependencies(mlir-headers MLIROnnxPythonIncGen)
+endif()
 
 add_mlir_doc(OnnxDialect OnnxDialect onnx/ -gen-dialect-doc)
 add_mlir_doc(OnnxOps OnnxOps onnx/ -gen-op-doc)
