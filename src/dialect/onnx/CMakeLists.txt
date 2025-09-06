@@ -9,7 +9,6 @@ mlir_tablegen(OnnxTypes.cpp.inc -gen-typedef-defs -typedefs-dialect=onnx)
 mlir_tablegen(OnnxAttrs.h.inc -gen-attrdef-decls -attrdefs-dialect=onnx)
 mlir_tablegen(OnnxAttrs.cpp.inc -gen-attrdef-defs -attrdefs-dialect=onnx)
 add_public_tablegen_target(MLIROnnxIncGen)
-set_output_directory(MLIROnnxIncGen test)
 add_dependencies(mlir-headers MLIROnnxIncGen)
 
 set(LLVM_TARGET_DEFINITIONS OnnxInterface.td)
@@ -19,10 +18,29 @@ add_public_tablegen_target(MLIROnnxInterfaceIncGen)
 add_dependencies(mlir-headers MLIROnnxInterfaceIncGen)
 
 if(BUILD_PYTHON_BINDINGS)
+  set(LLVM_TARGET_DEFINITIONS Onnx.td)
   mlir_tablegen(Onnx.py.inc -gen-python-op-bindings --bind-dialect=onnx)
   add_public_tablegen_target(MLIROnnxPythonIncGen)
-  set_output_directory(MLIROnnxPythonIncGen test)
-  add_dependencies(mlir-headers MLIROnnxPythonIncGen)
+
+  # change to global python mlir path
+  set(OUTPUT_PY_PATH "${CMAKE_BINARY_DIR}/python/dialect")
+  set(TBLGEN_PY_FILE "${CMAKE_CURRENT_BINARY_DIR}/Onnx.py.inc")
+  add_custom_command(
+    OUTPUT "${OUTPUT_PY_PATH}/onnx.py"
+    DEPENDS MLIROnnxPythonIncGen
+    COMMAND ${CMAKE_COMMAND} -E copy ${TBLGEN_PY_FILE} "${OUTPUT_PY_PATH}/onnx.py"
+    COMMAND ${CMAKE_COMMAND} -E touch "${OUTPUT_PY_PATH}/__init__.py"
+    COMMAND ${CMAKE_COMMAND} -E chdir "${OUTPUT_PY_PATH}"
+      sed -i 's|from ._ods_common|from mlir.dialects._ods_common|g' onnx.py
+    COMMENT "Fixing Onnx.py.inc bindings"
+  )
+  add_custom_target(generate_onnx_py_bindings ALL
+    DEPENDS "${OUTPUT_PY_PATH}/onnx.py"
+    COMMENT "Finalize onnx.py bindings"
+  )
+
+  add_dependencies(mlir-headers MLIROnnxPythonIncGen generate_onnx_py_bindings)
+
 endif()
 
 add_mlir_doc(OnnxDialect OnnxDialect onnx/ -gen-dialect-doc)
@@ -48,8 +66,8 @@ add_custom_command(
 )
 
 add_custom_target(generate_onnx_ops ALL
-    DEPENDS ${ONNX_MLIR_OPS_INC}
-    COMMENT "MLIR ONNX Ops generator"
+  DEPENDS ${ONNX_MLIR_OPS_INC}
+  COMMENT "MLIR ONNX Ops generator"
 )
 
 add_dependencies(MLIROnnxIncGen generate_onnx_ops)

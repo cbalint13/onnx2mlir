@@ -23,18 +23,19 @@
  *****************************************************************************/
 
 /*!
- * \file python/src/conversion/passes/onnx_pass_bindings.cpp
+ * \file python/src/dialect/onnx_dialect_bindings.cpp
  * \brief Onnx passes bindings to python
  */
 
 #include <mlir/Bindings/Python/PybindAdaptors.h>
-#include <mlir/Pass/PassManager.h>
+#include <mlir/IR/Dialect.h>
 
-#include "onnx2mlir/conversion/onnx_passes.hpp"
+#include "onnx2mlir/dialect/onnx/Onnx.hpp"
 
-PYBIND11_MODULE(_onnx2mlir_onnx_passes, m) {
-  m.doc() = "Python bindings for Onnx2Mlir ONNX passes.";
+PYBIND11_MODULE(_onnx2mlir_onnx_dialect, m) {
+  m.doc() = "ONNX dialect python bindings";
 
-  // Register ONNX passes on load.
-  onnx2mlir::dialect::registerLowerONNXToLINALGPass();
+  // Register the core dialect with the module.
+  m.def("register_dialect",
+        [](mlir::MLIRContext *context) { registerOnnxDialect(context); });
 }

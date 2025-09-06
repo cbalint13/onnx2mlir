@@ -32,3 +32,5 @@
 #include "onnx2mlir/dialect/onnx/OnnxInterface.hpp"
 #include "onnx2mlir/dialect/onnx/OnnxOps.hpp"
 #include "onnx2mlir/dialect/onnx/OnnxTypes.hpp"
+
+void registerOnnxDialect(mlir::MLIRContext *context);

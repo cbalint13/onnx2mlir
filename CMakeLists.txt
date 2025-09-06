@@ -1,14 +1,16 @@
 cmake_minimum_required(VERSION 3.15)
 project(onnx2mlir LANGUAGES C CXX)
 
+option(BUILD_PYTHON_BINDINGS "Build with python bindings." ON)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-option(BUILD_PYTHON_BINDINGS "Build with python bindings." ON)
+find_program(PYTHON3_EXECUTABLE NAMES python3 REQUIRED)
 
 if(BUILD_PYTHON_BINDINGS)
   set(PYBIND11_FINDPYTHON ON)
-  find_package(Python3 COMPONENTS Interpreter Development)
+  find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
   find_package(pybind11 REQUIRED)
 endif()
 
