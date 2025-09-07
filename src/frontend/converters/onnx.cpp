@@ -29,8 +29,8 @@
 
 #include <mlir/Pass/PassManager.h>
 
-#include "onnx2mlir/frontend/onnx.hpp"
 #include "onnx2mlir/conversion/onnx_passes.hpp"
+#include "onnx2mlir/frontend/onnx.hpp"
 
 namespace onnx2mlir::frontend {
 

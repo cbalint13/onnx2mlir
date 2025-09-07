@@ -55,7 +55,6 @@
 #include "onnx2mlir/dialect/onnx/OnnxOps.hpp"
 #include "onnx2mlir/frontend/onnx.hpp"
 
-
 template <typename shp_T, typename typ_T>
 static mlir::DenseElementsAttr
 getMlirTensor(const std::string &data, shp_T shape, typ_T dType,
@@ -159,7 +158,7 @@ static mlir::ElementsAttr OnnxToMlir_Tensor(const onnx::TensorProto &tensor,
     case onnx::TensorProto::UINT64:
       return getMlirTensor(tensor.uint64_data(), tensor.dims(), dType, eAttr);
     case onnx::TensorProto::STRING:
-    // TODO STRING
+    // TODO(cbalint13): STRING
     case onnx::TensorProto::UNDEFINED:
     default:
       llvm::errs() << "ERROR: Data read not supported for this type.\n";
@@ -625,7 +624,7 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
           if (oitr != ops_by_inputs.end()) {
             auto oadj = *oitr->second;
             oadj->print(llvm::errs());
-            // TODO which result ?!
+            // TODO(cbalint13): which result ?!
             types.push_back(oadj->getResults()[0].getType());
           }
           // lookup main func outputs

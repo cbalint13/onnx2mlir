@@ -34,9 +34,11 @@
 #include <mlir/Pass/Pass.h>
 #include <mlir/Transforms/DialectConversion.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <memory>
 #include <regex>
+#include <set>
 #include <string>
 #include <utility>
 
@@ -186,7 +188,6 @@ struct ONNXToTOSALowering : public mlir::RewritePattern {
      * onnx::Constant
      */
     if (opNameBeginsWith(opName, "Constant")) {
-
       // onnx::Constant
       mlir::Attribute valueAttr = op->getAttr("value");
       auto elemValueAttr =
@@ -214,7 +215,6 @@ struct ONNXToTOSALowering : public mlir::RewritePattern {
        * onnx::Unsqueeze
        */
     } else if (opNameBeginsWith(opName, "Unsqueeze")) {
-
       mlir::Value inputData = op->getOperand(0);
       mlir::Value axesTensor = op->getOperand(1);
       mlir::Location loc = op->getLoc();

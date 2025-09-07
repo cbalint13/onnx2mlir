@@ -95,7 +95,7 @@ int main(int argc, char **argv) {
   // DEBUG
   mlir::OpPrintingFlags flags;
   flags.elideLargeElementsAttrs(16);
-  //flags.printLargeElementsAttrWithHex();
+  // flags.printLargeElementsAttrWithHex();
   flags.enableDebugInfo();
   llvm::outs().enable_colors(true);
   module->print(llvm::outs(), flags);

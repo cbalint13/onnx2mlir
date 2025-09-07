@@ -27,6 +27,9 @@
  * \brief Onnx dialect related declarations
  */
 
+#ifndef INCLUDE_ONNX2MLIR_DIALECT_ONNX_ONNX_HPP_
+#define INCLUDE_ONNX2MLIR_DIALECT_ONNX_ONNX_HPP_
+
 #include "onnx2mlir/dialect/onnx/OnnxAttrs.hpp"
 #include "onnx2mlir/dialect/onnx/OnnxDialect.hpp"
 #include "onnx2mlir/dialect/onnx/OnnxInterface.hpp"
@@ -34,3 +37,5 @@
 #include "onnx2mlir/dialect/onnx/OnnxTypes.hpp"
 
 void registerOnnxDialect(mlir::MLIRContext *context);
+
+#endif // INCLUDE_ONNX2MLIR_DIALECT_ONNX_ONNX_HPP_
