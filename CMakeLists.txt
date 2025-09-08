@@ -9,6 +9,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
 endif()
+message(STATUS "CMake build type is: ${CMAKE_BUILD_TYPE}")
 
 find_program(PYTHON3_EXECUTABLE NAMES python3 REQUIRED)
 
