@@ -29,7 +29,12 @@ if(BUILD_PYTHON_BINDINGS)
     OUTPUT "${OUTPUT_PY_PATH}/onnx.py"
     DEPENDS MLIROnnxPythonIncGen
     COMMAND ${CMAKE_COMMAND} -E copy ${TBLGEN_PY_FILE} "${OUTPUT_PY_PATH}/onnx.py"
-    COMMAND ${CMAKE_COMMAND} -E touch "${OUTPUT_PY_PATH}/__init__.py"
+    COMMAND ${CMAKE_COMMAND} -E chdir "${OUTPUT_PY_PATH}"
+      echo "from . import onnx" > __init__.py
+    COMMAND ${CMAKE_COMMAND} -E chdir "${OUTPUT_PY_PATH}"
+      echo "from ._onnx2mlirDialectsOnnx import register_onnx_dialect" >> __init__.py
+    COMMAND ${CMAKE_COMMAND} -E chdir "${OUTPUT_PY_PATH}"
+      echo "__all__ = ['onnx', 'register_onnx_dialect']" >> __init__.py
     COMMAND ${CMAKE_COMMAND} -E chdir "${OUTPUT_PY_PATH}"
       sed -i 's|from ._ods_common|from mlir.dialects._ods_common|g' onnx.py
     COMMENT "Fixing Onnx.py.inc bindings"

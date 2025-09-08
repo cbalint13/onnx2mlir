@@ -14,8 +14,7 @@ from mlir.ir import (
     DenseElementsAttr,
     F32Type,
 )
-from onnx2mlir.dialect import onnx
-from onnx2mlir.dialect._onnx2mlirDialectsOnnx import register_onnx_dialect
+from onnx2mlir.dialect import onnx, register_onnx_dialect
 
 
 def test_onnx_mlir_generation():
