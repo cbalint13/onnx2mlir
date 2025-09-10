@@ -23,20 +23,21 @@ if(BUILD_PYTHON_BINDINGS)
   add_public_tablegen_target(MLIROnnxPythonIncGen)
 
   # change to global python mlir path
-  set(OUTPUT_PY_PATH "${CMAKE_BINARY_DIR}/python/onnx2mlir/dialect")
-  set(TBLGEN_PY_FILE "${CMAKE_CURRENT_BINARY_DIR}/Onnx.py.inc")
+  set(PY_OUTPUT_PATH "${CMAKE_BINARY_DIR}/python/onnx2mlir/dialect")
+  set(PY_TBLGEN_FILE "${CMAKE_CURRENT_BINARY_DIR}/Onnx.py.inc")
   add_custom_command(
     OUTPUT "${OUTPUT_PY_PATH}/onnx.py"
     DEPENDS MLIROnnxPythonIncGen
-    COMMAND ${CMAKE_COMMAND} -E copy ${TBLGEN_PY_FILE} "${OUTPUT_PY_PATH}/onnx.py"
-    COMMAND ${CMAKE_COMMAND} -E chdir "${OUTPUT_PY_PATH}"
+    COMMAND ${CMAKE_COMMAND} -E copy ${PY_TBLGEN_FILE} onnx.py
+    COMMAND
       echo "from . import onnx" > __init__.py
-    COMMAND ${CMAKE_COMMAND} -E chdir "${OUTPUT_PY_PATH}"
+    COMMAND
       echo "from ._onnx2mlirDialectsOnnx import register_onnx_dialect" >> __init__.py
-    COMMAND ${CMAKE_COMMAND} -E chdir "${OUTPUT_PY_PATH}"
+    COMMAND
       echo "__all__ = ['onnx', 'register_onnx_dialect']" >> __init__.py
-    COMMAND ${CMAKE_COMMAND} -E chdir "${OUTPUT_PY_PATH}"
+    COMMAND
       sed -i 's|from ._ods_common|from mlir.dialects._ods_common|g' onnx.py
+    WORKING_DIRECTORY ${PY_OUTPUT_PATH}
     COMMENT "Fixing Onnx.py.inc bindings"
   )
   add_custom_target(generate_onnx_py_bindings ALL

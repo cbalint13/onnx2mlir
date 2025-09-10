@@ -1,5 +1,3 @@
-enable_testing()
-
 add_test(
     NAME all_python_tests
     COMMAND ${PYTEST_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/python
