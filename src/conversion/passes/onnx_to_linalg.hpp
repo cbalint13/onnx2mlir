@@ -23,39 +23,24 @@
  *****************************************************************************/
 
 /*!
- * \file src/conversion/passes/onnx_to_linalg/constant.cpp
- * \brief ONNX ConstantOp to Linalg lowering
+ * \file src/conversion/onnx_to_linalg.hpp
+ * \brief MLIR to Linalg operators conversion
  */
 
-#include <mlir/Dialect/Arith/IR/Arith.h>
-#include <mlir/IR/PatternMatch.h>
-
-#include "onnx2mlir/dialect/onnx/Onnx.hpp"
+#ifndef SRC_CONVERSION_PASSES_ONNX_TO_LINALG_HPP_
+#define SRC_CONVERSION_PASSES_ONNX_TO_LINALG_HPP_
 
 namespace onnx2mlir::dialect {
 
+/*
+ *  Onnx to Linalg Operator conversions
+ *
+ */
+
+// onnx.ConstantOp
 mlir::LogicalResult OnnxToLinalg_ConstantOp(mlir::Operation *op,
-                                            mlir::PatternRewriter &rewriter) {
-  // Cannot handle NoneType return
-  if (mlir::isa<mlir::NoneType>(op->getResult(0).getType())) {
-    return rewriter.notifyMatchFailure(
-        op, "onnx.Constant with 'NoneType' is not supported");
-  }
-
-  mlir::Attribute valueAttr = op->getAttr("value");
-  auto elemValueAttr = mlir::dyn_cast_or_null<mlir::ElementsAttr>(valueAttr);
-
-  // Cannot handle empty tensor
-  if (!elemValueAttr) {
-    return rewriter.notifyMatchFailure(
-        op, "onnx.Constant without a valid tensor 'value' attribute");
-  }
-
-  // Create the new arithmetic constant op
-  rewriter.replaceOpWithNewOp<mlir::arith::ConstantOp>(
-      op, elemValueAttr.getType(), elemValueAttr);
-
-  return mlir::success();
-}
+                                            mlir::PatternRewriter &rewriter);
 
 } // namespace onnx2mlir::dialect
+
+#endif // SRC_CONVERSION_PASSES_ONNX_TO_LINALG_HPP_

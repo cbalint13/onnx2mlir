@@ -44,8 +44,10 @@
 #include <utility>
 
 #include "onnx2mlir/common/onnx.hpp"
-#include "onnx2mlir/dialect/onnx/Onnx.hpp"
 #include "onnx2mlir/conversion/onnx_passes.hpp"
+#include "onnx2mlir/dialect/onnx/Onnx.hpp"
+
+#include "onnx_to_linalg.hpp"
 
 namespace onnx2mlir::dialect {
 
@@ -275,7 +277,7 @@ struct ONNXToLINALGLowering : public mlir::RewritePattern {
     llvm::StringRef opName = op->getName().getStringRef();
 
     if (opNameBeginsWith(opName, "Constant")) {
-#include "onnx_to_linalg/constant.cpp"
+      return OnnxToLinalg_ConstantOp(op, rewriter);
     } else if (opNameBeginsWith(opName, "Unsqueeze")) {
 #include "onnx_to_linalg/unsqueeze.cpp"
     } else if (opNameBeginsWith(opName, "Transpose")) {

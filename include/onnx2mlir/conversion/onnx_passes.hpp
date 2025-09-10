@@ -23,7 +23,7 @@
  *****************************************************************************/
 
 /*!
- * \file include/onnx2mlir/conversion/conversion_passes.cpp
+ * \file include/onnx2mlir/conversion/onnx_passes.hpp
  * \brief MLIR conversion passes
  */
 
