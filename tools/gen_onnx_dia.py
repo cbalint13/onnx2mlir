@@ -185,7 +185,10 @@ def main():
             ops_versions[schema.name] = []
         ops_versions[schema.name].append(int(schema.since_version))
 
-    # iterate Ops
+    ##
+    ## Operators
+    ##
+
     for schema in defs.get_all_schemas_with_history():
 
         opname = schema.name
@@ -228,8 +231,8 @@ def main():
         ##
 
         inp_names = []
-        inp_types_str = "  let arguments = (ins "
-        prefill = " " * len(inp_types_str)
+        inp_args_str = "  let arguments = (ins "
+        prefill = " " * len(inp_args_str)
         if len(schema.inputs):
             for inp in schema.inputs:
                 mlir_types = get_mlir_types_from_str(
@@ -238,34 +241,34 @@ def main():
                 inp_name = inp.name
                 if inp_name in inp_names:
                     inp_name = "input_" + inp_name
-                inp_types_str += f"{mlir_types}:${inp_name},\n" + prefill
+                inp_args_str += f"{mlir_types}:${inp_name},\n" + prefill
                 inp_names.append(inp.name)
 
         ##
         ## Attributes
         ##
 
-        if len(schema.attributes):
-            for idx, attr in enumerate(sorted(schema.attributes)):
-                mlir_attr = get_mlir_attrs_from_str(schema.attributes[attr])
-                if mlir_attr is not None:
-                    inp_attr = attr
-                    if inp_attr in inp_names:
-                        inp_attr = "input_" + inp_attr
-                    inp_types_str += f"{mlir_attr}:${inp_attr},\n" + prefill
+        for attr in sorted(schema.attributes):
+            mlir_attr = get_mlir_attrs_from_str(schema.attributes[attr])
+            if mlir_attr is not None:
+                inp_attr = attr
+                if inp_attr in inp_names:
+                    inp_attr = "input_" + inp_attr
+                inp_args_str += f"{mlir_attr}:${inp_attr},\n" + prefill
 
-        if len(inp_types_str):
+        if len(inp_args_str):
             # trim last comma
-            inp_types_str = inp_types_str[: inp_types_str.rfind(",")]
-        inc.write(f"{inp_types_str});\n")
+            inp_args_str = inp_args_str[: inp_args_str.rfind(",")]
+
+        inc.write(f"{inp_args_str});\n")
 
         ##
         ## Results
         ##
 
-        out_types_str = "  let results = (outs "
-        prefill = " " * len(out_types_str)
-        for idx, out in enumerate(schema.outputs):
+        out_results_str = "  let results = (outs "
+        prefill = " " * len(out_results_str)
+        for out in schema.outputs:
             opt = (
                 out.option
                 if (schema.name != "Constant")
@@ -275,18 +278,19 @@ def main():
             out_name = out.name.replace(".", "")
             if out_name in inp_names:
                 out_name = "output_" + out_name
-            out_types_str += f"{mlir_types}:${out_name},\n" + prefill
+            out_results_str += f"{mlir_types}:${out_name},\n" + prefill
 
-        if len(out_types_str):
+        if len(out_results_str):
             # trim last comma
-            out_types_str = out_types_str[: out_types_str.rfind(",")]
-        inc.write(f"{out_types_str});\n")
+            out_results_str = out_results_str[: out_results_str.rfind(",")]
+
+        inc.write(f"{out_results_str});\n")
 
         ##
         ## Class appendix
         ##
 
-        def_operands = -1 if "Variadic" in inp_types_str else len(schema.inputs)
+        def_operands = -1 if "Variadic" in inp_args_str else len(schema.inputs)
         inc.write(f"  let extraClassDeclaration = [{{\n")
         inc.write(f"    int getDefinedOperandCount() {{\n")
         inc.write(f"      return %i;\n" % def_operands)
