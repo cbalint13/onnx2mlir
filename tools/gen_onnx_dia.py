@@ -162,17 +162,16 @@ def get_mlir_attrs_from_str(attr):
 def main():
 
     parser = argparse.ArgumentParser(description="MLIR ONNX ops generator.")
-
     parser.add_argument("output_mlir_ops_inc", help="MLIR Ops file output")
     parser.add_argument("-debug", action="store_true", help="Enable debug mode")
-
     args = parser.parse_args()
+
+    inc = open(args.output_mlir_ops_inc, "w")
 
     ##
     ## Header
     ##
 
-    inc = open(args.output_mlir_ops_inc, "w")
     inc.write("/********************************************************\n")
     inc.write(" *   ONNX version [%s]%s*\n" % (onnx.__version__, " " * 30))
     inc.write(" *   Generated at [%s]%s*\n" % (datetime.now(), " " * 10))
@@ -308,9 +307,8 @@ def main():
 
         if args.debug:
             print("\n====================[%s]=======================\n" % schema.name)
-            print(dir(schema.outputs))
             print(
-                "DBG [%s][%s][%s] [%s]"
+                "OP domain:[%s] level:[%s] name:[%s] ver:[%s]"
                 % (
                     schema.domain,
                     schema.support_level,
