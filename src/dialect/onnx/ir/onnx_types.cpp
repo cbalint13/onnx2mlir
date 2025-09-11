@@ -42,7 +42,7 @@
 namespace onnx2mlir::dialect::onnx {
 
 void OnnxDialect::registerTypes() {
-  addTypes<
+  addTypes< // NOLINT
 #define GET_TYPEDEF_LIST
 #include "dialect/onnx/OnnxTypes.cpp.inc" // NOLINT
       >();

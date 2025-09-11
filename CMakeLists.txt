@@ -8,6 +8,7 @@ option(BUILD_SHARED_LIBS "Build shared libraries instead of static libraries" ON
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build" FORCE)
@@ -125,6 +126,15 @@ add_custom_target(lint
   COMMAND env sh tests/lint/git-check-lint-format.sh
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   COMMENT "Running code format check..."
+)
+
+# clang-tidy
+add_custom_target(tidy
+  COMMAND env run-clang-tidy -quiet
+    -p ${CMAKE_BINARY_DIR}
+    -header-filter='^include/.*'
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  COMMENT "Running clang-tidy check..."
 )
 
 if(BUILD_TESTING)
