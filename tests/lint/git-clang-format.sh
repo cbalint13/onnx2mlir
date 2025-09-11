@@ -6,28 +6,46 @@ style="LLVM"
 
 for f in $(git ls-files -- '*.h' '*.hpp' '*.c' '*.cc' '*.cpp' | grep -v '/onnx_to_linalg'); do
 
-  echo
-  echo "-----------------------////---------------------"
-  echo "Analysing: [$f]"
+  if [ $quiet == false ];
+  then
+    echo "Analysing: [$f]"
+  fi
+
   filename="$(basename -- $f)"
   pathname="$(dirname -- $f)"
+
+  ##
+  ## clang-format
+  ##
+
   pushd $pathname > /dev/null
-  clang-format --style=$style $filename > /tmp/$filename.tmp
-  if [ $quiet == false ]
-  then
-    unbuffer git --no-pager diff $filename /tmp/$filename.tmp | tail -n +5
+  cdiff=`git diff --no-index --color -- "$filename" <(clang-format --style=$style "$filename")`
+  if [[ -n "$cdiff" && "$apply" == true ]]; then
+    udiff=`git diff --no-index --no-color -- "$filename" <(clang-format --style=$style "$filename")`
+    echo "udiff" | patch -p1
   fi
-  git --no-pager diff $filename /tmp/$filename.tmp > /tmp/$filename.dif
-  if [ $apply == true ]
-  then
-    patch -p1 < /tmp/$filename.dif
-  fi
-  rm -rf /tmp/$filename.???
   popd > /dev/null
 
-  flt="+readability/missing-final-newline,"
+  ##
+  ## cpplint
+  ##
+
+  flt="-whitespace/indent,"
   flt+="-whitespace/comments,"
-  flt+="-whitespace/indent"
-  cpplint --filter=${flt} $f
+  flt+="+readability/missing-final-newline"
+  clint=`cpplint --quiet --filter=${flt} "$f" 2>&1`
+
+  ##
+  ## display errors
+  ##
+
+  if [[ -n "$cdiff" || -n "$clint" ]]; then
+    echo
+    echo -e "------->>>--[\e[32m$f\e[0m]-->>>---------"
+    echo "$cdiff" | tail -n +5
+    echo "$clint"
+    echo -e "-------<<<--[\e[32m$f\e[0m]--<<<---------"
+    echo
+  fi
 
 done
