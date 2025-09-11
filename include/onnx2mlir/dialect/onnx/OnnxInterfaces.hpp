@@ -34,4 +34,4 @@
 
 #include "dialect/onnx/OnnxInterfaces.h.inc"
 
-#endif // INCLUDE_ONNX2MLIR_DIALECT_ONNX_ONNXINTERFACE_HPP_
+#endif // INCLUDE_ONNX2MLIR_DIALECT_ONNX_ONNXINTERFACES_HPP_

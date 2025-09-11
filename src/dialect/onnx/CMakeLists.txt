@@ -33,7 +33,7 @@ if(BUILD_PYTHON_BINDINGS)
   set(PY_OUTPUT_PATH "${CMAKE_BINARY_DIR}/python/onnx2mlir/dialect")
   set(PY_TBLGEN_FILE "${CMAKE_CURRENT_BINARY_DIR}/Onnx.py.inc")
   add_custom_command(
-    OUTPUT "${OUTPUT_PY_PATH}/onnx.py"
+    OUTPUT "${OUTPUT_PY_PATH}/__init__.py"
     DEPENDS MLIROnnxPythonIncGen
     COMMAND ${CMAKE_COMMAND} -E copy ${PY_TBLGEN_FILE} onnx.py
     COMMAND
@@ -45,11 +45,11 @@ if(BUILD_PYTHON_BINDINGS)
     COMMAND
       sed -i 's|from ._ods_common|from mlir.dialects._ods_common|g' onnx.py
     WORKING_DIRECTORY ${PY_OUTPUT_PATH}
-    COMMENT "Update Onnx.py.inc bindings"
+    COMMENT "Update Onnx dialect python bindings"
   )
   add_custom_target(generate_onnx_py_bindings
-    DEPENDS "${OUTPUT_PY_PATH}/onnx.py"
-    COMMENT "Finalize onnx.py bindings"
+    DEPENDS "${OUTPUT_PY_PATH}/__init__.py"
+    COMMENT "Finish Onnx dialect python bindings"
   )
 endif()
 
@@ -74,7 +74,6 @@ add_dependencies(MLIROnnxIncGen generate_onnx_ops)
 
 # Onnx dialect library
 add_mlir_dialect_library(onnx2mlir_onnx_dialect
-  OBJECT
     ir/onnx_attrs.cpp
     ir/onnx_dialect.cpp
     ir/onnx_interfaces.cpp

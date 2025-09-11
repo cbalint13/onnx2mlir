@@ -1,0 +1,11 @@
+add_library(onnx2mlir_importers
+  onnx.cpp
+)
+target_link_libraries(onnx2mlir_importers
+  PRIVATE
+    onnx2mlir_onnx_dialect
+  PUBLIC
+    ONNX::onnx
+    MLIR
+    LLVM
+)

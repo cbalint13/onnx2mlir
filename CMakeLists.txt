@@ -2,16 +2,25 @@ cmake_minimum_required(VERSION 3.15)
 project(onnx2mlir LANGUAGES C CXX)
 
 option(BUILD_TESTING "Build with tests" ON)
-option(BUILD_PYTHON_BINDINGS "Build with python bindings." ON)
+option(BUILD_PYTHON_BINDINGS "Build with python bindings" ON)
+option(BUILD_SHARED_LIBS "Build shared libraries instead of static libraries" ON)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF)
 
 if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build." FORCE)
+  set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build" FORCE)
 endif()
 message(STATUS "CMake build type is: ${CMAKE_BUILD_TYPE}")
+
+if(BUILD_SHARED_LIB)
+  message(STATUS "Building SHARED libraries")
+else()
+  message(STATUS "Building STATIC libraries")
+endif()
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Werror -Wno-comment -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-function")
 
 find_program(PYTHON3_EXECUTABLE NAMES python3 REQUIRED)
 
@@ -73,9 +82,9 @@ if(MLIR_FOUND)
   set(MLIR_BINARY_DIR ${CMAKE_BINARY_DIR})
 endif()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0 -Wall -Wextra -Werror -Wno-comment -Wno-unused-parameter -Wno-unused-but-set-variable -Wno-unused-function")
-
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")
 list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
