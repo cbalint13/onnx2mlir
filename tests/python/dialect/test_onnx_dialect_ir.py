@@ -7,13 +7,12 @@ import textwrap
 from mlir.dialects import func
 from mlir.ir import (
     Context,
+    InsertionPoint,
     Location,
     Module,
-    InsertionPoint,
-    RankedTensorType,
-    DenseElementsAttr,
-    F32Type,
 )
+
+import onnx2mlir.support as support
 from onnx2mlir.dialect import onnx, register_onnx_dialect
 
 
@@ -21,7 +20,6 @@ def test_onnx_mlir_generation():
     """
     Test ONNX dialect ops MLIR generation.
     """
-
     EXPECTED_OUTPUT = textwrap.dedent(
         """
         module {
@@ -39,21 +37,16 @@ def test_onnx_mlir_generation():
         with Context() as ctx, Location.unknown() as unk:
             register_onnx_dialect(ctx)
             module = Module.create(unk)
-            f32 = F32Type.get(ctx)
-            tensor_type = RankedTensorType.get(shape=[2, 2], element_type=f32, loc=unk)
+            np_array = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+            tensor = support.mlir_dense_from_numpy(np_array)
             func_op = func.FuncOp(
-                "main", ([tensor_type, tensor_type], [tensor_type]), loc=unk
+                "main", ([tensor.type, tensor.type], [tensor.type]), loc=unk
             )
             with InsertionPoint(func_op.add_entry_block()):
                 arg0, arg1 = func_op.arguments
-                mul_op = onnx.MulOp(tensor_type, arg0, arg1)
-                tensor_attr = DenseElementsAttr.get(
-                    np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float32),
-                    type=tensor_type,
-                    context=ctx,
-                )
-                const = onnx.ConstantOp(tensor_type, value=tensor_attr)
-                add_op = onnx.AddOp(tensor_type, const, mul_op)
+                mul_op = onnx.MulOp(tensor.type, arg0, arg1)
+                const = onnx.ConstantOp(tensor.type, value=tensor)
+                add_op = onnx.AddOp(tensor.type, const, mul_op)
                 func.ReturnOp([add_op.result])
             module.body.append(func_op)
             module.operation.verify()
