@@ -54,7 +54,6 @@ else()
   message(FATAL_ERROR "ONNX protobuf header not found.")
 endif()
 
-# use llvm config
 if (DEFINED LLVM_CONFIG)
   message(STATUS "Using ${LLVM_CONFIG}")
   separate_arguments(LLVM_CONFIG)
@@ -92,6 +91,9 @@ list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
 include(TableGen)
 include(AddLLVM)
 include(AddMLIR)
+if(BUILD_PYTHON_BINDINGS)
+  include(AddMLIRPython)
+endif()
 
 include_directories(${LLVM_INCLUDE_DIRS})
 include_directories(${MLIR_INCLUDE_DIRS})
@@ -101,13 +103,6 @@ add_definitions(${LLVM_DEFINITIONS})
 
 add_subdirectory(src)
 
-# python bindings
-if(BUILD_PYTHON_BINDINGS)
-  include(AddMLIRPython)
-  add_subdirectory(python)
-endif()
-
-# docs
 add_custom_target(docs
   DEPENDS
     OnnxAttrsDocGen
@@ -121,14 +116,12 @@ add_custom_target(docs
   COMMENT "Build docs"
 )
 
-# lint
 add_custom_target(lint
   COMMAND env sh tests/lint/git-check-lint-format.sh
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   COMMENT "Running code format check..."
 )
 
-# clang-tidy
 add_custom_target(tidy
   COMMAND env run-clang-tidy -quiet
     -p ${CMAKE_BINARY_DIR}
