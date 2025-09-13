@@ -27,21 +27,28 @@
  * \brief Python bindings for the ONNX dialect
  */
 
-#include <mlir-c/IR.h>
 #include <mlir/Bindings/Python/PybindAdaptors.h>
 #include <mlir/CAPI/Registration.h>
-#include <mlir/IR/Dialect.h>
 
-#include "onnx2mlir/dialect/onnx/Onnx.hpp"
+#include <map>
+#include <string>
 
-PYBIND11_MODULE(_onnx2mlirDialectsOnnx, m) {
-  m.doc() = "Python bindings for the ONNX dialect";
+#include "onnx2mlir/frontend/onnx.hpp"
+
+PYBIND11_MODULE(_onnx2mlirImporters, m) {
+  m.doc() = "Python bindings for the ONNX2MLIR importers";
 
   m.def(
-      "register_onnx_dialect",
-      [](MlirContext context) {
-        mlir::MLIRContext *cppContext = unwrap(context);
-        cppContext->loadDialect<onnx2mlir::dialect::onnx::OnnxDialect>();
+      "import_from_onnx",
+      [](const std::string &ONNXFilename, int onnxConvertOps) -> MlirModule {
+        std::map<std::string, std::string> options;
+        if (onnxConvertOps >= 0)
+          options["--onnx-convert-ops"] = std::to_string(onnxConvertOps);
+        auto ONNXLoader =
+            new onnx2mlir::Importer<onnx2mlir::frontend::ONNXImporter>(options);
+        ONNXLoader->importModule(ONNXFilename);
+        auto moduleOp = ONNXLoader->getMLIRModule();
+        return wrap(moduleOp);
       },
-      py::arg("context"));
+      py::arg("onnxfilename"), py::arg("onnx_convert_ops") = -1);
 }
