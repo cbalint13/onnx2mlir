@@ -7,7 +7,7 @@ option(BUILD_SHARED_LIBS "Build shared libraries instead of static libraries" ON
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(NOT CMAKE_BUILD_TYPE)
@@ -103,6 +103,11 @@ add_definitions(${LLVM_DEFINITIONS})
 
 add_subdirectory(src)
 
+if(BUILD_TESTING)
+  find_program(PYTEST_EXECUTABLE pytest REQUIRED)
+  add_subdirectory(tests)
+endif()
+
 add_custom_target(docs
   DEPENDS
     OnnxAttrsDocGen
@@ -129,8 +134,3 @@ add_custom_target(tidy
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   COMMENT "Running clang-tidy check..."
 )
-
-if(BUILD_TESTING)
-  find_program(PYTEST_EXECUTABLE pytest REQUIRED)
-  add_subdirectory(tests)
-endif()
