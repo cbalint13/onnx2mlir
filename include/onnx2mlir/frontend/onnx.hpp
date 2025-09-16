@@ -49,7 +49,7 @@ public:
   explicit ONNXImporter(const std::map<std::string, std::string> &options);
 
 protected:
-  void import(const std::string &filepath) override;
+  void import(const std::string &file_or_string) override;
 
 private:
   // parse the graph ins & outs

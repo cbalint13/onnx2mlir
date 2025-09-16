@@ -50,5 +50,25 @@ PYBIND11_MODULE(_onnx2mlirImporters, m) {
         auto moduleOp = ONNXLoader->getMLIRModule();
         return wrap(moduleOp);
       },
-      py::arg("onnxfilename"), py::arg("onnx_convert_ops") = -1);
+      py::arg("onnxfilename"), py::arg("onnx_convert_ops") = -1,
+      "Import from an ONNX file path");
+
+  m.def(
+      "import_from_onnx",
+      [](py::object onnx_model_proto, int onnxConvertOps) -> MlirModule {
+        std::map<std::string, std::string> options;
+        if (onnxConvertOps >= 0)
+          options["--onnx-convert-ops"] = std::to_string(onnxConvertOps);
+        options["--import-serialized"] = "";
+        py::bytes serialized_bytes =
+            onnx_model_proto.attr("SerializeToString")();
+        std::string ONNXSerialString = serialized_bytes;
+        auto ONNXLoader =
+            new onnx2mlir::Importer<onnx2mlir::frontend::ONNXImporter>(options);
+        ONNXLoader->importModule(ONNXSerialString);
+        auto moduleOp = ONNXLoader->getMLIRModule();
+        return wrap(moduleOp);
+      },
+      py::arg("onnxfilename"), py::arg("onnx_convert_ops") = -1,
+      "Import from an ONNX ModelProto object");
 }

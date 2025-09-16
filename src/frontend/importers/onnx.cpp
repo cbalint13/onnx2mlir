@@ -753,7 +753,7 @@ void ONNXImporter::parse_graph_io(const onnx::GraphProto &graph_proto) {
   module->push_back(func);
 }
 
-void ONNXImporter::import(const std::string &filepath) {
+void ONNXImporter::import(const std::string &file_or_string) {
   llvm::outs() << "ONNX engine version: " << onnx::LAST_RELEASE_VERSION << "\n";
   llvm::outs() << "ONNX engine IR version: " << onnx::IR_VERSION << "\n";
 
@@ -767,19 +767,28 @@ void ONNXImporter::import(const std::string &filepath) {
   }
 
   llvm::outs() << "ONNX engine opset version: " << engine_opset_version << "\n";
+  llvm::outs() << "\n";
 
-  std::ifstream model_file(filepath, std::ios::binary);
-
-  if (!model_file.is_open()) {
-    llvm::errs() << "Error opening file: " << filepath << "\n";
-    exit(-1);
-  }
-
-  // parse onnx binary
+  // parse onnx source
   onnx::ModelProto model_import;
-  if (!model_import.ParseFromIstream(&model_file)) {
-    llvm::errs() << "ERROR: ONNX model file parsing error.\n";
-    exit(-1);
+  if (opt_args.count("--import-serialized") > 0) {
+    if (!model_import.ParseFromString(file_or_string)) {
+      llvm::errs() << "ERROR: ONNX model string parsing error." << "\n";
+      exit(-1);
+    }
+    llvm::outs() << "Model data: " << file_or_string.length()
+                 << " bytes <serialized>\n";
+  } else {
+    llvm::outs() << "Model path: " << file_or_string << "\n";
+    std::ifstream model_file(file_or_string, std::ios::binary);
+    if (!model_file.is_open()) {
+      llvm::errs() << "Error opening file: " << file_or_string << "\n";
+      exit(-1);
+    }
+    if (!model_import.ParseFromIstream(&model_file)) {
+      llvm::errs() << "ERROR: ONNX model file parsing error.\n";
+      exit(-1);
+    }
   }
 
   model_opset_version = -1;
@@ -792,8 +801,6 @@ void ONNXImporter::import(const std::string &filepath) {
     }
   }
 
-  llvm::outs() << "\n";
-  llvm::outs() << "Model path: " << filepath << "\n";
   llvm::outs() << "Model IR version: " << model_import.ir_version() << "\n";
 
   // convert model
