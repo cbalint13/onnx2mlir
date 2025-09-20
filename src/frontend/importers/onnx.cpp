@@ -616,7 +616,7 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
           auto oitr = ops_by_inputs.find(out);
           if (oitr != ops_by_inputs.end()) {
             auto oadj = *oitr->second;
-            oadj->print(llvm::errs());
+            // oadj->print(llvm::errs());
             // TODO(cbalint13): which result ?!
             types.push_back(oadj->getResults()[0].getType());
           }
@@ -624,7 +624,7 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
           auto fitr = func_outputs.find(out);
           if (fitr != func_outputs.end()) {
             auto fadj = *fitr->second;
-            fadj.print(llvm::errs());
+            // fadj.print(llvm::errs());
             types.push_back(fadj);
           }
         }
