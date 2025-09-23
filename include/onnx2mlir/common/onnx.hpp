@@ -109,6 +109,12 @@ static inline mlir::Type OnnxToMlir_dType(const std::string data_type_str,
   std::transform(lcase_str.begin(), lcase_str.end(), lcase_str.begin(),
                  [](unsigned char c) { return std::tolower(c); });
   auto data_type_int = onnx::PrimitiveTypeNameMap::Lookup(lcase_str);
+  if (data_type_int == onnx::TensorProto_DataType_UNDEFINED) {
+    llvm::errs() << "ERROR: Unsupported ONNX data type string: '"
+                 << data_type_str << "'\n";
+    exit(-1);
+  }
+
   return OnnxToMlir_dType(data_type_int, ctx);
 }
 
