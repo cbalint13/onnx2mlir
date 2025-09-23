@@ -56,6 +56,16 @@ static inline bool opNameBeginsWith(const llvm::StringRef &OpName,
   return std::regex_match(OpName.str(), std::regex("^onnx." + match + ".*"));
 }
 
+static inline bool opNameBeginsWith(const llvm::StringRef &opName,
+                                    const std::vector<std::string> &matches) {
+  for (const auto &match : matches) {
+    if (std::regex_match(opName.str(), std::regex("^onnx." + match + ".*"))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static inline bool isBroadcastNeeded(mlir::RankedTensorType operandType,
                                      mlir::RankedTensorType resultType) {
   if (!operandType || operandType == resultType) {
@@ -76,195 +86,6 @@ static inline bool isBroadcastNeeded(mlir::RankedTensorType operandType,
   return false;
 }
 
-static inline mlir::Value
-createArithCastOp(mlir::OpBuilder *builder, const mlir::Location &loc,
-                  const mlir::Value &inputElement,
-                  const mlir::Type &targetElementType) {
-  mlir::Type inputElementType = inputElement.getType();
-
-  // If element types are the same, no cast needed.
-  if (inputElementType == targetElementType) {
-    return inputElement;
-  }
-
-  // Floating point to Floating point
-  if (inputElementType.isFloat() && targetElementType.isFloat()) {
-    unsigned inputWidth = inputElementType.getIntOrFloatBitWidth();
-    unsigned outputWidth = targetElementType.getIntOrFloatBitWidth();
-
-    if (inputWidth < outputWidth) {
-      return builder->create<mlir::arith::ExtFOp>(loc, targetElementType,
-                                                  inputElement);
-    } else { // Truncation
-      return builder->create<mlir::arith::TruncFOp>(loc, targetElementType,
-                                                    inputElement);
-    }
-    // Integer to Integer
-  } else if (inputElementType.isInteger() && targetElementType.isInteger()) {
-    unsigned inputWidth = inputElementType.getIntOrFloatBitWidth();
-    unsigned outputWidth = targetElementType.getIntOrFloatBitWidth();
-
-    // Handle bool (i1) as a special case for older APIs
-    if (inputWidth == 1 && outputWidth == 1)
-      return inputElement; // bool to bool
-
-    // From bool (i1) to larger integer
-    if (inputWidth == 1) {
-      return builder->create<mlir::arith::ExtUIOp>(loc, targetElementType,
-                                                   inputElement);
-    }
-    // To bool (i1) from any integer
-    if (outputWidth == 1) {
-      return builder->create<mlir::arith::TruncIOp>(loc, targetElementType,
-                                                    inputElement);
-    }
-
-    // General integer casting (signed/unsigned extension/truncation)
-    if (inputWidth < outputWidth) {
-      // In older APIs, `isSigned()` or `isUnsigned()` might be needed on the
-      // integer type. Assuming `IntegerType::get(context, width, signedness)`
-      // implies these properties. For now, default to unsigned extension for
-      // generic integer types unless explicitly signed.
-      if (inputElementType.isSignedInteger() &&
-          targetElementType.isSignedInteger()) {
-        return builder->create<mlir::arith::ExtSIOp>(loc, targetElementType,
-                                                     inputElement);
-      } else { // Fallback for unsigned or signless extension
-        return builder->create<mlir::arith::ExtUIOp>(loc, targetElementType,
-                                                     inputElement);
-      }
-    } else if (inputWidth > outputWidth) {
-      return builder->create<mlir::arith::TruncIOp>(loc, targetElementType,
-                                                    inputElement);
-    } else { // Same bitwidth, potentially different signedness (e.g., i32 to
-             // ui32)
-      // This is a reinterpretation (bitcast)
-      return builder->create<mlir::arith::BitcastOp>(loc, targetElementType,
-                                                     inputElement);
-    }
-    // Floating point to Integer
-  } else if (inputElementType.isFloat() && targetElementType.isInteger()) {
-    if (targetElementType.isSignedInteger()) {
-      return builder->create<mlir::arith::FPToSIOp>(loc, targetElementType,
-                                                    inputElement);
-    } else { // isUnsignedInteger or isSignlessInteger
-      return builder->create<mlir::arith::FPToUIOp>(loc, targetElementType,
-                                                    inputElement);
-    }
-    // Integer to Floating point
-  } else if (inputElementType.isInteger() && targetElementType.isFloat()) {
-    if (inputElementType.isSignedInteger()) {
-      return builder->create<mlir::arith::SIToFPOp>(loc, targetElementType,
-                                                    inputElement);
-    } else { // isUnsignedInteger or isSignlessInteger
-      return builder->create<mlir::arith::UIToFPOp>(loc, targetElementType,
-                                                    inputElement);
-    }
-  }
-
-  // Fallback for unhandled/unsupported combinations.
-  // In older MLIR, direct emitError on OpBuilder might not exist or has
-  // different signature. We return nullptr to signal failure, and the caller
-  // (LowerONNXCastOp) will handle the error.
-  return nullptr; // Indicate failure
-}
-
-
-// Helper function for performing various arithmetic casts
-// This function canonicalizes integer types to signless (iN) before performing
-// arithmetic operations, and then casts back if the target type requires signedness.
-// NOTE: This helper might still encounter issues with very strict MLIR builds
-// if arith.bitcast/extui/extsi truly reject uiN/siN as operands.
-// For MaxPool, current usage is to keep original integer types for comparisons.
-mlir::Value createArithCastOp2(mlir::OpBuilder &builder, const mlir::Location &loc,
-                              const mlir::Value &inputElement,
-                              const mlir::Type &targetElementType) {
-  mlir::Type inputElementType = inputElement.getType();
-
-  // 0. Base case: If element types are the same, no cast needed.
-  if (inputElementType == targetElementType) {
-    return inputElement;
-  }
-
-  mlir::Value currentVal = inputElement; // Start with the original value
-  mlir::Type currentValType = inputElementType; // Keep track of current value's MLIR type
-  
-  // Floating point to Floating point
-  if (currentValType.isFloat() && targetElementType.isFloat()) {
-    unsigned inputWidth = currentValType.getIntOrFloatBitWidth();
-    unsigned outputWidth = targetElementType.getIntOrFloatBitWidth();
-    if (inputWidth < outputWidth) {
-      currentVal = builder.create<mlir::arith::ExtFOp>(loc, targetElementType, currentVal);
-    } else { // Truncation
-      currentVal = builder.create<mlir::arith::TruncFOp>(loc, targetElementType, currentVal);
-    }
-  // Integer to Integer
-  } else if (currentValType.isInteger() && targetElementType.isInteger()) {
-    unsigned inputWidth = currentValType.getIntOrFloatBitWidth();
-    unsigned outputWidth = targetElementType.getIntOrFloatBitWidth();
-    mlir::IntegerType inputIntType = mlir::dyn_cast<mlir::IntegerType>(currentValType);
-    mlir::IntegerType targetIntType = mlir::dyn_cast<mlir::IntegerType>(targetElementType);
-
-    if (inputWidth < outputWidth) {
-      // Extending:
-      // Use ExtUIOp/ExtSIOp if source is unsigned/signed, otherwise use common ExtIOp.
-      if (inputIntType.isUnsignedInteger()) {
-        currentVal = builder.create<mlir::arith::ExtUIOp>(loc, targetElementType, currentVal);
-      } else if (inputIntType.isSignedInteger()) {
-        currentVal = builder.create<mlir::arith::ExtSIOp>(loc, targetElementType, currentVal);
-      } else { // input is signless (iN)
-        // If target is signed, use ExtSIOp, otherwise ExtUIOp (for signless/unsigned target)
-        if (targetIntType.isSignedInteger()) {
-          currentVal = builder.create<mlir::arith::ExtSIOp>(loc, targetElementType, currentVal);
-        } else {
-          currentVal = builder.create<mlir::arith::ExtUIOp>(loc, targetElementType, currentVal);
-        }
-      }
-    } else if (inputWidth > outputWidth) {
-      // Truncating:
-      // Always truncate to a signless integer of the target width first, as TruncUIOp/TruncSIOp might be unavailable.
-      mlir::Type tempSignlessTarget = builder.getIntegerType(outputWidth);
-      currentVal = builder.create<mlir::arith::TruncIOp>(loc, tempSignlessTarget, currentVal);
-      // If the targetElementType (e.g., ui8) is different from the temporary signless target (i8),
-      // perform a bitcast to reinterpret the bits.
-      if (currentVal.getType() != targetElementType) {
-          currentVal = builder.create<mlir::arith::BitcastOp>(loc, targetElementType, currentVal);
-      }
-    } else { // Same bitwidth (inputWidth == outputWidth)
-      // If signedness is different (e.g., ui8 to i8, or i8 to ui8), this is a bitcast.
-      // This is the line that caused the error for ui8 input to arith.bitcast in some environments.
-      // We assume that this particular MLIR setup is strict and arith.bitcast cannot take uiN/siN input.
-      // However, if the currentVal is already iN/fN, it should work.
-      if (currentValType != targetElementType) {
-        currentVal = builder.create<mlir::arith::BitcastOp>(loc, targetElementType, currentVal);
-      }
-    }
-  // Floating point to Integer
-  } else if (currentValType.isFloat() && targetElementType.isInteger()) {
-    mlir::IntegerType targetIntType = mlir::dyn_cast<mlir::IntegerType>(targetElementType);
-    if (targetIntType.isSignedInteger()) {
-      currentVal = builder.create<mlir::arith::FPToSIOp>(loc, targetElementType, currentVal);
-    } else { // target is unsigned or signless
-      currentVal = builder.create<mlir::arith::FPToUIOp>(loc, targetElementType, currentVal);
-    }
-  // Integer to Floating point
-  } else if (currentValType.isInteger() && targetElementType.isFloat()) {
-    mlir::IntegerType inputIntType = mlir::dyn_cast<mlir::IntegerType>(currentValType);
-    if (inputIntType && inputIntType.isUnsignedInteger()) {
-      currentVal = builder.create<mlir::arith::UIToFPOp>(loc, targetElementType, currentVal);
-    } else { // original was signed or signless
-      currentVal = builder.create<mlir::arith::SIToFPOp>(loc, targetElementType, currentVal);
-    }
-  } else {
-    // Fallback for unhandled/unsupported combinations.
-    llvm::errs() << "ERROR: Unsupported cast operation in createArithCastOp2: from "
-                 << inputElementType << " to " << targetElementType << " at " << loc << "\n";
-    return nullptr; // Indicate failure
-  }
-
-  return currentVal;
-}
-
 
 struct ONNXToLINALGLowering : public mlir::RewritePattern {
   explicit ONNXToLINALGLowering(mlir::MLIRContext *ctx)
@@ -282,16 +103,12 @@ struct ONNXToLINALGLowering : public mlir::RewritePattern {
 #include "onnx_to_linalg/unsqueeze.cpp"
     } else if (opNameBeginsWith(opName, "Transpose")) {
 #include "onnx_to_linalg/transpose.cpp"
-    } else if (opNameBeginsWith(opName, "Add") ||
-               opNameBeginsWith(opName, "Sub") ||
-               opNameBeginsWith(opName, "Mul") ||
-               opNameBeginsWith(opName, "Div") ||
-               opNameBeginsWith(opName, "Pow")) {
+    } else if (opNameBeginsWith(opName, {"Add", "Sub", "Mul", "Div", "Pow"})) {
 #include "onnx_to_linalg/binary.cpp"
     } else if (opNameBeginsWith(opName, "Abs")) {
 #include "onnx_to_linalg/abs.cpp"
     } else if (opNameBeginsWith(opName, "Cast")) {
-#include "onnx_to_linalg/cast.cpp"
+      return OnnxToLinalg_CastOp(op, rewriter);
     } else if (opNameBeginsWith(opName, "Greater")) {
 #include "onnx_to_linalg/greater.cpp"
     } else if (opNameBeginsWith(opName, "Where")) {
@@ -363,10 +180,10 @@ struct LowerONNXToLINALGPass
 
     mlir::TypeConverter typeConverter;
 
-    // default conversion
+    // Default type
     typeConverter.addConversion([](mlir::Type type) { return type; });
 
-    // converter rule
+    // Shaped type
     typeConverter.addConversion(
         [&](mlir::ShapedType type) -> std::optional<mlir::Type> {
           mlir::Type convertedElementType =
@@ -377,27 +194,27 @@ struct LowerONNXToLINALGPass
           if (convertedElementType == type.getElementType()) {
             return type;
           }
-          // create a new RankedTensorType with the converted element type
+          // RankedTensorType with converted element type
           return mlir::RankedTensorType::get(type.getShape(),
                                              convertedElementType);
         });
 
-    // materialization for values from source operations
+    // Values <- source
     typeConverter.addSourceMaterialization(
         [&](mlir::OpBuilder builder, mlir::Type resultType,
             mlir::ValueRange inputs, mlir::Location loc) -> mlir::Value {
           if (inputs.size() != 1) {
-            return nullptr; // failure
+            return nullptr;
           }
           return createArithCastOp(&builder, loc, inputs[0], resultType);
         });
 
-    // materialization for values to target operations
+    // Values -> target
     typeConverter.addTargetMaterialization(
         [&](mlir::OpBuilder builder, mlir::Type resultType,
             mlir::ValueRange inputs, mlir::Location loc) -> mlir::Value {
           if (inputs.size() != 1) {
-            return nullptr; // failure
+            return nullptr;
           }
           return createArithCastOp(&builder, loc, inputs[0], resultType);
         });

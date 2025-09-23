@@ -37,9 +37,23 @@ namespace onnx2mlir::dialect {
  *
  */
 
+// onnx.CastOp
+mlir::LogicalResult OnnxToLinalg_CastOp(mlir::Operation *op,
+                                        mlir::PatternRewriter &rewriter);
+
 // onnx.ConstantOp
 mlir::LogicalResult OnnxToLinalg_ConstantOp(mlir::Operation *op,
                                             mlir::PatternRewriter &rewriter);
+
+/*
+ * Helpers
+ *
+ */
+
+mlir::Value
+createArithCastOp(mlir::OpBuilder *builder, const mlir::Location &loc,
+                  const mlir::Value &inputElement,
+                  const mlir::Type &targetElementType);
 
 } // namespace onnx2mlir::dialect
 

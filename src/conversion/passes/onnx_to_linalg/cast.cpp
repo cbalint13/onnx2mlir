@@ -1,108 +1,203 @@
-      llvm::errs() << "DEBUG: LowerONNXCastOp pattern invoked for operation: "
-                   << op->getName() << "\n";
-      llvm::errs() << "DEBUG: Full op dump: ";
-      op->dump();
+/******************************************************************+************
+ *
+ * ONNX2MLIR (ONNX dialect mappings for composable optimizations)
+ *
+ * Authors:
+ *     Cristian Balint <cristian dot balint at gmail dot com>
+ *
+ * Copyright (c) 2021,2025
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ *****************************************************************************/
 
-      mlir::Value inputTensor = op->getOperand(0);
+/*!
+ * \file src/conversion/passes/onnx_to_linalg/cast.cpp
+ * \brief ONNX CastOp to Linalg lowering
+ */
 
-      auto toAttr = op->getAttrOfType<mlir::IntegerAttr>("to");
-      if (!toAttr) {
-        return rewriter.notifyMatchFailure(op, "missing 'to' attribute");
+#include <mlir/Dialect/Arith/IR/Arith.h>
+#include <mlir/Dialect/Linalg/IR/Linalg.h>
+#include <mlir/Dialect/Tensor/IR/Tensor.h>
+#include <mlir/Dialect/Transform/IR/TransformOps.h>
+#include <mlir/IR/PatternMatch.h>
+#include <mlir/Support/LogicalResult.h>
+
+#include "onnx2mlir/common/onnx.hpp"
+#include "onnx2mlir/dialect/onnx/Onnx.hpp"
+
+namespace onnx2mlir::dialect {
+
+mlir::Value createArithCastOp(mlir::OpBuilder *builder,
+                              const mlir::Location &loc,
+                              const mlir::Value &inpElem,
+                              const mlir::Type &tgtElemType) {
+
+  mlir::Type inpElemType = inpElem.getType();
+
+  // Same elements
+  if (inpElemType == tgtElemType) {
+    return inpElem;
+  }
+
+  // Float -> Float
+  if (inpElemType.isFloat() && tgtElemType.isFloat()) {
+    unsigned inpWidth = inpElemType.getIntOrFloatBitWidth();
+    unsigned outWidth = tgtElemType.getIntOrFloatBitWidth();
+    if (inpWidth < outWidth) {
+      return builder->create<mlir::arith::ExtFOp>(loc, tgtElemType, inpElem);
+    } else {
+      return builder->create<mlir::arith::TruncFOp>(loc, tgtElemType, inpElem);
+    }
+    // Integer -> Integer
+  } else if (inpElemType.isInteger() && tgtElemType.isInteger()) {
+    unsigned inpWidth = inpElemType.getIntOrFloatBitWidth();
+    unsigned outWidth = tgtElemType.getIntOrFloatBitWidth();
+    // extend
+    if (inpWidth < outWidth) {
+      if (inpElemType.isSignedInteger()) {
+        return builder->create<mlir::arith::ExtSIOp>(loc, tgtElemType, inpElem);
+      } else {
+        return builder->create<mlir::arith::ExtUIOp>(loc, tgtElemType, inpElem);
       }
-      // Re-introduced: toValue
-      int64_t toValue = toAttr.getInt();
+      // truncate
+    } else if (inpWidth > outWidth) {
+      return builder->create<mlir::arith::TruncIOp>(loc, tgtElemType, inpElem);
+    } else {
+      // reinterpret (same bitwidth, different signedness)
+      return builder->create<mlir::arith::BitcastOp>(loc, tgtElemType, inpElem);
+    }
+    // Floating -> Integer
+  } else if (inpElemType.isFloat() && tgtElemType.isInteger()) {
+    if (tgtElemType.isSignedInteger()) {
+      return builder->create<mlir::arith::FPToSIOp>(loc, tgtElemType, inpElem);
+    } else {
+      return builder->create<mlir::arith::FPToUIOp>(loc, tgtElemType, inpElem);
+    }
+    // Integer -> Floating
+  } else if (inpElemType.isInteger() && tgtElemType.isFloat()) {
+    if (inpElemType.isSignedInteger()) {
+      return builder->create<mlir::arith::SIToFPOp>(loc, tgtElemType, inpElem);
+    } else {
+      return builder->create<mlir::arith::UIToFPOp>(loc, tgtElemType, inpElem);
+    }
+  }
 
-      mlir::Location loc = op->getLoc();
-      // Re-introduced: context
-      mlir::MLIRContext *context = rewriter.getContext();
+  return nullptr;
+}
 
-      // Reverted: targetElementType now derived from 'to' attribute
-      mlir::Type targetElementType = OnnxToMlir_dType(toValue, context);
-      // Re-introduced check for unsupported 'to' attribute value
-      if (!targetElementType) {
-        return rewriter.notifyMatchFailure(
-            op, "unsupported 'to' attribute value for ONNX Cast");
-      }
+mlir::LogicalResult OnnxToLinalg_CastOp(mlir::Operation *op,
+                                        mlir::PatternRewriter &rewriter) {
 
-      // Ensure input is a ShapedType before attempting to get its shape
-      if (!mlir::isa<mlir::ShapedType>(inputTensor.getType())) {
-        return rewriter.notifyMatchFailure(
-            op, "input tensor to ONNX Cast is not a shaped type");
-      }
-      mlir::ShapedType inputShapedType =
-          mlir::cast<mlir::ShapedType>(inputTensor.getType());
+  // Input tensor type
+  mlir::Value inputTensor = op->getOperand(0);
+  mlir::ShapedType inputShapedType =
+      mlir::dyn_cast_or_null<mlir::ShapedType>(inputTensor.getType());
+  if (!inputShapedType) {
+    return rewriter.notifyMatchFailure(op,
+                                       "onnx.Cast input is not a shaped type");
+  }
 
-      // Reverted: resultTensorType now derived from input shape and
-      // targetElementType
-      mlir::Type resultTensorType = mlir::RankedTensorType::get(
-          inputShapedType.getShape(), targetElementType);
+  mlir::Attribute toAttr = op->getAttr("to");
+  if (!toAttr) {
+    return rewriter.notifyMatchFailure(op, "onnx.Cast is missing 'to' attribute");
+  }
 
-      // Updated debug messages
-      llvm::errs() << "DEBUG: LowerONNXCastOp: Derived targetElementType (from "
-                      "'to' attribute): "
-                   << targetElementType << "\n";
-      llvm::errs() << "DEBUG: LowerONNXCastOp: Derived resultTensorType (from "
-                      "input shape + target element type): "
-                   << resultTensorType << "\n";
+  mlir::Type tgtElemType = {};
+  // Lookup 'to' MLIR element type
+  if (auto intAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(toAttr)) {
+    tgtElemType = OnnxToMlir_dType(intAttr.getInt(), rewriter.getContext());
+  } else if (auto strAttr = mlir::dyn_cast_or_null<mlir::StringAttr>(toAttr)) {
+    tgtElemType = OnnxToMlir_dType(strAttr.getValue().str(), rewriter.getContext());
+  } else {
+    return rewriter.notifyMatchFailure(op, "onnx.Cast has invalid 'to' attribute type");
+  }
 
-      // 1. Create an empty tensor for the output (using inputShapedType for
-      // shape)
-      mlir::Value outputBuffer = rewriter.create<mlir::tensor::EmptyOp>(
-          loc, inputShapedType.getShape(), targetElementType);
-      llvm::errs() << "DEBUG: LowerONNXCastOp: Created tensor.empty: ";
-      outputBuffer.getDefiningOp()->dump();
+  if (!tgtElemType) {
+    return rewriter.notifyMatchFailure(
+        op, "onnx.Cast unsupported `to` attribute value");
+  }
 
-      mlir::Value linalgCastOpResult;
-      bool bodyBuildFailed = false;
+  mlir::Type resultTensorType = inputShapedType.clone(tgtElemType);
+  mlir::Location loc = op->getLoc();
 
-      // Get the rank once
-      int rank = mlir::cast<mlir::ShapedType>(inputTensor.getType()).getRank();
+  // Input and Output are identical
+  if (inputTensor.getType() == resultTensorType) {
+    rewriter.replaceOp(op, inputTensor);
+    return mlir::success();
+  }
 
-      llvm::SmallVector<mlir::utils::IteratorType> iterators;
-      for (int i = 0; i < rank; ++i) {
-        iterators.push_back(mlir::utils::IteratorType::parallel);
-      }
+  // Input is a scalar
+  if (inputShapedType.getRank() == 0) {
+    mlir::Value castResult =
+        createArithCastOp(&rewriter, loc, inputTensor, tgtElemType);
+    if (!castResult) {
+      return rewriter.notifyMatchFailure(
+          op, "onnx.Cast unsupported scalar conversion");
+    }
+    rewriter.replaceOp(op, castResult);
+    return mlir::success();
+  }
 
-      mlir::SmallVector<mlir::AffineMap> indexingMaps;
-      indexingMaps.push_back(rewriter.getMultiDimIdentityMap(rank));
-      indexingMaps.push_back(rewriter.getMultiDimIdentityMap(rank));
+  // 1. Create an empty tensor for the output
+  mlir::Value outputBuffer = rewriter.create<mlir::tensor::EmptyOp>(
+      loc, inputShapedType.getShape(), tgtElemType);
 
-      mlir::linalg::GenericOp genericOp =
-          rewriter.create<mlir::linalg::GenericOp>(
-              loc, resultTensorType, mlir::ValueRange{inputTensor},
-              mlir::ValueRange{outputBuffer}, indexingMaps, iterators,
-              [&](mlir::OpBuilder nestedBuilder, mlir::Location nestedLoc,
-                  mlir::ValueRange args) {
-                mlir::Value inputElement = args[0];
+  // 2. Create the linalg.generic operation
+  mlir::SmallVector<mlir::utils::IteratorType> iterators;
+  for (int i = 0; i < inputShapedType.getRank(); ++i) {
+    iterators.push_back(mlir::utils::IteratorType::parallel);
+  }
 
-                mlir::Value castResult = createArithCastOp(
-                    &nestedBuilder, nestedLoc, inputElement, targetElementType);
-                if (!castResult) {
-                  bodyBuildFailed = true;
-                  return;
-                }
-                nestedBuilder.create<mlir::linalg::YieldOp>(nestedLoc,
-                                                            castResult);
-              });
+  mlir::SmallVector<mlir::AffineMap> indexingMaps;
+  indexingMaps.push_back(
+      rewriter.getMultiDimIdentityMap(inputShapedType.getRank()));
+  indexingMaps.push_back(
+      rewriter.getMultiDimIdentityMap(inputShapedType.getRank()));
 
-      if (bodyBuildFailed) {
-        if (genericOp) {
-          genericOp.erase();
+  bool bodyBuildFailed = false;
+  mlir::linalg::GenericOp genericOp = rewriter.create<mlir::linalg::GenericOp>(
+      loc, resultTensorType, mlir::ValueRange{inputTensor},
+      mlir::ValueRange{outputBuffer}, indexingMaps, iterators,
+      [&](mlir::OpBuilder nestedBuilder, mlir::Location nestedLoc,
+          mlir::ValueRange args) {
+        mlir::Value inpElem = args[0];
+        mlir::Value castResult =
+            createArithCastOp(&nestedBuilder, nestedLoc, inpElem, tgtElemType);
+        if (!castResult) {
+          bodyBuildFailed = true;
+          return;
         }
-        return rewriter.notifyMatchFailure(
-            op, "unsupported element type conversion for ONNX Cast within "
-                "linalg.generic body");
-      }
+        nestedBuilder.create<mlir::linalg::YieldOp>(nestedLoc, castResult);
+      });
 
-      linalgCastOpResult = genericOp.getResult(0);
+  if (bodyBuildFailed) {
+    if (genericOp) {
+      genericOp.erase();
+    }
+    return rewriter.notifyMatchFailure(op,
+                                       "onnx.Cast unsupported element type "
+                                       "conversion within linalg.generic body");
+  }
 
-      llvm::errs() << "DEBUG: LowerONNXCastOp: Created linalg.genericOp: ";
-      genericOp.dump();
+  // Tag for transform optimization
+  genericOp->setAttr("transform.target_tag",
+                     rewriter.getStringAttr("onnx.Cast"));
 
-      rewriter.replaceOp(op, linalgCastOpResult);
-      llvm::errs() << "DEBUG: LowerONNXCastOp: Called replaceOp. Now returning "
-                      "success.\n";
+  rewriter.replaceOp(op, genericOp);
 
-      llvm::errs() << "Successfully lowered onnx.CastOp to linalg.genericOp.\n";
+  return mlir::success();
+}
 
-      return mlir::success();
+} // namespace onnx2mlir::dialect

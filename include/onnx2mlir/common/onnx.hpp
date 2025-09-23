@@ -30,7 +30,11 @@
 #ifndef INCLUDE_ONNX2MLIR_COMMON_ONNX_HPP_
 #define INCLUDE_ONNX2MLIR_COMMON_ONNX_HPP_
 
-#include "onnx/onnx_pb.h"
+#include <onnx/defs/parser.h>
+#include <onnx/onnx_pb.h>
+
+#include <algorithm>
+#include <string>
 
 static inline mlir::Type OnnxToMlir_dType(const int32_t data_type_int,
                                           mlir::MLIRContext *ctx) {
@@ -97,6 +101,15 @@ static inline mlir::Type OnnxToMlir_dType(const int32_t data_type_int,
   }
 
   return nullptr;
+}
+
+static inline mlir::Type OnnxToMlir_dType(const std::string data_type_str,
+                                          mlir::MLIRContext *ctx) {
+  std::string lcase_str = std::string(data_type_str);
+  std::transform(lcase_str.begin(), lcase_str.end(), lcase_str.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+  auto data_type_int = onnx::PrimitiveTypeNameMap::Lookup(lcase_str);
+  return OnnxToMlir_dType(data_type_int, ctx);
 }
 
 #endif // INCLUDE_ONNX2MLIR_COMMON_ONNX_HPP_

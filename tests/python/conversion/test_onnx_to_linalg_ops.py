@@ -107,4 +107,59 @@ def test_onnx_ConstantOp_lower(ONNX_OPSET_VERSION):
         output = np.zeros_like(np_array)
         outputs = runner(llvm_module, "main", [], [output])
 
-        np.testing.assert_allclose(np_array, outputs[0], atol=1e-3)
+        np.testing.assert_allclose(outputs[0], np_array, atol=1e-3)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OPSET_VERSION",
+    [
+        schema.since_version
+        for schema in get_all_schemas_with_history()
+        if "Cast" == schema.name
+    ],
+)
+def test_onnx_Cast_lower(ONNX_OPSET_VERSION):
+    """
+    Test ONNX CastOp lower.
+    """
+
+    def create_onnx_model(np_array):
+        input_tensor = make_tensor_value_info(
+            "input_tensor", TensorProto.FLOAT, np_array.shape
+        )
+        output_tensor = make_tensor_value_info(
+            "output_tensor", TensorProto.INT32, np_array.shape
+        )
+        cast_node = make_node(
+            "Cast",
+            ["input_tensor"],
+            ["output_tensor"],
+            to=TensorProto.INT32 if ONNX_OPSET_VERSION > 1 else "INT32",
+        )
+        graph = make_graph(
+            nodes=[cast_node],
+            name="cast_graph",
+            inputs=[input_tensor],
+            outputs=[output_tensor],
+            initializer=[],
+        )
+        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        model = make_model(graph, opset_imports=opset_imports)
+        check_model(model)
+        return model
+
+    np_array = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+    onnx_model = create_onnx_model(np_array)
+
+    with Context() as ctx, Location.unknown():
+
+        mlir_module = import_from_onnx(onnx_model, ctx)
+        mlir_module.operation.verify()
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        output = np.zeros_like(np_array).astype(np.int32)
+        outputs = runner(llvm_module, "main", [output], [np_array])
+
+        np.testing.assert_allclose(outputs[0], np_array.astype(np.int32), atol=1e-3)
