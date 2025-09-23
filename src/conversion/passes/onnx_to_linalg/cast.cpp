@@ -124,7 +124,7 @@ mlir::LogicalResult OnnxToLinalg_CastOp(mlir::Operation *op,
     return rewriter.notifyMatchFailure(op, "onnx.Cast has invalid 'to' attribute type");
   }
 
-  if (!tgtElemType) {
+  if (!tgtElemType || mlir::dyn_cast_or_null<mlir::NoneType>(tgtElemType)) {
     return rewriter.notifyMatchFailure(
         op, "onnx.Cast unsupported `to` attribute value");
   }

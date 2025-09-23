@@ -148,7 +148,7 @@ def test_onnx_Cast_lower(ONNX_OPSET_VERSION):
         check_model(model)
         return model
 
-    np_array = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+    np_array = np.array([[1.0, 2.0], [-3.0, 4.0]], dtype=np.float32)
     onnx_model = create_onnx_model(np_array)
 
     with Context() as ctx, Location.unknown():
