@@ -39,6 +39,7 @@
 static void printUsage() {
   std::cout << std::endl;
   std::cout << "Usage: onnx2mlir [--help]\n"
+            << "             [--verbose]"
             << "             [--onnx-convert-ops <int : (optional | default is "
                "max supported)>]\n"
             << "       input_file\n\n";
@@ -67,6 +68,8 @@ int main(int argc, char **argv) {
           }
         }
         continue;
+      } else if (arg == "--verbose") {
+        options[argv[i]] = "";
       } else {
         std::cout << "Unknown argument `" << arg << "`" << std::endl;
         printUsage();
