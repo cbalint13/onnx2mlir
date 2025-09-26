@@ -83,6 +83,8 @@ struct ONNXToLINALGLowering : public mlir::RewritePattern {
       return OnnxToLinalg_ArithUnaryOps(op, rewriter);
     } else if (opNameBeginsWith(opName, "Softmax")) {
       return OnnxToLinalg_SoftmaxOp(op, rewriter);
+    } else if (opNameBeginsWith(opName, "LogSoftmax")) {
+      return OnnxToLinalg_LogSoftmaxOp(op, rewriter);
     } else if (opNameBeginsWith(opName, "Cast")) {
       return OnnxToLinalg_CastOp(op, rewriter);
     } else if (opNameBeginsWith(opName, "Greater")) {

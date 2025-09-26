@@ -37,13 +37,15 @@
 namespace onnx2mlir::dialect {
 
 bool opNameBeginsWith(const llvm::StringRef &OpName, const std::string &match) {
-  return std::regex_match(OpName.str(), std::regex("^onnx." + match + ".*"));
+  return std::regex_match(OpName.str(),
+                          std::regex("^onnx." + match + "(_.*)?$"));
 }
 
 bool opNameBeginsWith(const llvm::StringRef &opName,
                       const std::vector<std::string> &matches) {
   for (const auto &match : matches) {
-    if (std::regex_match(opName.str(), std::regex("^onnx." + match + ".*"))) {
+    if (std::regex_match(opName.str(),
+                         std::regex("^onnx." + match + "(_.*)?$"))) {
       return true;
     }
   }

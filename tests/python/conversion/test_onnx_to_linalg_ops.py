@@ -63,7 +63,7 @@ from onnx2mlir.pipeline import llvm_lower_pipeline, runner
 )
 def test_onnx_ConstantOp_lower(ONNX_OPSET_VERSION):
     """
-    Test ONNX ConstantOp lower.
+    Test ONNX Constant lowering.
     """
 
     def create_onnx_model(np_array):
@@ -121,7 +121,7 @@ def test_onnx_ConstantOp_lower(ONNX_OPSET_VERSION):
 )
 def test_onnx_Cast_lower(ONNX_OPSET_VERSION):
     """
-    Test ONNX CastOp lower.
+    Test ONNX Cast lowering.
     """
 
     def create_onnx_model(np_array):
@@ -167,16 +167,16 @@ def test_onnx_Cast_lower(ONNX_OPSET_VERSION):
 
 
 @pytest.mark.parametrize(
-    "ONNX_OPSET_VERSION",
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION",
     [
-        schema.since_version
+        (schema.name, schema.since_version)
         for schema in get_all_schemas_with_history()
-        if "Add" == schema.name
+        if schema.name in ["Add", "Sub", "Mul", "Div", "Pow"]
     ],
 )
-def test_onnx_Add_lower(ONNX_OPSET_VERSION):
+def test_onnx_binary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION):
     """
-    Test ONNX AddOp lower.
+    Test ONNX arith binary operators lowering.
     """
 
     def create_onnx_model(inp_array0, inp_array1):
@@ -190,7 +190,7 @@ def test_onnx_Add_lower(ONNX_OPSET_VERSION):
             "output", TensorProto.FLOAT, (inp_array0 + inp_array1).shape
         )
         arith_node = make_node(
-            "Add",
+            ONNX_OP_NAME,
             # binary arg
             ["input0", "input1"],
             ["output"],
@@ -229,16 +229,16 @@ def test_onnx_Add_lower(ONNX_OPSET_VERSION):
 
 
 @pytest.mark.parametrize(
-    "ONNX_OPSET_VERSION",
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION",
     [
-        schema.since_version
+        (schema.name, schema.since_version)
         for schema in get_all_schemas_with_history()
-        if "Sin" == schema.name
+        if schema.name in ["Sin", "Cos"]
     ],
 )
-def test_onnx_Sin_lower(ONNX_OPSET_VERSION):
+def test_onnx_unary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION):
     """
-    Test ONNX SinOp lower.
+    Test ONNX arith unary operators lowering.
     """
 
     def create_onnx_model(np_array):
@@ -249,7 +249,7 @@ def test_onnx_Sin_lower(ONNX_OPSET_VERSION):
             "output", TensorProto.FLOAT, np_array.shape
         )
         cast_node = make_node(
-            "Sin",
+            ONNX_OP_NAME,
             ["input"],
             ["output"],
         )
@@ -286,16 +286,16 @@ def test_onnx_Sin_lower(ONNX_OPSET_VERSION):
 
 
 @pytest.mark.parametrize(
-    "ONNX_OPSET_VERSION",
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION",
     [
-        schema.since_version
+        (schema.name, schema.since_version)
         for schema in get_all_schemas_with_history()
-        if "Softmax" == schema.name
+        if schema.name in ["Softmax", "LogSoftmax"]
     ],
 )
-def test_onnx_Softmax_lower(ONNX_OPSET_VERSION):
+def test_onnx_softmax_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION):
     """
-    Test ONNX Softmax lower.
+    Test ONNX softmax family of operators lowering.
     """
 
     def create_onnx_model(np_array):
@@ -306,7 +306,7 @@ def test_onnx_Softmax_lower(ONNX_OPSET_VERSION):
             "output", TensorProto.FLOAT, np_array.shape
         )
         cast_node = make_node(
-            "Softmax",
+            ONNX_OP_NAME,
             # i/o
             ["input"],
             ["output"],
