@@ -109,8 +109,17 @@ OnnxToLinalg_ArithUnaryOps(mlir::Operation *op,
         if (opNameBeginsWith(opName, "Cosh"))
           outOp = nest.create<mlir::math::CoshOp>(loc, args[0]);
         if (opNameBeginsWith(opName, "Elu")) {
+          double alpha = 1.0;
+          auto alphaAttr = op->getAttr("alpha");
+          if (alphaAttr) {
+            if(auto floatAttr = mlir::dyn_cast_or_null<mlir::FloatAttr>(alphaAttr)) {
+              alpha = floatAttr.getValueAsDouble();
+            }
+          }
           mlir::Type elmType = inpType.getElementType();
           if (mlir::isa<mlir::FloatType>(elmType)) {
+            auto cA = nest.create<mlir::arith::ConstantOp>(
+                loc, nest.getFloatAttr(elmType, alpha));
             auto c0 = nest.create<mlir::arith::ConstantOp>(
                 loc, nest.getFloatAttr(elmType, 0.0));
             auto c1 = nest.create<mlir::arith::ConstantOp>(
@@ -118,9 +127,12 @@ OnnxToLinalg_ArithUnaryOps(mlir::Operation *op,
             auto cnd = nest.create<mlir::arith::CmpFOp>(
                 loc, mlir::arith::CmpFPredicate::OGE, args[0], c0);
             auto exp = nest.create<mlir::math::ExpOp>(loc, args[0]);
-            auto neg = nest.create<mlir::arith::SubFOp>(loc, exp, c1);
+            auto sub = nest.create<mlir::arith::SubFOp>(loc, exp, c1);
+            auto neg = nest.create<mlir::arith::MulFOp>(loc, cA, sub);
             outOp = nest.create<mlir::arith::SelectOp>(loc, cnd, args[0], neg);
           } else {
+            auto cA = nest.create<mlir::arith::ConstantOp>(
+                loc, nest.getIntegerAttr(elmType, int(alpha)));
             auto c0 = nest.create<mlir::arith::ConstantOp>(
                 loc, nest.getIntegerAttr(elmType, 0));
             auto c1 = nest.create<mlir::arith::ConstantOp>(
@@ -128,7 +140,8 @@ OnnxToLinalg_ArithUnaryOps(mlir::Operation *op,
             auto cnd = nest.create<mlir::arith::CmpIOp>(
                 loc, mlir::arith::CmpIPredicate::sge, args[0], c0);
             auto exp = nest.create<mlir::math::ExpOp>(loc, args[0]);
-            auto neg = nest.create<mlir::arith::SubFOp>(loc, exp, c1);
+            auto sub = nest.create<mlir::arith::SubIOp>(loc, exp, c1);
+            auto neg = nest.create<mlir::arith::MulIOp>(loc, cA, sub);
             outOp = nest.create<mlir::arith::SelectOp>(loc, cnd, args[0], neg);
           }
         }

@@ -234,7 +234,7 @@ def test_onnx_binary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION):
     [
         (schema.name, schema.since_version)
         for schema in get_all_schemas_with_history()
-        if schema.name in ["Sin", "Cos"]
+        if schema.name in ["Sin", "Cos", "Elu"]
     ],
 )
 def test_onnx_unary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION):
