@@ -1,82 +1,108 @@
-      // 1. Get input and output types
-      mlir::Value input = op->getOperand(0);
-      auto inputType = mlir::dyn_cast<mlir::RankedTensorType>(input.getType());
-      if (!inputType) {
-        return rewriter.notifyMatchFailure(op, "input must be a ranked tensor");
-      }
-      int64_t rank = inputType.getRank();
+/******************************************************************+************
+ *
+ * ONNX2MLIR (ONNX dialect mappings for composable optimizations)
+ *
+ * Authors:
+ *     Cristian Balint <cristian dot balint at gmail dot com>
+ *
+ * Copyright (c) 2021,2025
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ *****************************************************************************/
 
-      auto outputType =
-          mlir::dyn_cast<mlir::RankedTensorType>(op->getResult(0).getType());
-      if (!outputType) {
-        return rewriter.notifyMatchFailure(op,
-                                           "output must be a ranked tensor");
-      }
+/*!
+ * \file src/conversion/passes/onnx_to_linalg/transpose.cpp
+ * \brief ONNX TransposeOp to Linalg lowering
+ */
 
-      // 2. Get the 'perm' attribute from the operation
-      mlir::Attribute permAttr = op->getAttr("perm");
-      llvm::SmallVector<int64_t> permutations;
-      auto arrayPermAttr = mlir::dyn_cast_or_null<mlir::ArrayAttr>(permAttr);
-      if (arrayPermAttr) {
-        for (mlir::Attribute attr : arrayPermAttr) {
-          if (auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(attr)) {
-            permutations.push_back(intAttr.getInt());
-          } else {
-            return rewriter.notifyMatchFailure(
-                op, "perm array contains non-integer attributes");
-          }
-        }
-        if (static_cast<int64_t>(permutations.size()) != rank) {
-          return rewriter.notifyMatchFailure(
-              op, "perm attribute size mismatch with input rank");
-        }
+#include <mlir/Dialect/Arith/IR/Arith.h>
+#include <mlir/Dialect/Linalg/IR/Linalg.h>
+#include <mlir/Dialect/Tensor/IR/Tensor.h>
+#include <mlir/Dialect/Transform/IR/TransformOps.h>
+#include <mlir/IR/PatternMatch.h>
+#include <mlir/Support/LogicalResult.h>
+
+#include "onnx2mlir/common/onnx.hpp"
+#include "onnx2mlir/dialect/onnx/Onnx.hpp"
+
+namespace onnx2mlir::dialect {
+
+mlir::LogicalResult OnnxToLinalg_TransposeOp(mlir::Operation *op,
+                                             mlir::PatternRewriter &rewriter) {
+  auto opName = op->getName().getStringRef();
+
+  mlir::Value inp = op->getOperand(0);
+  mlir::Value res = op->getResult(0);
+
+  auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(inp.getType());
+  auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
+
+  if (!inpType) {
+    return rewriter.notifyMatchFailure(
+        op, opName + " operand must be ranked tensor type");
+  }
+
+  if (!resType) {
+    return rewriter.notifyMatchFailure(
+        op, opName + " result must be a ranked tensor type");
+  }
+
+  if (!inpType.hasStaticShape() || !resType.hasStaticShape()) {
+    return rewriter.notifyMatchFailure(
+        op, opName + " input and result must be static shaped");
+  }
+
+  mlir::Location loc = op->getLoc();
+
+  auto rank = inpType.getRank();
+
+  auto permAttr = op->getAttr("perm");
+  mlir::SmallVector<int64_t> perms, out_shape;
+  if (auto arrayPermAttr = mlir::dyn_cast_or_null<mlir::ArrayAttr>(permAttr)) {
+    for (auto attr : arrayPermAttr) {
+      if (auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(attr)) {
+        perms.push_back(intAttr.getInt());
+        out_shape.push_back(inpType.getShape()[intAttr.getInt()]);
       } else {
-        // if 'perm' attribute is not present
-        // default to reversing dimensions
-        for (int64_t i = 0; i < rank; ++i) {
-          permutations.push_back(rank - 1 - i);
-        }
+        return rewriter.notifyMatchFailure(
+            op, opName + " 'perm' array contains non-integer values");
       }
+    }
+    if (static_cast<int64_t>(perms.size()) != rank) {
+      return rewriter.notifyMatchFailure(
+          op, opName + " 'perm' array size mismatch with input rank");
+    }
+  } else {
+    // 'perm' attribute is not present
+    // default to reversing dimensions
+    for (int64_t i = 0; i < rank; ++i) {
+      perms.push_back(rank - 1 - i);
+    }
+  }
+  auto permsAttr = rewriter.getDenseI64ArrayAttr(perms);
 
-      // 3. Create linalg.transpose's 'permutation' attribute
-      mlir::DenseI64ArrayAttr permutationsAttr =
-          rewriter.getDenseI64ArrayAttr(permutations);
+  mlir::Value outBuff = rewriter.create<mlir::tensor::EmptyOp>(
+      loc, out_shape, inpType.getElementType());
 
-      // --- DEBUG prints ---
-      llvm::errs() << "Lowering onnx.TransposeOp to linalg.transposeOp:\n";
-      llvm::errs() << "  Input Type: " << inputType << "\n";
-      llvm::errs() << "  Output Type: " << outputType << "\n";
-      llvm::errs() << "  Permutations: [";
-      llvm::interleave(permutations, llvm::errs(), ", ");
-      llvm::errs() << "]\n";
-      // --- END DEBUG ---
+  auto TransOp =
+      rewriter.create<mlir::linalg::TransposeOp>(loc, inp, outBuff, permsAttr);
+  mlir::Value result = TransOp.getResult().front();
 
-      mlir::Location fusedLoc = rewriter.getFusedLoc(
-          {op->getLoc()}, rewriter.getStringAttr(op->getName().getStringRef()));
+  rewriter.replaceOp(op, result);
 
-      // 4. Create a tensor.empty operation for the 'init' operand.
-      llvm::SmallVector<mlir::Value> dynamicDims;
-      for (int64_t i = 0; i < outputType.getRank(); ++i) {
-        if (outputType.isDynamicDim(i)) {
-          mlir::Value dimValue = rewriter.create<mlir::tensor::DimOp>(
-              fusedLoc, input,
-              rewriter.create<mlir::arith::ConstantIndexOp>(fusedLoc,
-                                                            permutations[i]));
-          dynamicDims.push_back(dimValue);
-        }
-      }
+  return mlir::success();
+}
 
-      mlir::Value emptyTensor = rewriter.create<mlir::tensor::EmptyOp>(
-          fusedLoc, outputType, dynamicDims);
-
-      // 5. Create linalg.transpose op
-      auto linalgTransposeOp = rewriter.create<mlir::linalg::TransposeOp>(
-          fusedLoc, input, emptyTensor, permutationsAttr);
-      mlir::Value transposedTensor = linalgTransposeOp.getResult().front();
-
-      // 6. Replace the original ONNX op with the new linalg.transpose op
-      rewriter.replaceOp(op, transposedTensor);
-
-      llvm::errs()
-          << "Successfully lowered onnx.TransposeOp to linalg.transposeOp.\n";
-      return mlir::success();
+} // namespace onnx2mlir::dialect

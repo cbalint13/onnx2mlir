@@ -65,7 +65,7 @@ struct ONNXToLINALGLowering : public mlir::RewritePattern {
     } else if (opNameBeginsWith(opName, "Unsqueeze")) {
 #include "onnx_to_linalg/unsqueeze.cpp"
     } else if (opNameBeginsWith(opName, "Transpose")) {
-#include "onnx_to_linalg/transpose.cpp"
+      return OnnxToLinalg_TransposeOp(op, rewriter);
     } else if (opNameBeginsWith(opName, {"Add", "Sub", "Mul", "Div", "Pow"})) {
       return OnnxToLinalg_ArithBinaryOps(op, rewriter);
     } else if (opNameBeginsWith( // clang-format off

@@ -7,6 +7,7 @@ add_mlir_conversion_library(onnx2mlir_onnx_linalg_pass
     onnx_to_linalg/arith_unary.cpp
     onnx_to_linalg/cast.cpp
     onnx_to_linalg/constant.cpp
+    onnx_to_linalg/transpose.cpp
   DEPENDS
     onnx2mlir_onnx_dialect
     MLIRConversionPassesIncGen

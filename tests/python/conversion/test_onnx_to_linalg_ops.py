@@ -28,6 +28,7 @@
 \brief Tests for Onnx to Linalg operator lowering
 """
 
+import random
 import pytest
 import numpy as np
 
@@ -325,6 +326,69 @@ def test_onnx_softmax_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION):
         return model
 
     np_array = np.random.rand(8, 8).astype(np.float32)
+    onnx_model = create_onnx_model(np_array)
+
+    ref = ReferenceEvaluator(onnx_model)
+    onnx_result = ref.run(None, {"input": np_array})[0]
+
+    with Context() as ctx, Location.unknown():
+
+        mlir_module = import_from_onnx(onnx_model, ctx)
+        mlir_module.operation.verify()
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        output = np.zeros_like(np_array)
+        outputs = runner(llvm_module, "main", [np_array], [output])
+
+        np.testing.assert_allclose(outputs[0], onnx_result, atol=1e-3)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OPSET_VERSION",
+    [
+        schema.since_version
+        for schema in get_all_schemas_with_history()
+        if "Transpose" == schema.name
+    ],
+)
+def test_onnx_transpose_lower(ONNX_OPSET_VERSION):
+    """
+    Test ONNX Transpose operator lowering.
+    """
+
+    def create_onnx_model(np_array):
+
+        perm = random.sample(range(np_array.ndim), np_array.ndim)
+        np_arrayT = np_array.transpose(perm)
+
+        input_tensor = make_tensor_value_info(
+            "input", TensorProto.FLOAT, np_array.shape
+        )
+        output_tensor = make_tensor_value_info(
+            "output", TensorProto.FLOAT, np_arrayT.shape
+        )
+        cast_node = make_node(
+            "Transpose",
+            # i/o
+            ["input"],
+            ["output"],
+            perm=perm,
+        )
+        graph = make_graph(
+            nodes=[cast_node],
+            name="transpose_graph",
+            inputs=[input_tensor],
+            outputs=[output_tensor],
+            initializer=[],
+        )
+        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        model = make_model(graph, opset_imports=opset_imports)
+        check_model(model)
+        return model
+
+    np_array = np.random.rand(1, 3, 8, 5).astype(np.float32)
     onnx_model = create_onnx_model(np_array)
 
     ref = ReferenceEvaluator(onnx_model)
