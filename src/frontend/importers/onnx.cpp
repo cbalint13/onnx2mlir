@@ -843,7 +843,10 @@ void ONNXImporter::import(const std::string &file_or_string,
     llvm::outs() << "Model OPSet version: " << model_opset_version << "\n";
 
   // infer shapes
-  onnx::shape_inference::InferShapes(model_proto);
+  onnx::ShapeInferenceOptions iopts(
+      /*check_type=*/false, /*error_mode=*/false, /*data_prop=*/true);
+  onnx::shape_inference::InferShapes(
+      model_proto, onnx::OpSchemaRegistry::Instance(), iopts, {});
 
   const onnx::GraphProto &graph_proto = model_proto.graph();
 
