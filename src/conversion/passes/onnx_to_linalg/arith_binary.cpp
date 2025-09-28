@@ -104,11 +104,11 @@ OnnxToLinalg_ArithBinaryOps(mlir::Operation *op,
   llvm::SmallVector<mlir::AffineExpr, 4> lhsExprs;
   for (unsigned i = 0; i < resType.getRank(); ++i) {
     int64_t lhsDimIndex = lhsType.getRank() - (resType.getRank() - i);
-    if (lhsType.getRank() < resType.getRank() - i ||
-        lhsType.getDimSize(lhsDimIndex) == 1) {
-      lhsExprs.push_back(zero);
-    } else {
-      lhsExprs.push_back(builder.getAffineDimExpr(i));
+    if (lhsDimIndex >= 0) {
+      if (lhsType.getDimSize(lhsDimIndex) == 1)
+        lhsExprs.push_back(zero);
+      else
+        lhsExprs.push_back(builder.getAffineDimExpr(i));
     }
   }
   lhsMap = mlir::AffineMap::get(resType.getRank(), 0, lhsExprs,
@@ -118,11 +118,11 @@ OnnxToLinalg_ArithBinaryOps(mlir::Operation *op,
   llvm::SmallVector<mlir::AffineExpr, 4> rhsExprs;
   for (unsigned i = 0; i < resType.getRank(); ++i) {
     int64_t rhsDimIndex = rhsType.getRank() - (resType.getRank() - i);
-    if (rhsType.getRank() < resType.getRank() - i ||
-        rhsType.getDimSize(rhsDimIndex) == 1) {
-      rhsExprs.push_back(zero);
-    } else {
-      rhsExprs.push_back(builder.getAffineDimExpr(i));
+    if (rhsDimIndex >= 0) {
+      if (rhsType.getDimSize(rhsDimIndex) == 1)
+        rhsExprs.push_back(zero);
+      else
+        rhsExprs.push_back(builder.getAffineDimExpr(i));
     }
   }
   rhsMap = mlir::AffineMap::get(resType.getRank(), 0, rhsExprs,
