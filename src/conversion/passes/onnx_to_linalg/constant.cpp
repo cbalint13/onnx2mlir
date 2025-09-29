@@ -36,10 +36,11 @@ namespace onnx2mlir::dialect {
 
 mlir::LogicalResult OnnxToLinalg_ConstantOp(mlir::Operation *op,
                                             mlir::PatternRewriter &rewriter) {
+  auto loc = op->getLoc();
   // Cannot handle NoneType return
   if (mlir::isa<mlir::NoneType>(op->getResult(0).getType())) {
-    return rewriter.notifyMatchFailure(
-        op, "onnx.Constant with 'NoneType' is not supported");
+    return mlir::emitError(loc,
+                           "onnx.Constant with 'NoneType' is not supported");
   }
 
   mlir::Attribute valueAttr = op->getAttr("value");
@@ -47,8 +48,8 @@ mlir::LogicalResult OnnxToLinalg_ConstantOp(mlir::Operation *op,
 
   // Cannot handle empty tensor
   if (!elemValueAttr) {
-    return rewriter.notifyMatchFailure(
-        op, "onnx.Constant without a valid tensor 'value' attribute");
+    return mlir::emitError(
+        loc, "onnx.Constant without a valid tensor 'value' attribute");
   }
 
   // Create the new arithmetic constant op

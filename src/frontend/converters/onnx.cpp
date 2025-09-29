@@ -27,6 +27,8 @@
  * \brief Onnx converter implementation
  */
 
+#include <llvm/Support/SourceMgr.h>
+
 #include <mlir/Pass/PassManager.h>
 
 #include "onnx2mlir/conversion/onnx_passes.hpp"
@@ -37,6 +39,10 @@ namespace onnx2mlir::frontend {
 void ONNXConverter::convert(mlir::ModuleOp *module) {
   // context
   auto ctx = module->getContext();
+
+  // diagnostics handler
+  llvm::SourceMgr srcMgr;
+  mlir::SourceMgrDiagnosticHandler sourceMgrHandler(srcMgr, ctx);
 
   // DEBUG
   mlir::OpPrintingFlags flags;

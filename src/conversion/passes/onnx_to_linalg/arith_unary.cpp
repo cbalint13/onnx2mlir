@@ -45,6 +45,7 @@ namespace onnx2mlir::dialect {
 mlir::LogicalResult
 OnnxToLinalg_ArithUnaryOps(mlir::Operation *op,
                            mlir::PatternRewriter &rewriter) {
+  auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
   mlir::Value inp = op->getOperand(0);
@@ -54,16 +55,13 @@ OnnxToLinalg_ArithUnaryOps(mlir::Operation *op,
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
   if (!inpType) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " operand must be ranked tensor type");
+    return mlir::emitError(loc, opName + " operand must be ranked tensor type");
   }
 
   if (!resType) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " result must be a ranked tensor type");
+    return mlir::emitError(loc,
+                           opName + " result must be a ranked tensor type");
   }
-
-  mlir::Location loc = op->getLoc();
 
   // 1. Create an empty tensor for the output
   mlir::Value outBuff = rewriter.create<mlir::tensor::EmptyOp>(
@@ -112,7 +110,8 @@ OnnxToLinalg_ArithUnaryOps(mlir::Operation *op,
           double alpha = 1.0;
           auto alphaAttr = op->getAttr("alpha");
           if (alphaAttr) {
-            if(auto floatAttr = mlir::dyn_cast_or_null<mlir::FloatAttr>(alphaAttr)) {
+            if (auto floatAttr =
+                    mlir::dyn_cast_or_null<mlir::FloatAttr>(alphaAttr)) {
               alpha = floatAttr.getValueAsDouble();
             }
           }
@@ -360,6 +359,7 @@ OnnxToLinalg_ArithUnaryOps(mlir::Operation *op,
 mlir::LogicalResult OnnxToLinalg_SoftmaxOp(mlir::Operation *op,
                                            mlir::PatternRewriter &rewriter) {
   auto ctx = rewriter.getContext();
+  auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
   mlir::Value inp = op->getOperand(0);
@@ -369,40 +369,34 @@ mlir::LogicalResult OnnxToLinalg_SoftmaxOp(mlir::Operation *op,
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
   if (!inpType) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " operand must be ranked tensor type");
+    return mlir::emitError(loc, opName + " operand must be ranked tensor type");
   }
 
   if (!resType) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " result must be a ranked tensor type");
+    return mlir::emitError(loc,
+                           opName + " result must be a ranked tensor type");
   }
 
   auto inpElmType = inpType.getElementType();
   if (!mlir::isa<mlir::FloatType>(inpElmType)) {
-    return rewriter.notifyMatchFailure(op,
-                                       opName + " requires float element type");
+    return mlir::emitError(loc, opName + " requires float element type");
   }
-
-  mlir::Location loc = op->getLoc();
 
   auto axisAttr = op->getAttr("axis");
   if (!axisAttr) {
-    return rewriter.notifyMatchFailure(op,
-                                       opName + " is missing 'axis' attribute");
+    return mlir::emitError(loc, opName + " is missing 'axis' attribute");
   }
 
   auto axisInt = mlir::dyn_cast_or_null<mlir::IntegerAttr>(axisAttr);
   if (!axisInt) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " has invalid 'axis' attribute type");
+    return mlir::emitError(loc, opName + " has invalid 'axis' attribute type");
   }
 
   auto axis = axisInt.getInt();
   auto rank = inpType.getRank();
 
   if (axis < 0 || axis >= rank) {
-    return rewriter.notifyMatchFailure(op, opName + " invalid axis");
+    return mlir::emitError(loc, opName + " invalid axis");
   }
 
   // parallel iterators once
@@ -512,6 +506,7 @@ mlir::LogicalResult OnnxToLinalg_SoftmaxOp(mlir::Operation *op,
 mlir::LogicalResult OnnxToLinalg_LogSoftmaxOp(mlir::Operation *op,
                                               mlir::PatternRewriter &rewriter) {
   auto ctx = rewriter.getContext();
+  auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
   mlir::Value inp = op->getOperand(0);
@@ -521,40 +516,34 @@ mlir::LogicalResult OnnxToLinalg_LogSoftmaxOp(mlir::Operation *op,
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
   if (!inpType) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " operand must be ranked tensor type");
+    return mlir::emitError(loc, opName + " operand must be ranked tensor type");
   }
 
   if (!resType) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " result must be a ranked tensor type");
+    return mlir::emitError(loc,
+                           opName + " result must be a ranked tensor type");
   }
 
   auto inpElmType = inpType.getElementType();
   if (!mlir::isa<mlir::FloatType>(inpElmType)) {
-    return rewriter.notifyMatchFailure(op,
-                                       opName + " requires float element type");
+    return mlir::emitError(loc, opName + " requires float element type");
   }
-
-  mlir::Location loc = op->getLoc();
 
   auto axisAttr = op->getAttr("axis");
   if (!axisAttr) {
-    return rewriter.notifyMatchFailure(op,
-                                       opName + " is missing 'axis' attribute");
+    return mlir::emitError(loc, opName + " is missing 'axis' attribute");
   }
 
   auto axisInt = mlir::dyn_cast_or_null<mlir::IntegerAttr>(axisAttr);
   if (!axisInt) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " has invalid 'axis' attribute type");
+    return mlir::emitError(loc, opName + " has invalid 'axis' attribute type");
   }
 
   auto axis = axisInt.getInt();
   auto rank = inpType.getRank();
 
   if (axis < 0 || axis >= rank) {
-    return rewriter.notifyMatchFailure(op, opName + " invalid axis");
+    return mlir::emitError(loc, opName + " invalid axis");
   }
 
   // parallel iterators
@@ -669,6 +658,7 @@ mlir::LogicalResult OnnxToLinalg_LogSoftmaxOp(mlir::Operation *op,
 mlir::LogicalResult OnnxToLinalg_HardmaxOp(mlir::Operation *op,
                                            mlir::PatternRewriter &rewriter) {
   auto ctx = rewriter.getContext();
+  auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
   mlir::Value inp = op->getOperand(0);
@@ -678,40 +668,34 @@ mlir::LogicalResult OnnxToLinalg_HardmaxOp(mlir::Operation *op,
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
   if (!inpType) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " operand must be ranked tensor type");
+    return mlir::emitError(loc, opName + " operand must be ranked tensor type");
   }
 
   if (!resType) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " result must be a ranked tensor type");
+    return mlir::emitError(loc,
+                           opName + " result must be a ranked tensor type");
   }
 
   auto inpElmType = inpType.getElementType();
   if (!mlir::isa<mlir::FloatType>(inpElmType)) {
-    return rewriter.notifyMatchFailure(op,
-                                       opName + " requires float element type");
+    return mlir::emitError(loc, opName + " requires float element type");
   }
-
-  mlir::Location loc = op->getLoc();
 
   auto axisAttr = op->getAttr("axis");
   if (!axisAttr) {
-    return rewriter.notifyMatchFailure(op,
-                                       opName + " is missing 'axis' attribute");
+    return mlir::emitError(loc, opName + " is missing 'axis' attribute");
   }
 
   auto axisInt = mlir::dyn_cast_or_null<mlir::IntegerAttr>(axisAttr);
   if (!axisInt) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " has invalid 'axis' attribute type");
+    return mlir::emitError(loc, opName + " has invalid 'axis' attribute type");
   }
 
   auto axis = axisInt.getInt();
   auto rank = inpType.getRank();
 
   if (axis < 0 || axis >= rank) {
-    return rewriter.notifyMatchFailure(op, opName + " invalid axis");
+    return mlir::emitError(loc, opName + " invalid axis");
   }
 
   // map and shape definitions

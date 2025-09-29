@@ -31,6 +31,7 @@
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/Dialect/Transform/IR/TransformOps.h>
+#include <mlir/IR/Diagnostics.h>
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Support/LogicalResult.h>
 
@@ -41,6 +42,7 @@ namespace onnx2mlir::dialect {
 
 mlir::LogicalResult OnnxToLinalg_TransposeOp(mlir::Operation *op,
                                              mlir::PatternRewriter &rewriter) {
+  auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
   mlir::Value inp = op->getOperand(0);
@@ -48,18 +50,14 @@ mlir::LogicalResult OnnxToLinalg_TransposeOp(mlir::Operation *op,
 
   auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(inp.getType());
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
-
   if (!inpType) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " operand must be ranked tensor type");
+    return mlir::emitError(loc, opName + " operand must be ranked tensor type");
   }
 
   if (!resType) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " result must be a ranked tensor type");
+    return mlir::emitError(loc,
+                           opName + " result must be a ranked tensor type");
   }
-
-  mlir::Location loc = op->getLoc();
 
   auto rank = inpType.getRank();
 

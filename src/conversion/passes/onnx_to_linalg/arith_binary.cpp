@@ -42,6 +42,7 @@ namespace onnx2mlir::dialect {
 mlir::LogicalResult
 OnnxToLinalg_ArithBinaryOps(mlir::Operation *op,
                             mlir::PatternRewriter &rewriter) {
+  auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
   mlir::Value lhs = op->getOperand(0);
@@ -53,42 +54,40 @@ OnnxToLinalg_ArithBinaryOps(mlir::Operation *op,
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
   if ((!lhsType) || (!rhsType)) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " operands must be ranked tensor type");
+    return mlir::emitError(loc,
+                           opName + " operands must be ranked tensor type");
   }
 
   if (lhsType.getElementType() != rhsType.getElementType()) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " operands element type are different");
+    return mlir::emitError(loc,
+                           opName + " operands element type are different");
   }
 
   if (!resType) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " result must be a ranked tensor type");
+    return mlir::emitError(loc,
+                           opName + " result must be a ranked tensor type");
   }
 
   if (opNameBeginsWith(opName, "Pow") &&
       mlir::isa<mlir::IntegerType>(resType.getElementType())) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " not supported with integer types");
+    return mlir::emitError(loc, opName + " not supported with integer types");
   }
 
   // Infer broadcasted shape output
   auto outBrdType = getBroadcastShape(lhsType, rhsType);
 
   if (!outBrdType) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " operands are not broadcastable");
+    return mlir::emitError(loc, opName + " operands are not broadcastable");
   }
 
   if ((outBrdType) && (resType != outBrdType)) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " result not match operands broadcast");
+    return mlir::emitError(loc,
+                           opName + " result not match operands broadcast");
   }
 
   // Create an empty tensor for the output
   mlir::Value outBuff = rewriter.create<mlir::tensor::EmptyOp>(
-      op->getLoc(), resType.getShape(), resType.getElementType());
+      loc, resType.getShape(), resType.getElementType());
 
   // Create indexing maps for the elementwise op
   llvm::SmallVector<mlir::AffineMap, 4> idxMaps;
@@ -147,19 +146,19 @@ OnnxToLinalg_ArithBinaryOps(mlir::Operation *op,
     if (mlir::isa<mlir::FloatType>(resType.getElementType()))
       kindEnum = mlir::linalg::ElementwiseKind::powf;
     else
-      return rewriter.notifyMatchFailure(
-          op, opName + " supports only float element types");
+      return mlir::emitError(loc,
+                             opName + " supports only float element types");
   } else {
-    return rewriter.notifyMatchFailure(
-        op, opName + " is unsupported for linalg.elementwise operation");
+    return mlir::emitError(
+        loc, opName + " is unsupported for linalg.elementwise operation");
   }
 
   auto kindAttr =
       mlir::linalg::ElementwiseKindAttr::get(op->getContext(), kindEnum);
 
   auto elmwiseOp = rewriter.create<mlir::linalg::ElementwiseOp>(
-      op->getLoc(), mlir::ValueRange{lhs, rhs}, mlir::ValueRange{outBuff},
-      kindAttr, idxMapsAttr);
+      loc, mlir::ValueRange{lhs, rhs}, mlir::ValueRange{outBuff}, kindAttr,
+      idxMapsAttr);
 
   // Tag for transform optimization
   elmwiseOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
