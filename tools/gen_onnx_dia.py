@@ -373,7 +373,9 @@ def main():
         # attributes
         attr_list = '"{' + ",".join(f'\\"{attr}\\"' for attr, atype in inp_attrs) + '}"'
         out_assembly_str += prefill
-        out_assembly_str += f"`attributes` ` ` `{{`custom<OnnxDictAsmPrinter>(attr-dict, {attr_list})`}}`\n"
+        out_assembly_str += (
+            f"`attributes` custom<OnnxDictAsmPrinter>(attr-dict, {attr_list})\n"
+        )
         out_assembly_str += prefill + f"{indent_spaces[0:20]}\n"
         out_assembly_str += prefill + "`)`"
         # results

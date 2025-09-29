@@ -43,6 +43,57 @@ from onnx2mlir import support
 from onnx2mlir.dialect import onnx, register_onnx_dialect
 
 
+def test_onnx_mlir_parse_ir():
+    """
+    Test ONNX dialect IR parser.
+    """
+    ONNX_MLIR_SAMPLE = textwrap.dedent(
+        """
+        module {
+          func.func @main(%arg0: tensor<2x2xf32>, %arg1: tensor<2x2xf32>) -> tensor<2x2xf32> {
+            %0 = onnx.Mul(
+                    A = %arg0 : tensor<2x2xf32>
+                    B = %arg1 : tensor<2x2xf32>
+                    attributes {}
+                ) : tensor<2x2xf32>
+            %1 = onnx.Constant(
+                    attributes {value = dense<[[1.000000e+00, 2.000000e+00], [3.000000e+00, 4.000000e+00]]> : tensor<2x2xf32>}
+                ) : tensor<2x2xf32>
+            %2 = onnx.Add(
+                    A = %1 : tensor<2x2xf32>
+                    B = %0 : tensor<2x2xf32>
+                    attributes {}
+                ) : tensor<2x2xf32>
+            return %2 : tensor<2x2xf32>
+          }
+        }
+        """
+    )
+
+    def onnx_module_parse():
+        with Context() as ctx:
+            register_onnx_dialect(ctx)
+            module = Module.parse(ONNX_MLIR_SAMPLE)
+        return module
+
+    mlir_module = onnx_module_parse()
+    actual_output = str(mlir_module)
+
+    expected_lines = ONNX_MLIR_SAMPLE.strip().splitlines()
+    actual_lines = actual_output.strip().splitlines()
+
+    diff = difflib.unified_diff(
+        expected_lines,
+        actual_lines,
+        fromfile="expected.mlir",
+        tofile="actual.mlir",
+        lineterm="",
+    )
+    diff_output = "\n".join(list(diff))
+
+    assert not diff_output, f"MLIR output mismatch detected:\n{diff_output}"
+
+
 def test_onnx_mlir_generation():
     """
     Test ONNX dialect ops MLIR generation.

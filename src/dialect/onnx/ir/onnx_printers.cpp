@@ -37,6 +37,7 @@ void printOnnxDictAsmPrinter(mlir::OpAsmPrinter &printer, mlir::Operation *op,
                              mlir::DictionaryAttr dict,
                              mlir::DenseSet<mlir::StringRef> orderedAttrs = {},
                              const bool masked = false) {
+  printer << "{";
   bool isFirst = true;
   for (const auto &attrName : orderedAttrs) {
     auto attrValue = dict.get(attrName);
@@ -62,6 +63,7 @@ void printOnnxDictAsmPrinter(mlir::OpAsmPrinter &printer, mlir::Operation *op,
       }
     }
   }
+  printer << "}";
 }
 
 mlir::ParseResult
