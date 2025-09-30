@@ -393,8 +393,9 @@ def main():
         inc.write(f"    int getDefinedOperandCount() {{\n")
         inc.write(f"      return %i;\n" % def_operands)
         inc.write(f"    }}\n")
+        def_results = -1 if "Variadic" in out_results_str else len(schema.outputs)
         inc.write(f"    int getDefinedResultCount() {{\n")
-        inc.write(f"      return %i;\n" % len(schema.outputs))
+        inc.write(f"      return %i;\n" % def_results)
         inc.write(f"    }}\n")
         inc.write(f"  }}];\n")
 
