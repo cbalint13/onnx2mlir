@@ -1,3 +1,5 @@
+add_definitions(-DONNX_NAMESPACE=onnx -DONNX_ML=${ONNX_USE_ML})
+
 add_subdirectory(importers)
 add_subdirectory(converters)
 
