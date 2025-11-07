@@ -4,8 +4,7 @@ add_library(onnx2mlir_importers
 target_link_libraries(onnx2mlir_importers
   PRIVATE
     onnx2mlir_onnx_dialect
-  PUBLIC
-    ONNX::onnx
+    onnx
     MLIR
     LLVM
 )

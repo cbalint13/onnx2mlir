@@ -88,8 +88,8 @@ OnnxToLinalg_CompBinaryOps(mlir::Operation *op,
   }
 
   // Create an empty tensor for the output
-  mlir::Value outBuff = rewriter.create<mlir::tensor::EmptyOp>(
-      op->getLoc(), resType.getShape(), resType.getElementType());
+  mlir::Value outBuff = mlir::tensor::EmptyOp::create(
+      rewriter, op->getLoc(), resType.getShape(), resType.getElementType());
 
   // Create indexing maps for the generic op
   llvm::SmallVector<mlir::AffineMap, 4> idxMaps;
@@ -134,8 +134,8 @@ OnnxToLinalg_CompBinaryOps(mlir::Operation *op,
   idxMaps.push_back(resMap);
 
   // Create the comparison op with linalg.generic
-  auto genericOp = rewriter.create<mlir::linalg::GenericOp>(
-      op->getLoc(), resType, mlir::ValueRange{lhs, rhs},
+  auto genericOp = mlir::linalg::GenericOp::create(
+      rewriter, op->getLoc(), resType, mlir::ValueRange{lhs, rhs},
       mlir::ValueRange{outBuff}, idxMaps,
       llvm::SmallVector<mlir::utils::IteratorType>(
           resType.getRank(), mlir::utils::IteratorType::parallel),
@@ -143,38 +143,38 @@ OnnxToLinalg_CompBinaryOps(mlir::Operation *op,
         mlir::Value outOp;
         if (mlir::isa<mlir::FloatType>(lhsType.getElementType())) {
           if (opNameBeginsWith(opName, "Equal"))
-            outOp = nest.create<mlir::arith::CmpFOp>(
-                loc, mlir::arith::CmpFPredicate::OEQ, vals[0], vals[1]);
+            outOp = mlir::arith::CmpFOp::create(
+                nest, loc, mlir::arith::CmpFPredicate::OEQ, vals[0], vals[1]);
           if (opNameBeginsWith(opName, "Greater"))
-            outOp = nest.create<mlir::arith::CmpFOp>(
-                loc, mlir::arith::CmpFPredicate::OGT, vals[0], vals[1]);
+            outOp = mlir::arith::CmpFOp::create(
+                nest, loc, mlir::arith::CmpFPredicate::OGT, vals[0], vals[1]);
           if (opNameBeginsWith(opName, "GreaterOrEqual"))
-            outOp = nest.create<mlir::arith::CmpFOp>(
-                loc, mlir::arith::CmpFPredicate::OGE, vals[0], vals[1]);
+            outOp = mlir::arith::CmpFOp::create(
+                nest, loc, mlir::arith::CmpFPredicate::OGE, vals[0], vals[1]);
           if (opNameBeginsWith(opName, "Less"))
-            outOp = nest.create<mlir::arith::CmpFOp>(
-                loc, mlir::arith::CmpFPredicate::OLT, vals[0], vals[1]);
+            outOp = mlir::arith::CmpFOp::create(
+                nest, loc, mlir::arith::CmpFPredicate::OLT, vals[0], vals[1]);
           if (opNameBeginsWith(opName, "LessOrEqual"))
-            outOp = nest.create<mlir::arith::CmpFOp>(
-                loc, mlir::arith::CmpFPredicate::OLE, vals[0], vals[1]);
+            outOp = mlir::arith::CmpFOp::create(
+                nest, loc, mlir::arith::CmpFPredicate::OLE, vals[0], vals[1]);
         } else {
           if (opNameBeginsWith(opName, "Equal"))
-            outOp = nest.create<mlir::arith::CmpIOp>(
-                loc, mlir::arith::CmpIPredicate::eq, vals[0], vals[1]);
+            outOp = mlir::arith::CmpIOp::create(
+                nest, loc, mlir::arith::CmpIPredicate::eq, vals[0], vals[1]);
           if (opNameBeginsWith(opName, "Greater"))
-            outOp = nest.create<mlir::arith::CmpIOp>(
-                loc, mlir::arith::CmpIPredicate::sgt, vals[0], vals[1]);
+            outOp = mlir::arith::CmpIOp::create(
+                nest, loc, mlir::arith::CmpIPredicate::sgt, vals[0], vals[1]);
           if (opNameBeginsWith(opName, "GreaterOrEqual"))
-            outOp = nest.create<mlir::arith::CmpIOp>(
-                loc, mlir::arith::CmpIPredicate::sge, vals[0], vals[1]);
+            outOp = mlir::arith::CmpIOp::create(
+                nest, loc, mlir::arith::CmpIPredicate::sge, vals[0], vals[1]);
           if (opNameBeginsWith(opName, "Less"))
-            outOp = nest.create<mlir::arith::CmpIOp>(
-                loc, mlir::arith::CmpIPredicate::slt, vals[0], vals[1]);
+            outOp = mlir::arith::CmpIOp::create(
+                nest, loc, mlir::arith::CmpIPredicate::slt, vals[0], vals[1]);
           if (opNameBeginsWith(opName, "LessOrEqual"))
-            outOp = nest.create<mlir::arith::CmpIOp>(
-                loc, mlir::arith::CmpIPredicate::sle, vals[0], vals[1]);
+            outOp = mlir::arith::CmpIOp::create(
+                nest, loc, mlir::arith::CmpIPredicate::sle, vals[0], vals[1]);
         }
-        nest.create<mlir::linalg::YieldOp>(loc, outOp);
+        mlir::linalg::YieldOp::create(nest, loc, outOp);
       });
 
   // Tag for transform optimization

@@ -40,21 +40,27 @@ class Onnx_Type<string name, string typeMnemonic,
 
 include "OnnxTypes.td.inc"
 
-def StringType : Type<CPred<"mlir::isa<OnnxStringType>($_self)">, "string type">;
+def StringType
+    : Type<CPred<"mlir::isa<onnx2mlir::dialect::onnx::OnnxStringType>($_self)">,
+           "string type">;
 
-def IsSeqTypePred : CPred<"mlir::isa<SeqType>($_self)">;
+def IsSeqTypePred : CPred<"mlir::isa<onnx2mlir::dialect::onnx::SeqType>($_self)">;
 
-class SeqOf<list<Type> allowedTypes> :
-  ContainerType<AnyTypeOf<allowedTypes>, IsSeqTypePred,
-                "mlir::cast<SeqType>($_self).getElementType()", "SeqType">;
+class SeqOf<list<Type> allowedTypes>
+    : ContainerType<
+          AnyTypeOf<allowedTypes>, IsSeqTypePred,
+          "mlir::cast<onnx2mlir::dialect::onnx::SeqType>($_self).getElementType()",
+          "SeqType">;
 
-def IsOptTypePred : CPred<"mlir::isa<OptType>($_self)">;
+def IsOptTypePred : CPred<"mlir::isa<onnx2mlir::dialect::onnx::OptType>($_self)">;
 
-class OptOf<Type type> :
-  ContainerType<type, IsOptTypePred,
-                "mlir::cast<OptType>($_self).getElementType()", "OptType">;
+class OptOf<Type type>
+    : ContainerType<
+          type, IsOptTypePred,
+          "mlir::cast<onnx2mlir::dialect::onnx::OptType>($_self).getElementType()",
+          "OptType">;
 
-def ONNXConstantOpFromDenseAttr: NativeCodeCall<
-  "onnx_mlir::OnnxBuilder($_builder, $_loc).constant($0)">;
+def ONNXConstantOpFromDenseAttr
+    : NativeCodeCall<"onnx_mlir::OnnxBuilder($_builder, $_loc).constant($0)">;
 
 #endif // ONNX2MLIR_DIALECT_ONNX_ONNXTYPES_TD_

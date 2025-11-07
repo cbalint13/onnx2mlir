@@ -188,7 +188,7 @@ struct LowerONNXToLINALGPass
             // same rank & element type
             if ((inpSType.getRank() == resSType.getRank()) &&
                 (inpSType.getElementType() == resSType.getElementType())) {
-              return builder.create<mlir::tensor::CastOp>(loc, resType, inp);
+              return mlir::tensor::CastOp::create(builder, loc, resType, inp);
             }
           }
 

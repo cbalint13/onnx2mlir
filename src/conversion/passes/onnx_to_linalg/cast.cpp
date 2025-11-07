@@ -55,9 +55,9 @@ mlir::Value createArithCastOp(mlir::OpBuilder *builder,
     unsigned inpWidth = inpElemType.getIntOrFloatBitWidth();
     unsigned outWidth = tgtElemType.getIntOrFloatBitWidth();
     if (inpWidth < outWidth) {
-      return builder->create<mlir::arith::ExtFOp>(loc, tgtElemType, inpElem);
+      return mlir::arith::ExtFOp::create(*builder, loc, tgtElemType, inpElem);
     } else {
-      return builder->create<mlir::arith::TruncFOp>(loc, tgtElemType, inpElem);
+      return mlir::arith::TruncFOp::create(*builder, loc, tgtElemType, inpElem);
     }
     // Integer -> Integer
   } else if (inpElemType.isInteger() && tgtElemType.isInteger()) {
@@ -66,35 +66,38 @@ mlir::Value createArithCastOp(mlir::OpBuilder *builder,
     // extend
     if (inpWidth < outWidth) {
       if (inpElemType.isSignedInteger()) {
-        return builder->create<mlir::arith::ExtSIOp>(loc, tgtElemType, inpElem);
+        return mlir::arith::ExtSIOp::create(*builder, loc, tgtElemType,
+                                            inpElem);
       } else {
-        return builder->create<mlir::arith::ExtUIOp>(loc, tgtElemType, inpElem);
+        return mlir::arith::ExtUIOp::create(*builder, loc, tgtElemType,
+                                            inpElem);
       }
       // truncate
     } else if (inpWidth > outWidth) {
-      return builder->create<mlir::arith::TruncIOp>(loc, tgtElemType, inpElem);
+      return mlir::arith::TruncIOp::create(*builder, loc, tgtElemType, inpElem);
     } else {
       // reinterpret (same bitwidth, different signedness)
-      return builder->create<mlir::arith::BitcastOp>(loc, tgtElemType, inpElem);
+      return mlir::arith::BitcastOp::create(*builder, loc, tgtElemType,
+                                            inpElem);
     }
     // Floating -> Integer
   } else if (inpElemType.isFloat() && tgtElemType.isInteger()) {
     if (tgtElemType.isSignedInteger()) {
-      return builder->create<mlir::arith::FPToSIOp>(loc, tgtElemType, inpElem);
+      return mlir::arith::FPToSIOp::create(*builder, loc, tgtElemType, inpElem);
     } else {
-      return builder->create<mlir::arith::FPToUIOp>(loc, tgtElemType, inpElem);
+      return mlir::arith::FPToUIOp::create(*builder, loc, tgtElemType, inpElem);
     }
     // Integer -> Floating
   } else if (inpElemType.isInteger() && tgtElemType.isFloat()) {
     if (inpElemType.isSignedInteger()) {
-      return builder->create<mlir::arith::SIToFPOp>(loc, tgtElemType, inpElem);
+      return mlir::arith::SIToFPOp::create(*builder, loc, tgtElemType, inpElem);
     } else {
       auto signlessIntType = mlir::IntegerType::get(
           builder->getContext(), inpElemType.getIntOrFloatBitWidth());
-      auto signlessVal = builder->create<mlir::UnrealizedConversionCastOp>(
-          loc, signlessIntType, inpElem);
-      return builder->create<mlir::arith::UIToFPOp>(loc, tgtElemType,
-                                                    signlessVal.getResult(0));
+      auto signlessVal = mlir::UnrealizedConversionCastOp::create(
+          *builder, loc, signlessIntType, inpElem);
+      return mlir::arith::UIToFPOp::create(*builder, loc, tgtElemType,
+                                           signlessVal.getResult(0));
     }
   }
 
@@ -166,8 +169,8 @@ mlir::LogicalResult OnnxToLinalg_CastOp(mlir::Operation *op,
   }
 
   // 1. Create an empty tensor for the output
-  mlir::Value outBuff = rewriter.create<mlir::tensor::EmptyOp>(
-      loc, inpType.getShape(), tgtElemType);
+  mlir::Value outBuff = mlir::tensor::EmptyOp::create(
+      rewriter, loc, inpType.getShape(), tgtElemType);
 
   // 2. Create the linalg.generic operation
   mlir::SmallVector<mlir::utils::IteratorType> iterators;
@@ -180,16 +183,16 @@ mlir::LogicalResult OnnxToLinalg_CastOp(mlir::Operation *op,
   idxMaps.push_back(rewriter.getMultiDimIdentityMap(inpType.getRank()));
 
   bool bodyBuildFailed = false;
-  auto genericOp = rewriter.create<mlir::linalg::GenericOp>(
-      loc, outType, mlir::ValueRange{inp}, mlir::ValueRange{outBuff}, idxMaps,
-      iterators,
+  auto genericOp = mlir::linalg::GenericOp::create(
+      rewriter, loc, outType, mlir::ValueRange{inp}, mlir::ValueRange{outBuff},
+      idxMaps, iterators,
       [&](mlir::OpBuilder nest, mlir::Location loc, mlir::ValueRange args) {
         mlir::Value outOp = createArithCastOp(&nest, loc, args[0], tgtElemType);
         if (!outOp) {
           bodyBuildFailed = true;
           return;
         }
-        nest.create<mlir::linalg::YieldOp>(loc, outOp);
+        mlir::linalg::YieldOp::create(nest, loc, outOp);
       });
 
   if (bodyBuildFailed) {

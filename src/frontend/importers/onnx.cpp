@@ -685,16 +685,16 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
   }
 
   // Step 6, set main func results
-  mlir::SmallVector<mlir::Value> ret_values;
+  mlir::SmallVector<mlir::Value> ret_vals;
   for (const auto &out : func_outputs) {
     auto r_it = res_by_outputs.find(out.first);
     if (r_it != res_by_outputs.end()) {
       auto res = *(r_it->second);
-      ret_values.push_back(res);
+      ret_vals.push_back(res);
     }
   }
   auto ret =
-      builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc(), ret_values);
+      mlir::func::ReturnOp::create(builder, builder.getUnknownLoc(), ret_vals);
   block->push_back(ret);
 
   // remove unused NoType constant

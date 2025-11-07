@@ -73,7 +73,7 @@ mlir::LogicalResult OnnxToLinalg_TransposeOp(mlir::Operation *op,
         int64_t dim_size = inpType.getShape()[dim_index];
         if (mlir::ShapedType::isDynamic(dim_size)) {
           mlir::Value dim_value =
-              rewriter.create<mlir::tensor::DimOp>(loc, inp, dim_index);
+              mlir::tensor::DimOp::create(rewriter, loc, inp, dim_index);
           dynamic_dims.push_back(dim_value);
           out_shape.push_back(mlir::ShapedType::kDynamic);
         } else {
@@ -98,7 +98,7 @@ mlir::LogicalResult OnnxToLinalg_TransposeOp(mlir::Operation *op,
 
       if (mlir::ShapedType::isDynamic(dim_size)) {
         mlir::Value dim_value =
-            rewriter.create<mlir::tensor::DimOp>(loc, inp, dim_index);
+            mlir::tensor::DimOp::create(rewriter, loc, inp, dim_index);
         dynamic_dims.push_back(dim_value);
         out_shape.push_back(mlir::ShapedType::kDynamic);
       } else {
@@ -111,10 +111,10 @@ mlir::LogicalResult OnnxToLinalg_TransposeOp(mlir::Operation *op,
   auto outType =
       mlir::RankedTensorType::get(out_shape, inpType.getElementType());
   auto outBuff =
-      rewriter.create<mlir::tensor::EmptyOp>(loc, outType, dynamic_dims);
+      mlir::tensor::EmptyOp::create(rewriter, loc, outType, dynamic_dims);
 
   auto transOp =
-      rewriter.create<mlir::linalg::TransposeOp>(loc, inp, outBuff, permsAttr);
+      mlir::linalg::TransposeOp::create(rewriter, loc, inp, outBuff, permsAttr);
 
   // Tag for transform optimization
   transOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));

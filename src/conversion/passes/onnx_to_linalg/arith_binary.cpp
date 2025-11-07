@@ -86,8 +86,8 @@ OnnxToLinalg_ArithBinaryOps(mlir::Operation *op,
   }
 
   // Create an empty tensor for the output
-  mlir::Value outBuff = rewriter.create<mlir::tensor::EmptyOp>(
-      loc, resType.getShape(), resType.getElementType());
+  mlir::Value outBuff = mlir::tensor::EmptyOp::create(
+      rewriter, loc, resType.getShape(), resType.getElementType());
 
   // Create indexing maps for the elementwise op
   llvm::SmallVector<mlir::AffineMap, 4> idxMaps;
@@ -156,9 +156,9 @@ OnnxToLinalg_ArithBinaryOps(mlir::Operation *op,
   auto kindAttr =
       mlir::linalg::ElementwiseKindAttr::get(op->getContext(), kindEnum);
 
-  auto elmwiseOp = rewriter.create<mlir::linalg::ElementwiseOp>(
-      loc, mlir::ValueRange{lhs, rhs}, mlir::ValueRange{outBuff}, kindAttr,
-      idxMapsAttr);
+  auto elmwiseOp = mlir::linalg::ElementwiseOp::create(
+      rewriter, loc, mlir::ValueRange{lhs, rhs}, mlir::ValueRange{outBuff},
+      kindAttr, idxMapsAttr);
 
   // Tag for transform optimization
   elmwiseOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));

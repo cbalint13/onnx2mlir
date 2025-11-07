@@ -64,8 +64,8 @@ OnnxToLinalg_ArithUnaryOps(mlir::Operation *op,
   }
 
   // 1. Create an empty tensor for the output
-  mlir::Value outBuff = rewriter.create<mlir::tensor::EmptyOp>(
-      loc, inpType.getShape(), inpType.getElementType());
+  mlir::Value outBuff = mlir::tensor::EmptyOp::create(
+      rewriter, loc, inpType.getShape(), inpType.getElementType());
 
   // 2. Create the linalg.generic operation
   mlir::SmallVector<mlir::utils::IteratorType> iterators;
@@ -77,35 +77,35 @@ OnnxToLinalg_ArithUnaryOps(mlir::Operation *op,
   idxMaps.push_back(rewriter.getMultiDimIdentityMap(inpType.getRank()));
   idxMaps.push_back(rewriter.getMultiDimIdentityMap(inpType.getRank()));
 
-  auto genericOp = rewriter.create<mlir::linalg::GenericOp>(
-      loc, inpType, mlir::ValueRange{inp}, mlir::ValueRange{outBuff}, idxMaps,
-      iterators,
+  auto genericOp = mlir::linalg::GenericOp::create(
+      rewriter, loc, inpType, mlir::ValueRange{inp}, mlir::ValueRange{outBuff},
+      idxMaps, iterators,
       [&](mlir::OpBuilder nest, mlir::Location loc, mlir::ValueRange args) {
         mlir::Value outOp;
         if (opNameBeginsWith(opName, "Abs")) {
           if (mlir::isa<mlir::FloatType>(inpType.getElementType()))
-            outOp = nest.create<mlir::math::AbsFOp>(loc, args[0]);
+            outOp = mlir::math::AbsFOp::create(nest, loc, args[0]);
           else
-            outOp = nest.create<mlir::math::AbsIOp>(loc, args[0]);
+            outOp = mlir::math::AbsIOp::create(nest, loc, args[0]);
         }
         if (opNameBeginsWith(opName, "Acos"))
-          outOp = nest.create<mlir::math::AcosOp>(loc, args[0]);
+          outOp = mlir::math::AcosOp::create(nest, loc, args[0]);
         if (opNameBeginsWith(opName, "Acosh"))
-          outOp = nest.create<mlir::math::AcoshOp>(loc, args[0]);
+          outOp = mlir::math::AcoshOp::create(nest, loc, args[0]);
         if (opNameBeginsWith(opName, "Asin"))
-          outOp = nest.create<mlir::math::AsinOp>(loc, args[0]);
+          outOp = mlir::math::AsinOp::create(nest, loc, args[0]);
         if (opNameBeginsWith(opName, "Asinh"))
-          outOp = nest.create<mlir::math::AsinhOp>(loc, args[0]);
+          outOp = mlir::math::AsinhOp::create(nest, loc, args[0]);
         if (opNameBeginsWith(opName, "Atan"))
-          outOp = nest.create<mlir::math::AtanOp>(loc, args[0]);
+          outOp = mlir::math::AtanOp::create(nest, loc, args[0]);
         if (opNameBeginsWith(opName, "Atanh"))
-          outOp = nest.create<mlir::math::AtanhOp>(loc, args[0]);
+          outOp = mlir::math::AtanhOp::create(nest, loc, args[0]);
         if (opNameBeginsWith(opName, "Ceil"))
-          outOp = nest.create<mlir::math::CeilOp>(loc, args[0]);
+          outOp = mlir::math::CeilOp::create(nest, loc, args[0]);
         if (opNameBeginsWith(opName, "Cos"))
-          outOp = nest.create<mlir::math::CosOp>(loc, args[0]);
+          outOp = mlir::math::CosOp::create(nest, loc, args[0]);
         if (opNameBeginsWith(opName, "Cosh"))
-          outOp = nest.create<mlir::math::CoshOp>(loc, args[0]);
+          outOp = mlir::math::CoshOp::create(nest, loc, args[0]);
         if (opNameBeginsWith(opName, "Elu")) {
           double alpha = 1.0;
           auto alphaAttr = op->getAttr("alpha");
@@ -117,97 +117,98 @@ OnnxToLinalg_ArithUnaryOps(mlir::Operation *op,
           }
           mlir::Type elmType = inpType.getElementType();
           if (mlir::isa<mlir::FloatType>(elmType)) {
-            auto cA = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getFloatAttr(elmType, alpha));
-            auto c0 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getFloatAttr(elmType, 0.0));
-            auto c1 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getFloatAttr(elmType, 1.0));
-            auto cnd = nest.create<mlir::arith::CmpFOp>(
-                loc, mlir::arith::CmpFPredicate::OGE, args[0], c0);
-            auto exp = nest.create<mlir::math::ExpOp>(loc, args[0]);
-            auto sub = nest.create<mlir::arith::SubFOp>(loc, exp, c1);
-            auto neg = nest.create<mlir::arith::MulFOp>(loc, cA, sub);
-            outOp = nest.create<mlir::arith::SelectOp>(loc, cnd, args[0], neg);
+            auto cA = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getFloatAttr(elmType, alpha));
+            auto c0 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getFloatAttr(elmType, 0.0));
+            auto c1 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getFloatAttr(elmType, 1.0));
+            auto cnd = mlir::arith::CmpFOp::create(
+                nest, loc, mlir::arith::CmpFPredicate::OGE, args[0], c0);
+            auto exp = mlir::math::ExpOp::create(nest, loc, args[0]);
+            auto sub = mlir::arith::SubFOp::create(nest, loc, exp, c1);
+            auto neg = mlir::arith::MulFOp::create(nest, loc, cA, sub);
+            outOp = mlir::arith::SelectOp::create(nest, loc, cnd, args[0], neg);
           } else {
-            auto cA = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getIntegerAttr(elmType, static_cast<int>(alpha)));
-            auto c0 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getIntegerAttr(elmType, 0));
-            auto c1 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getIntegerAttr(elmType, 1));
-            auto cnd = nest.create<mlir::arith::CmpIOp>(
-                loc, mlir::arith::CmpIPredicate::sge, args[0], c0);
-            auto exp = nest.create<mlir::math::ExpOp>(loc, args[0]);
-            auto sub = nest.create<mlir::arith::SubIOp>(loc, exp, c1);
-            auto neg = nest.create<mlir::arith::MulIOp>(loc, cA, sub);
-            outOp = nest.create<mlir::arith::SelectOp>(loc, cnd, args[0], neg);
+            auto cA = mlir::arith::ConstantOp::create(
+                nest, loc,
+                nest.getIntegerAttr(elmType, static_cast<int>(alpha)));
+            auto c0 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getIntegerAttr(elmType, 0));
+            auto c1 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getIntegerAttr(elmType, 1));
+            auto cnd = mlir::arith::CmpIOp::create(
+                nest, loc, mlir::arith::CmpIPredicate::sge, args[0], c0);
+            auto exp = mlir::math::ExpOp::create(nest, loc, args[0]);
+            auto sub = mlir::arith::SubIOp::create(nest, loc, exp, c1);
+            auto neg = mlir::arith::MulIOp::create(nest, loc, cA, sub);
+            outOp = mlir::arith::SelectOp::create(nest, loc, cnd, args[0], neg);
           }
         }
         if (opNameBeginsWith(opName, "Erf"))
-          outOp = nest.create<mlir::math::ErfOp>(loc, args[0]);
+          outOp = mlir::math::ErfOp::create(nest, loc, args[0]);
         if (opNameBeginsWith(opName, "Exp"))
-          outOp = nest.create<mlir::math::ExpOp>(loc, args[0]);
+          outOp = mlir::math::ExpOp::create(nest, loc, args[0]);
         if (opNameBeginsWith(opName, "Floor"))
-          outOp = nest.create<mlir::math::FloorOp>(loc, args[0]);
+          outOp = mlir::math::FloorOp::create(nest, loc, args[0]);
         if (opNameBeginsWith(opName, "HardSwish")) {
           mlir::Type elmType = inpType.getElementType();
           if (mlir::isa<mlir::FloatType>(elmType)) {
-            auto c0 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getFloatAttr(elmType, 0.0));
-            auto c3 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getFloatAttr(elmType, 3.0));
-            auto c6 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getFloatAttr(elmType, 6.0));
-            auto xPlus3 = nest.create<mlir::arith::AddFOp>(loc, args[0], c3);
-            auto condPos = nest.create<mlir::arith::CmpFOp>(
-                loc, mlir::arith::CmpFPredicate::OGT, xPlus3, c0);
+            auto c0 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getFloatAttr(elmType, 0.0));
+            auto c3 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getFloatAttr(elmType, 3.0));
+            auto c6 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getFloatAttr(elmType, 6.0));
+            auto xPlus3 = mlir::arith::AddFOp::create(nest, loc, args[0], c3);
+            auto condPos = mlir::arith::CmpFOp::create(
+                nest, loc, mlir::arith::CmpFPredicate::OGT, xPlus3, c0);
             auto max0 =
-                nest.create<mlir::arith::SelectOp>(loc, condPos, xPlus3, c0);
-            auto condLimit = nest.create<mlir::arith::CmpFOp>(
-                loc, mlir::arith::CmpFPredicate::OLT, max0, c6);
+                mlir::arith::SelectOp::create(nest, loc, condPos, xPlus3, c0);
+            auto condLimit = mlir::arith::CmpFOp::create(
+                nest, loc, mlir::arith::CmpFPredicate::OLT, max0, c6);
             auto relu6_arg =
-                nest.create<mlir::arith::SelectOp>(loc, condLimit, max0, c6);
+                mlir::arith::SelectOp::create(nest, loc, condLimit, max0, c6);
             auto numerator =
-                nest.create<mlir::arith::MulFOp>(loc, args[0], relu6_arg);
-            outOp = nest.create<mlir::arith::DivFOp>(loc, numerator, c6);
+                mlir::arith::MulFOp::create(nest, loc, args[0], relu6_arg);
+            outOp = mlir::arith::DivFOp::create(nest, loc, numerator, c6);
           } else {
-            auto c0 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getIntegerAttr(elmType, 0));
-            auto c3 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getIntegerAttr(elmType, 3));
-            auto c6 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getIntegerAttr(elmType, 6));
-            auto xPlus3 = nest.create<mlir::arith::AddIOp>(loc, args[0], c3);
-            auto condPos = nest.create<mlir::arith::CmpIOp>(
-                loc, mlir::arith::CmpIPredicate::sgt, xPlus3, c0);
+            auto c0 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getIntegerAttr(elmType, 0));
+            auto c3 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getIntegerAttr(elmType, 3));
+            auto c6 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getIntegerAttr(elmType, 6));
+            auto xPlus3 = mlir::arith::AddIOp::create(nest, loc, args[0], c3);
+            auto condPos = mlir::arith::CmpIOp::create(
+                nest, loc, mlir::arith::CmpIPredicate::sgt, xPlus3, c0);
             auto max0 =
-                nest.create<mlir::arith::SelectOp>(loc, condPos, xPlus3, c0);
-            auto condLimit = nest.create<mlir::arith::CmpIOp>(
-                loc, mlir::arith::CmpIPredicate::slt, max0, c6);
+                mlir::arith::SelectOp::create(nest, loc, condPos, xPlus3, c0);
+            auto condLimit = mlir::arith::CmpIOp::create(
+                nest, loc, mlir::arith::CmpIPredicate::slt, max0, c6);
             auto relu6_arg =
-                nest.create<mlir::arith::SelectOp>(loc, condLimit, max0, c6);
+                mlir::arith::SelectOp::create(nest, loc, condLimit, max0, c6);
             auto numerator =
-                nest.create<mlir::arith::MulIOp>(loc, args[0], relu6_arg);
-            outOp = nest.create<mlir::arith::DivSIOp>(loc, numerator, c6);
+                mlir::arith::MulIOp::create(nest, loc, args[0], relu6_arg);
+            outOp = mlir::arith::DivSIOp::create(nest, loc, numerator, c6);
           }
         }
         if (opNameBeginsWith(opName, "Identity"))
           outOp = args[0];
         if (opNameBeginsWith(opName, "IsInf"))
-          outOp = nest.create<mlir::math::IsInfOp>(loc, args[0]);
+          outOp = mlir::math::IsInfOp::create(nest, loc, args[0]);
         if (opNameBeginsWith(opName, "IsNaN"))
-          outOp = nest.create<mlir::math::IsNaNOp>(loc, args[0]);
+          outOp = mlir::math::IsNaNOp::create(nest, loc, args[0]);
         if (opNameBeginsWith(opName, "Log"))
-          outOp = nest.create<mlir::math::LogOp>(loc, args[0]);
+          outOp = mlir::math::LogOp::create(nest, loc, args[0]);
         if (opNameBeginsWith(opName, "Neg")) {
           mlir::Type elmType = inpType.getElementType();
           if (mlir::isa<mlir::FloatType>(elmType)) {
-            outOp = nest.create<mlir::arith::NegFOp>(loc, args[0]);
+            outOp = mlir::arith::NegFOp::create(nest, loc, args[0]);
           } else if (mlir::isa<mlir::IntegerType>(elmType)) {
-            mlir::Value c0 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getIntegerAttr(elmType, 0));
-            outOp = nest.create<mlir::arith::SubIOp>(loc, c0, args[0]);
+            mlir::Value c0 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getIntegerAttr(elmType, 0));
+            outOp = mlir::arith::SubIOp::create(nest, loc, c0, args[0]);
           }
         }
         // TODO(cbalint13): Not is integer only
@@ -216,136 +217,136 @@ OnnxToLinalg_ArithUnaryOps(mlir::Operation *op,
           if (mlir::isa<mlir::IntegerType>(elmType)) {
             int bitW = mlir::cast<mlir::IntegerType>(elmType).getWidth();
             auto ones = llvm::APInt::getAllOnes(bitW);
-            auto allOnes = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getIntegerAttr(elmType, ones));
-            outOp = nest.create<mlir::arith::XOrIOp>(loc, args[0], allOnes);
+            auto allOnes = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getIntegerAttr(elmType, ones));
+            outOp = mlir::arith::XOrIOp::create(nest, loc, args[0], allOnes);
           }
         }
         // TODO(cbalint13): Reciprocal is float only
         if (opNameBeginsWith(opName, "Reciprocal")) {
           mlir::Type elmType = inpType.getElementType();
           if (mlir::isa<mlir::FloatType>(elmType)) {
-            mlir::Value c1 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getFloatAttr(elmType, 1.0));
-            outOp = nest.create<mlir::arith::DivFOp>(loc, c1, args[0]);
+            mlir::Value c1 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getFloatAttr(elmType, 1.0));
+            outOp = mlir::arith::DivFOp::create(nest, loc, c1, args[0]);
           }
         }
         if (opNameBeginsWith(opName, "Relu")) {
           mlir::Type elmType = inpType.getElementType();
           if (mlir::isa<mlir::FloatType>(elmType)) {
-            auto c0 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getFloatAttr(elmType, 0.0));
-            auto cnd = nest.create<mlir::arith::CmpFOp>(
-                loc, mlir::arith::CmpFPredicate::OGE, args[0], c0);
-            outOp = nest.create<mlir::arith::SelectOp>(loc, cnd, args[0], c0);
+            auto c0 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getFloatAttr(elmType, 0.0));
+            auto cnd = mlir::arith::CmpFOp::create(
+                nest, loc, mlir::arith::CmpFPredicate::OGE, args[0], c0);
+            outOp = mlir::arith::SelectOp::create(nest, loc, cnd, args[0], c0);
           } else if (mlir::isa<mlir::IntegerType>(elmType)) {
-            auto c0 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getIntegerAttr(elmType, 0));
-            auto cnd = nest.create<mlir::arith::CmpIOp>(
-                loc, mlir::arith::CmpIPredicate::sge, args[0], c0);
-            outOp = nest.create<mlir::arith::SelectOp>(loc, cnd, args[0], c0);
+            auto c0 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getIntegerAttr(elmType, 0));
+            auto cnd = mlir::arith::CmpIOp::create(
+                nest, loc, mlir::arith::CmpIPredicate::sge, args[0], c0);
+            outOp = mlir::arith::SelectOp::create(nest, loc, cnd, args[0], c0);
           }
         }
         if (opNameBeginsWith(opName, "Round"))
-          outOp = nest.create<mlir::math::RoundOp>(loc, args[0]);
+          outOp = mlir::math::RoundOp::create(nest, loc, args[0]);
 
         if (opNameBeginsWith(opName, "Sigmoid")) {
           mlir::Type elmType = inpType.getElementType();
           if (mlir::isa<mlir::FloatType>(elmType)) {
-            auto c1 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getFloatAttr(elmType, 1.0));
-            auto negX = nest.create<mlir::arith::NegFOp>(loc, args[0]);
-            auto expNegX = nest.create<mlir::math::ExpOp>(loc, negX);
-            auto denom = nest.create<mlir::arith::AddFOp>(loc, c1, expNegX);
-            outOp = nest.create<mlir::arith::DivFOp>(loc, c1, denom);
+            auto c1 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getFloatAttr(elmType, 1.0));
+            auto negX = mlir::arith::NegFOp::create(nest, loc, args[0]);
+            auto expNegX = mlir::math::ExpOp::create(nest, loc, negX);
+            auto denom = mlir::arith::AddFOp::create(nest, loc, c1, expNegX);
+            outOp = mlir::arith::DivFOp::create(nest, loc, c1, denom);
           } else {
-            auto c1 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getIntegerAttr(elmType, 1));
-            auto c0 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getIntegerAttr(elmType, 0));
-            auto negX = nest.create<mlir::arith::SubIOp>(loc, c0, args[0]);
-            auto expNegX = nest.create<mlir::math::ExpOp>(loc, negX);
-            auto denom = nest.create<mlir::arith::AddIOp>(loc, c1, expNegX);
-            outOp = nest.create<mlir::arith::DivSIOp>(loc, c1, denom);
+            auto c1 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getIntegerAttr(elmType, 1));
+            auto c0 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getIntegerAttr(elmType, 0));
+            auto negX = mlir::arith::SubIOp::create(nest, loc, c0, args[0]);
+            auto expNegX = mlir::math::ExpOp::create(nest, loc, negX);
+            auto denom = mlir::arith::AddIOp::create(nest, loc, c1, expNegX);
+            outOp = mlir::arith::DivSIOp::create(nest, loc, c1, denom);
           }
         }
         if (opNameBeginsWith(opName, "Sign")) {
           mlir::Type elmType = inpType.getElementType();
           mlir::Value c0, cPos1, cNeg1, cndPos, cndNeg;
           if (mlir::isa<mlir::FloatType>(elmType)) {
-            c0 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getFloatAttr(elmType, 0.0));
-            cPos1 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getFloatAttr(elmType, 1.0));
-            cNeg1 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getFloatAttr(elmType, -1.0));
-            cndPos = nest.create<mlir::arith::CmpFOp>(
-                loc, mlir::arith::CmpFPredicate::OGT, args[0], c0);
-            cndNeg = nest.create<mlir::arith::CmpFOp>(
-                loc, mlir::arith::CmpFPredicate::OLT, args[0], c0);
+            c0 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getFloatAttr(elmType, 0.0));
+            cPos1 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getFloatAttr(elmType, 1.0));
+            cNeg1 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getFloatAttr(elmType, -1.0));
+            cndPos = mlir::arith::CmpFOp::create(
+                nest, loc, mlir::arith::CmpFPredicate::OGT, args[0], c0);
+            cndNeg = mlir::arith::CmpFOp::create(
+                nest, loc, mlir::arith::CmpFPredicate::OLT, args[0], c0);
           } else if (mlir::isa<mlir::IntegerType>(elmType)) {
-            c0 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getIntegerAttr(elmType, 0));
-            cPos1 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getIntegerAttr(elmType, 1));
-            cNeg1 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getIntegerAttr(elmType, -1));
-            cndPos = nest.create<mlir::arith::CmpIOp>(
-                loc, mlir::arith::CmpIPredicate::sgt, args[0], c0);
-            cndNeg = nest.create<mlir::arith::CmpIOp>(
-                loc, mlir::arith::CmpIPredicate::slt, args[0], c0);
+            c0 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getIntegerAttr(elmType, 0));
+            cPos1 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getIntegerAttr(elmType, 1));
+            cNeg1 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getIntegerAttr(elmType, -1));
+            cndPos = mlir::arith::CmpIOp::create(
+                nest, loc, mlir::arith::CmpIPredicate::sgt, args[0], c0);
+            cndNeg = mlir::arith::CmpIOp::create(
+                nest, loc, mlir::arith::CmpIPredicate::slt, args[0], c0);
           }
-          auto resIfPos = nest.create<mlir::arith::SelectOp>(
-              loc, cndPos, cPos1, /*else_value=*/nullptr);
+          auto resIfPos = mlir::arith::SelectOp::create(
+              nest, loc, cndPos, cPos1, /*else_value=*/nullptr);
           auto resIfNonPos =
-              nest.create<mlir::arith::SelectOp>(loc, cndNeg, cNeg1, c0);
-          outOp = nest.create<mlir::arith::SelectOp>(loc, cndPos, cPos1,
-                                                     resIfNonPos);
+              mlir::arith::SelectOp::create(nest, loc, cndNeg, cNeg1, c0);
+          outOp = mlir::arith::SelectOp::create(nest, loc, cndPos, cPos1,
+                                                resIfNonPos);
         }
         if (opNameBeginsWith(opName, "Sin"))
-          outOp = nest.create<mlir::math::SinOp>(loc, args[0]);
+          outOp = mlir::math::SinOp::create(nest, loc, args[0]);
         if (opNameBeginsWith(opName, "Sinh"))
-          outOp = nest.create<mlir::math::SinhOp>(loc, args[0]);
+          outOp = mlir::math::SinhOp::create(nest, loc, args[0]);
         if (opNameBeginsWith(opName, "Softplus")) {
           mlir::Type elmType = inpType.getElementType();
           if (mlir::isa<mlir::FloatType>(elmType)) {
-            auto c1 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getFloatAttr(elmType, 1.0));
-            auto expX = nest.create<mlir::math::ExpOp>(loc, args[0]);
-            auto logArg = nest.create<mlir::arith::AddFOp>(loc, c1, expX);
-            outOp = nest.create<mlir::math::LogOp>(loc, logArg);
+            auto c1 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getFloatAttr(elmType, 1.0));
+            auto expX = mlir::math::ExpOp::create(nest, loc, args[0]);
+            auto logArg = mlir::arith::AddFOp::create(nest, loc, c1, expX);
+            outOp = mlir::math::LogOp::create(nest, loc, logArg);
           } else if (mlir::isa<mlir::IntegerType>(elmType)) {
-            auto c1 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getIntegerAttr(elmType, 1));
-            auto expX = nest.create<mlir::math::ExpOp>(loc, args[0]);
-            auto logArg = nest.create<mlir::arith::AddIOp>(loc, c1, expX);
-            outOp = nest.create<mlir::math::LogOp>(loc, logArg);
+            auto c1 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getIntegerAttr(elmType, 1));
+            auto expX = mlir::math::ExpOp::create(nest, loc, args[0]);
+            auto logArg = mlir::arith::AddIOp::create(nest, loc, c1, expX);
+            outOp = mlir::math::LogOp::create(nest, loc, logArg);
           }
         }
         if (opNameBeginsWith(opName, "Softsign")) {
           mlir::Type elmType = inpType.getElementType();
           if (mlir::isa<mlir::FloatType>(elmType)) {
-            auto c1 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getFloatAttr(elmType, 1.0));
-            auto absX = nest.create<mlir::math::AbsFOp>(loc, args[0]);
-            auto denom = nest.create<mlir::arith::AddFOp>(loc, c1, absX);
-            outOp = nest.create<mlir::arith::DivFOp>(loc, args[0], denom);
+            auto c1 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getFloatAttr(elmType, 1.0));
+            auto absX = mlir::math::AbsFOp::create(nest, loc, args[0]);
+            auto denom = mlir::arith::AddFOp::create(nest, loc, c1, absX);
+            outOp = mlir::arith::DivFOp::create(nest, loc, args[0], denom);
           } else if (mlir::isa<mlir::IntegerType>(elmType)) {
-            auto c1 = nest.create<mlir::arith::ConstantOp>(
-                loc, nest.getIntegerAttr(elmType, 1));
-            auto absX = nest.create<mlir::math::AbsIOp>(loc, args[0]);
-            auto denom = nest.create<mlir::arith::AddIOp>(loc, c1, absX);
-            outOp = nest.create<mlir::arith::DivSIOp>(loc, args[0], denom);
+            auto c1 = mlir::arith::ConstantOp::create(
+                nest, loc, nest.getIntegerAttr(elmType, 1));
+            auto absX = mlir::math::AbsIOp::create(nest, loc, args[0]);
+            auto denom = mlir::arith::AddIOp::create(nest, loc, c1, absX);
+            outOp = mlir::arith::DivSIOp::create(nest, loc, args[0], denom);
           }
         }
         if (opNameBeginsWith(opName, "Sqrt"))
-          outOp = nest.create<mlir::math::SqrtOp>(loc, args[0]);
+          outOp = mlir::math::SqrtOp::create(nest, loc, args[0]);
         if (opNameBeginsWith(opName, "Tan"))
-          outOp = nest.create<mlir::math::TanOp>(loc, args[0]);
+          outOp = mlir::math::TanOp::create(nest, loc, args[0]);
         if (opNameBeginsWith(opName, "Tanh"))
-          outOp = nest.create<mlir::math::TanhOp>(loc, args[0]);
+          outOp = mlir::math::TanhOp::create(nest, loc, args[0]);
 
-        nest.create<mlir::linalg::YieldOp>(loc, outOp);
+        mlir::linalg::YieldOp::create(nest, loc, outOp);
       });
 
   // Tag for transform optimization
@@ -428,22 +429,23 @@ mlir::LogicalResult OnnxToLinalg_SoftmaxOp(mlir::Operation *op,
 
   // 1. Max Reduction (find row-wise max for stability)
   auto maxTBuff =
-      rewriter.create<mlir::tensor::EmptyOp>(loc, reduce_shape, inpElmType);
+      mlir::tensor::EmptyOp::create(rewriter, loc, reduce_shape, inpElmType);
   auto fltType = mlir::cast<mlir::FloatType>(inpElmType);
-  mlir::Value negInf = rewriter.create<mlir::arith::ConstantOp>(
-      loc, rewriter.getFloatAttr(
-               fltType, llvm::APFloat::getInf(fltType.getFloatSemantics(),
-                                              /*Negative=*/true)));
+  mlir::Value negInf = mlir::arith::ConstantOp::create(
+      rewriter, loc,
+      rewriter.getFloatAttr(fltType,
+                            llvm::APFloat::getInf(fltType.getFloatSemantics(),
+                                                  /*Negative=*/true)));
   auto maxBuff =
-      rewriter.create<mlir::linalg::FillOp>(loc, negInf, maxTBuff.getResult())
+      mlir::linalg::FillOp::create(rewriter, loc, negInf, maxTBuff.getResult())
           .getResult(0);
 
-  auto maxOp = rewriter.create<mlir::linalg::ReduceOp>(
-      loc, mlir::ValueRange{inp}, mlir::ValueRange{maxBuff}, dimsAttr,
+  auto maxOp = mlir::linalg::ReduceOp::create(
+      rewriter, loc, mlir::ValueRange{inp}, mlir::ValueRange{maxBuff}, dimsAttr,
       [&](mlir::OpBuilder nest, mlir::Location loc, mlir::ValueRange args) {
         mlir::Value result =
-            nest.create<mlir::arith::MaximumFOp>(loc, args[0], args[1]);
-        nest.create<mlir::linalg::YieldOp>(loc, result);
+            mlir::arith::MaximumFOp::create(rewriter, loc, args[0], args[1]);
+        mlir::linalg::YieldOp::create(rewriter, loc, result);
       });
   mlir::Value maxVal = maxOp.getResult(0);
 
@@ -453,41 +455,42 @@ mlir::LogicalResult OnnxToLinalg_SoftmaxOp(mlir::Operation *op,
   exp_maps.push_back(reduce_broadcast_map);
   exp_maps.push_back(rewriter.getMultiDimIdentityMap(rank));
 
-  auto expTBuff = rewriter.create<mlir::tensor::EmptyOp>(
-      loc, inpType.getShape(), inpElmType);
+  auto expTBuff = mlir::tensor::EmptyOp::create(rewriter, loc,
+                                                inpType.getShape(), inpElmType);
 
-  auto expOp = rewriter.create<mlir::linalg::GenericOp>(
-      loc, inpType, mlir::ValueRange{inp, maxVal},
+  auto expOp = mlir::linalg::GenericOp::create(
+      rewriter, loc, inpType, mlir::ValueRange{inp, maxVal},
       mlir::ValueRange{expTBuff.getResult()}, exp_maps, parallel_iterators,
       [&](mlir::OpBuilder nest, mlir::Location loc, mlir::ValueRange args) {
         mlir::Value diff =
-            nest.create<mlir::arith::SubFOp>(loc, args[0], args[1]);
-        mlir::Value expX = nest.create<mlir::math::ExpOp>(loc, diff);
-        nest.create<mlir::linalg::YieldOp>(loc, expX);
+            mlir::arith::SubFOp::create(nest, loc, args[0], args[1]);
+        mlir::Value expX = mlir::math::ExpOp::create(nest, loc, diff);
+        mlir::linalg::YieldOp::create(nest, loc, expX);
       });
   mlir::Value expVal = expOp.getResult(0);
 
   // 3. Sum Reduction (row-wise sum of exp values)
   auto sumTBuff =
-      rewriter.create<mlir::tensor::EmptyOp>(loc, reduce_shape, inpElmType);
-  mlir::Value zero = rewriter.create<mlir::arith::ConstantOp>(
-      loc, rewriter.getFloatAttr(inpElmType, 0.0));
+      mlir::tensor::EmptyOp::create(rewriter, loc, reduce_shape, inpElmType);
+  mlir::Value zero = mlir::arith::ConstantOp::create(
+      rewriter, loc, rewriter.getFloatAttr(inpElmType, 0.0));
   mlir::Value sumBuff =
-      rewriter.create<mlir::linalg::FillOp>(loc, zero, sumTBuff.getResult())
+      mlir::linalg::FillOp::create(rewriter, loc, zero, sumTBuff.getResult())
           .getResult(0);
 
-  auto sumOp = rewriter.create<mlir::linalg::ReduceOp>(
-      loc, mlir::ValueRange{expVal}, mlir::ValueRange{sumBuff}, dimsAttr,
+  auto sumOp = mlir::linalg::ReduceOp::create(
+      rewriter, loc, mlir::ValueRange{expVal}, mlir::ValueRange{sumBuff},
+      dimsAttr,
       [&](mlir::OpBuilder nest, mlir::Location loc, mlir::ValueRange args) {
         mlir::Value result =
-            nest.create<mlir::arith::AddFOp>(loc, args[0], args[1]);
-        nest.create<mlir::linalg::YieldOp>(loc, result);
+            mlir::arith::AddFOp::create(nest, loc, args[0], args[1]);
+        mlir::linalg::YieldOp::create(nest, loc, result);
       });
   mlir::Value sumVal = sumOp.getResult(0);
 
   // 4. Final Normalization (element-wise div)
-  auto outBuff = rewriter.create<mlir::tensor::EmptyOp>(loc, inpType.getShape(),
-                                                        inpElmType);
+  auto outBuff = mlir::tensor::EmptyOp::create(rewriter, loc,
+                                               inpType.getShape(), inpElmType);
 
   mlir::SmallVector<mlir::AffineMap> norm_maps;
   norm_maps.push_back(rewriter.getMultiDimIdentityMap(rank));
@@ -498,8 +501,8 @@ mlir::LogicalResult OnnxToLinalg_SoftmaxOp(mlir::Operation *op,
   auto kindAttr = mlir::linalg::ElementwiseKindAttr::get(
       op->getContext(), mlir::linalg::ElementwiseKind::div);
 
-  auto normOp = rewriter.create<mlir::linalg::ElementwiseOp>(
-      loc, mlir::ValueRange{expVal, sumVal},
+  auto normOp = mlir::linalg::ElementwiseOp::create(
+      rewriter, loc, mlir::ValueRange{expVal, sumVal},
       mlir::ValueRange{outBuff.getResult()}, kindAttr, idxMapsAttr);
 
   rewriter.replaceOp(op, normOp.getResult(0));
@@ -579,22 +582,23 @@ mlir::LogicalResult OnnxToLinalg_LogSoftmaxOp(mlir::Operation *op,
 
   // 1. Max Reduction (find row-wise max for stability)
   auto maxTBuff =
-      rewriter.create<mlir::tensor::EmptyOp>(loc, reduce_shape, inpElmType);
+      mlir::tensor::EmptyOp::create(rewriter, loc, reduce_shape, inpElmType);
   auto fltType = mlir::cast<mlir::FloatType>(inpElmType);
-  mlir::Value negInf = rewriter.create<mlir::arith::ConstantOp>(
-      loc, rewriter.getFloatAttr(
-               fltType, llvm::APFloat::getInf(fltType.getFloatSemantics(),
-                                              /*Negative=*/true)));
+  mlir::Value negInf = mlir::arith::ConstantOp::create(
+      rewriter, loc,
+      rewriter.getFloatAttr(fltType,
+                            llvm::APFloat::getInf(fltType.getFloatSemantics(),
+                                                  /*Negative=*/true)));
   auto maxBuff =
-      rewriter.create<mlir::linalg::FillOp>(loc, negInf, maxTBuff.getResult())
+      mlir::linalg::FillOp::create(rewriter, loc, negInf, maxTBuff.getResult())
           .getResult(0);
 
-  auto maxOp = rewriter.create<mlir::linalg::ReduceOp>(
-      loc, mlir::ValueRange{inp}, mlir::ValueRange{maxBuff}, dimsAttr,
+  auto maxOp = mlir::linalg::ReduceOp::create(
+      rewriter, loc, mlir::ValueRange{inp}, mlir::ValueRange{maxBuff}, dimsAttr,
       [&](mlir::OpBuilder nest, mlir::Location loc, mlir::ValueRange args) {
         mlir::Value result =
-            nest.create<mlir::arith::MaximumFOp>(loc, args[0], args[1]);
-        nest.create<mlir::linalg::YieldOp>(loc, result);
+            mlir::arith::MaximumFOp::create(nest, loc, args[0], args[1]);
+        mlir::linalg::YieldOp::create(nest, loc, result);
       });
   mlir::Value maxVal = maxOp.getResult(0);
 
@@ -604,41 +608,42 @@ mlir::LogicalResult OnnxToLinalg_LogSoftmaxOp(mlir::Operation *op,
   exp_maps.push_back(reduce_broadcast_map);
   exp_maps.push_back(rewriter.getMultiDimIdentityMap(rank));
 
-  auto expTBuff = rewriter.create<mlir::tensor::EmptyOp>(
-      loc, inpType.getShape(), inpElmType);
+  auto expTBuff = mlir::tensor::EmptyOp::create(rewriter, loc,
+                                                inpType.getShape(), inpElmType);
 
-  auto expOp = rewriter.create<mlir::linalg::GenericOp>(
-      loc, inpType, mlir::ValueRange{inp, maxVal},
+  auto expOp = mlir::linalg::GenericOp::create(
+      rewriter, loc, inpType, mlir::ValueRange{inp, maxVal},
       mlir::ValueRange{expTBuff.getResult()}, exp_maps, parallel_iterators,
       [&](mlir::OpBuilder nest, mlir::Location loc, mlir::ValueRange args) {
         mlir::Value diff =
-            nest.create<mlir::arith::SubFOp>(loc, args[0], args[1]);
-        mlir::Value expX = nest.create<mlir::math::ExpOp>(loc, diff);
-        nest.create<mlir::linalg::YieldOp>(loc, expX);
+            mlir::arith::SubFOp::create(nest, loc, args[0], args[1]);
+        mlir::Value expX = mlir::math::ExpOp::create(nest, loc, diff);
+        mlir::linalg::YieldOp::create(nest, loc, expX);
       });
   mlir::Value expVal = expOp.getResult(0);
 
   // 3. Sum Reduction (row-wise sum of exp values)
   auto sumTBuff =
-      rewriter.create<mlir::tensor::EmptyOp>(loc, reduce_shape, inpElmType);
-  mlir::Value zero = rewriter.create<mlir::arith::ConstantOp>(
-      loc, rewriter.getFloatAttr(inpElmType, 0.0));
+      mlir::tensor::EmptyOp::create(rewriter, loc, reduce_shape, inpElmType);
+  mlir::Value zero = mlir::arith::ConstantOp::create(
+      rewriter, loc, rewriter.getFloatAttr(inpElmType, 0.0));
   mlir::Value sumBuff =
-      rewriter.create<mlir::linalg::FillOp>(loc, zero, sumTBuff.getResult())
+      mlir::linalg::FillOp::create(rewriter, loc, zero, sumTBuff.getResult())
           .getResult(0);
 
-  auto sumOp = rewriter.create<mlir::linalg::ReduceOp>(
-      loc, mlir::ValueRange{expVal}, mlir::ValueRange{sumBuff}, dimsAttr,
+  auto sumOp = mlir::linalg::ReduceOp::create(
+      rewriter, loc, mlir::ValueRange{expVal}, mlir::ValueRange{sumBuff},
+      dimsAttr,
       [&](mlir::OpBuilder nest, mlir::Location loc, mlir::ValueRange args) {
         mlir::Value result =
-            nest.create<mlir::arith::AddFOp>(loc, args[0], args[1]);
-        nest.create<mlir::linalg::YieldOp>(loc, result);
+            mlir::arith::AddFOp::create(nest, loc, args[0], args[1]);
+        mlir::linalg::YieldOp::create(nest, loc, result);
       });
   mlir::Value sumVal = sumOp.getResult(0);
 
   // 4. Fused (x - max(x)) - log(sum(e^(x - max(x))))
-  auto logSoftmaxTBuff = rewriter.create<mlir::tensor::EmptyOp>(
-      loc, inpType.getShape(), inpElmType);
+  auto logSoftmaxTBuff = mlir::tensor::EmptyOp::create(
+      rewriter, loc, inpType.getShape(), inpElmType);
 
   mlir::SmallVector<mlir::AffineMap> final_maps;
   final_maps.push_back(rewriter.getMultiDimIdentityMap(rank));
@@ -646,16 +651,16 @@ mlir::LogicalResult OnnxToLinalg_LogSoftmaxOp(mlir::Operation *op,
   final_maps.push_back(reduce_broadcast_map);
   final_maps.push_back(rewriter.getMultiDimIdentityMap(rank));
 
-  auto logSoftmaxOp = rewriter.create<mlir::linalg::GenericOp>(
-      loc, inpType, mlir::ValueRange{inp, maxVal, sumVal},
+  auto logSoftmaxOp = mlir::linalg::GenericOp::create(
+      rewriter, loc, inpType, mlir::ValueRange{inp, maxVal, sumVal},
       mlir::ValueRange{logSoftmaxTBuff.getResult()}, final_maps,
       parallel_iterators,
       [&](mlir::OpBuilder nest, mlir::Location loc, mlir::ValueRange args) {
-        auto diffMx = nest.create<mlir::arith::SubFOp>(loc, args[0], args[1]);
-        auto logSum = nest.create<mlir::math::LogOp>(loc, args[2]);
+        auto diffMx = mlir::arith::SubFOp::create(nest, loc, args[0], args[1]);
+        auto logSum = mlir::math::LogOp::create(nest, loc, args[2]);
         mlir::Value result =
-            nest.create<mlir::arith::SubFOp>(loc, diffMx, logSum);
-        nest.create<mlir::linalg::YieldOp>(loc, result);
+            mlir::arith::SubFOp::create(nest, loc, diffMx, logSum);
+        mlir::linalg::YieldOp::create(nest, loc, result);
       });
 
   rewriter.replaceOp(op, logSoftmaxOp.getResult(0));
@@ -731,52 +736,53 @@ mlir::LogicalResult OnnxToLinalg_HardmaxOp(mlir::Operation *op,
 
   // 1. Max reduction (find max value along the axis)
   auto maxTBuff =
-      rewriter.create<mlir::tensor::EmptyOp>(loc, reduce_shape, inpElmType);
+      mlir::tensor::EmptyOp::create(rewriter, loc, reduce_shape, inpElmType);
   auto fltType = mlir::cast<mlir::FloatType>(inpElmType);
-  mlir::Value negInf = rewriter.create<mlir::arith::ConstantOp>(
-      loc, rewriter.getFloatAttr(
-               fltType, llvm::APFloat::getInf(fltType.getFloatSemantics(),
-                                              /*Negative=*/true)));
+  mlir::Value negInf = mlir::arith::ConstantOp::create(
+      rewriter, loc,
+      rewriter.getFloatAttr(fltType,
+                            llvm::APFloat::getInf(fltType.getFloatSemantics(),
+                                                  /*Negative=*/true)));
   auto maxBuff =
-      rewriter.create<mlir::linalg::FillOp>(loc, negInf, maxTBuff.getResult())
+      mlir::linalg::FillOp::create(rewriter, loc, negInf, maxTBuff.getResult())
           .getResult(0);
 
-  auto maxOp = rewriter.create<mlir::linalg::ReduceOp>(
-      loc, mlir::ValueRange{inp}, mlir::ValueRange{maxBuff}, dimsAttr,
+  auto maxOp = mlir::linalg::ReduceOp::create(
+      rewriter, loc, mlir::ValueRange{inp}, mlir::ValueRange{maxBuff}, dimsAttr,
       [&](mlir::OpBuilder nest, mlir::Location loc, mlir::ValueRange args) {
         mlir::Value result =
-            nest.create<mlir::arith::MaximumFOp>(loc, args[0], args[1]);
-        nest.create<mlir::linalg::YieldOp>(loc, result);
+            mlir::arith::MaximumFOp::create(nest, loc, args[0], args[1]);
+        mlir::linalg::YieldOp::create(nest, loc, result);
       });
   mlir::Value maxVal = maxOp.getResult(0);
 
   // 2. Comparison and selection (Input == MaxVal) ? 1.0 : 0.0
-  mlir::Value one = rewriter.create<mlir::arith::ConstantOp>(
-      loc, rewriter.getFloatAttr(inpElmType, 1.0));
-  mlir::Value zero = rewriter.create<mlir::arith::ConstantOp>(
-      loc, rewriter.getFloatAttr(inpElmType, 0.0));
+  mlir::Value one = mlir::arith::ConstantOp::create(
+      rewriter, loc, rewriter.getFloatAttr(inpElmType, 1.0));
+  mlir::Value zero = mlir::arith::ConstantOp::create(
+      rewriter, loc, rewriter.getFloatAttr(inpElmType, 0.0));
 
   mlir::SmallVector<mlir::AffineMap> cmp_maps;
   cmp_maps.push_back(rewriter.getMultiDimIdentityMap(rank));
   cmp_maps.push_back(reduce_broadcast_map);
   cmp_maps.push_back(rewriter.getMultiDimIdentityMap(rank));
 
-  auto outTBuff = rewriter.create<mlir::tensor::EmptyOp>(
-      loc, inpType.getShape(), inpElmType);
+  auto outTBuff = mlir::tensor::EmptyOp::create(rewriter, loc,
+                                                inpType.getShape(), inpElmType);
 
   mlir::SmallVector<mlir::utils::IteratorType> parallel_iterators(
       rank, mlir::utils::IteratorType::parallel);
 
-  auto hardmaxOp = rewriter.create<mlir::linalg::GenericOp>(
-      loc, resType, mlir::ValueRange{inp, maxVal},
+  auto hardmaxOp = mlir::linalg::GenericOp::create(
+      rewriter, loc, resType, mlir::ValueRange{inp, maxVal},
       mlir::ValueRange{outTBuff.getResult()}, cmp_maps, parallel_iterators,
       [&](mlir::OpBuilder nest, mlir::Location loc, mlir::ValueRange args) {
-        mlir::Value condition = nest.create<mlir::arith::CmpFOp>(
-            loc, mlir::arith::CmpFPredicate::OEQ, args[0], args[1]);
+        mlir::Value condition = mlir::arith::CmpFOp::create(
+            nest, loc, mlir::arith::CmpFPredicate::OEQ, args[0], args[1]);
         mlir::Value result =
-            nest.create<mlir::arith::SelectOp>(loc, condition, one, zero);
+            mlir::arith::SelectOp::create(nest, loc, condition, one, zero);
 
-        nest.create<mlir::linalg::YieldOp>(loc, result);
+        mlir::linalg::YieldOp::create(nest, loc, result);
       });
 
   rewriter.replaceOp(op, hardmaxOp.getResult(0));
