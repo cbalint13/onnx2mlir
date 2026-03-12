@@ -8,6 +8,8 @@ if(BUILD_PYTHON_BINDINGS)
   add_definitions(-DONNX_NAMESPACE=onnx -DONNX_ML=${ONNX_USE_ML})
   set(PY_OUTPUT_PATH "${CMAKE_BINARY_DIR}/python/onnx2mlir/importer")
   add_mlir_python_extension(onnx2mlir_py_importers _onnx2mlirImporters
+    nanobind-static
+    _PRIVATE_SUPPORT_LIB
     SOURCES
       python/onnx_importer_bindings.cpp
     OUTPUT_DIRECTORY
@@ -16,6 +18,7 @@ if(BUILD_PYTHON_BINDINGS)
       onnx2mlir_importers
       MLIRPythonCAPI
   )
+  set_target_properties(onnx2mlir_py_importers PROPERTIES PREFIX "")
   add_custom_command(TARGET onnx2mlir_py_importers
     POST_BUILD
     COMMAND

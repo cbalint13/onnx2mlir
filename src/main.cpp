@@ -90,8 +90,10 @@ int main(int argc, char **argv) {
     exit(-1);
   }
 
-  auto ONNXLoader = onnx2mlir::Importer<onnx2mlir::frontend::ONNXImporter>(options);
-  auto ONNXConverter = onnx2mlir::Converter<onnx2mlir::frontend::ONNXConverter>();
+  auto ONNXLoader =
+      onnx2mlir::Importer<onnx2mlir::frontend::ONNXImporter>(options);
+  auto ONNXConverter =
+      onnx2mlir::Converter<onnx2mlir::frontend::ONNXConverter>();
 
   mlir::MLIRContext ctx;
   ONNXLoader.importModule(ONNXFilename, &ctx);

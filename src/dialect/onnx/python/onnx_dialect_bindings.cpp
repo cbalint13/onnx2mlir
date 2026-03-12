@@ -28,14 +28,14 @@
  */
 
 #include <mlir-c/IR.h>
-#include <mlir/Bindings/Python/PybindAdaptors.h>
+#include <mlir/Bindings/Python/NanobindAdaptors.h>
 #include <mlir/CAPI/Registration.h>
 #include <mlir/IR/Dialect.h>
 
 #include "onnx2mlir/dialect/onnx/Onnx.hpp"
 
-PYBIND11_MODULE(_onnx2mlirDialectsOnnx, m) {
-  m.doc() = "Python bindings for the ONNX dialect";
+NB_MODULE(_onnx2mlirDialectsOnnx, m) {
+  m.doc() = "Python bindings for the ONNX2MLIR dialect";
 
   m.def(
       "register_onnx_dialect",
@@ -43,5 +43,6 @@ PYBIND11_MODULE(_onnx2mlirDialectsOnnx, m) {
         mlir::MLIRContext *cppContext = unwrap(context);
         cppContext->loadDialect<onnx2mlir::dialect::onnx::OnnxDialect>();
       },
-      py::arg("context"));
+      nanobind::arg("context"),
+      "Registers the ONNX dialect in the given MLIR context.");
 }

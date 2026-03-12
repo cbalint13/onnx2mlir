@@ -26,9 +26,24 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Werror -Wno-comment -Wno-
 find_program(PYTHON3_EXECUTABLE NAMES python3 REQUIRED)
 
 if(BUILD_PYTHON_BINDINGS)
-  set(PYBIND11_FINDPYTHON ON)
-  find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
-  find_package(pybind11 REQUIRED)
+  find_package(Python COMPONENTS Interpreter Development REQUIRED)
+  execute_process(
+    COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
+    OUTPUT_VARIABLE NANOBIND_CMAKE_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  find_package(nanobind CONFIG REQUIRED PATHS "${NANOBIND_CMAKE_DIR}" NO_DEFAULT_PATH)
+  if(nanobind_FOUND)
+    message(STATUS "Found nanobind version: ${nanobind_VERSION}")
+  endif()
+  execute_process(
+    COMMAND "${Python_EXECUTABLE}" -m nanobind --include_dir
+    OUTPUT_VARIABLE NANOBIND_INCLUDE_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  message(STATUS "Found nanobind includes: ${NANOBIND_INCLUDE_DIR}")
+  include_directories(${Python_INCLUDE_DIRS} ${NANOBIND_INCLUDE_DIR})
+  nanobind_build_library(nanobind-static)
 endif()
 
 find_package(ONNX REQUIRED 1.17)
@@ -80,6 +95,17 @@ if(MLIR_FOUND)
   endif()
   add_definitions(-DONNX2MLIR_MLIR_VERSION=${ONNX2MLIR_MLIR_VERSION})
   set(MLIR_BINARY_DIR ${CMAKE_BINARY_DIR})
+  execute_process(
+    COMMAND "${Python_EXECUTABLE}" -c "import mlir; print(mlir.__path__[0])"
+    OUTPUT_VARIABLE MLIR_PYTHON_PATH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  if(MLIR_PYTHON_PATH)
+    message(STATUS "Found MLIR python module: ${MLIR_PYTHON_PATH}")
+    link_directories("${MLIR_PYTHON_PATH}/_mlir_libs")
+  else()
+    message(FATAL_ERROR "Cannot find MLIR python package.")
+  endif()
 endif()
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")

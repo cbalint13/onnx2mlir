@@ -11,8 +11,11 @@ add_subdirectory(passes)
 
 if(BUILD_PYTHON_BINDINGS)
   # Onnx passes python bindings
+  set(MLIR_BINDINGS_PYTHON_NB_DOMAIN "onnx2mlir")
   set(PY_OUTPUT_PATH "${CMAKE_BINARY_DIR}/python/onnx2mlir/passes")
   add_mlir_python_extension(onnx2mlir_py_onnx_passes _onnx2mlirOnnxPasses
+    nanobind-static
+    _PRIVATE_SUPPORT_LIB
     SOURCES
       python/onnx_passes_bindings.cpp
     OUTPUT_DIRECTORY
@@ -22,6 +25,7 @@ if(BUILD_PYTHON_BINDINGS)
       onnx2mlir_onnx_linalg_pass
       MLIRPythonCAPI
   )
+  set_target_properties(onnx2mlir_py_onnx_passes PROPERTIES PREFIX "")
   add_custom_command(TARGET onnx2mlir_py_onnx_passes
     POST_BUILD
     COMMAND

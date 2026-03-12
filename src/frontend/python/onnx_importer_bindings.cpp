@@ -27,7 +27,7 @@
  * \brief Python bindings for the ONNX dialect
  */
 
-#include <mlir/Bindings/Python/PybindAdaptors.h>
+#include <mlir/Bindings/Python/NanobindAdaptors.h>
 #include <mlir/CAPI/Registration.h>
 
 #include <map>
@@ -35,7 +35,7 @@
 
 #include "onnx2mlir/frontend/onnx.hpp"
 
-PYBIND11_MODULE(_onnx2mlirImporters, m) {
+NB_MODULE(_onnx2mlirImporters, m) {
   m.doc() = "Python bindings for the ONNX2MLIR importers";
 
   m.def(
@@ -52,21 +52,22 @@ PYBIND11_MODULE(_onnx2mlirImporters, m) {
         auto moduleOp = ONNXLoader.getMLIRModule();
         return wrap(moduleOp);
       },
-      pybind11::return_value_policy::take_ownership, py::arg("onnxfilename"),
-      py::arg("context"), py::arg("onnx_convert_ops") = -1,
+      nanobind::rv_policy::take_ownership, nanobind::arg("onnxfilename"),
+      nanobind::arg("context"), nanobind::arg("onnx_convert_ops") = -1,
       "Import from an ONNX file path");
 
   m.def(
       "import_from_onnx",
-      [](py::object onnx_model_proto, MlirContext context,
+      [](nanobind::object onnx_model_proto, MlirContext context,
          int onnxConvertOps) -> MlirModule {
         std::map<std::string, std::string> options;
         if (onnxConvertOps >= 0)
           options["--onnx-convert-ops"] = std::to_string(onnxConvertOps);
         options["--import-serialized"] = "";
-        py::bytes serialized_bytes =
-            onnx_model_proto.attr("SerializeToString")();
-        std::string ONNXSerialString = serialized_bytes;
+        nanobind::bytes serialized_bytes(
+            onnx_model_proto.attr("SerializeToString")());
+        std::string ONNXSerialString(serialized_bytes.c_str(),
+                                     serialized_bytes.size());
         auto ONNXLoader =
             onnx2mlir::Importer<onnx2mlir::frontend::ONNXImporter>(options);
         mlir::MLIRContext *mlirCtx = unwrap(context);
@@ -74,7 +75,7 @@ PYBIND11_MODULE(_onnx2mlirImporters, m) {
         auto moduleOp = ONNXLoader.getMLIRModule();
         return wrap(moduleOp);
       },
-      pybind11::return_value_policy::take_ownership, py::arg("onnxfilename"),
-      py::arg("context"), py::arg("onnx_convert_ops") = -1,
+      nanobind::rv_policy::take_ownership, nanobind::arg("onnxfilename"),
+      nanobind::arg("context"), nanobind::arg("onnx_convert_ops") = -1,
       "Import from an ONNX ModelProto object");
 }

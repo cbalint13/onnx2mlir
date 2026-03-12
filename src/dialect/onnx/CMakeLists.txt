@@ -74,6 +74,8 @@ if(BUILD_PYTHON_BINDINGS)
   # Onnx dialect python bindings
   set(PY_OUTPUT_PATH "${CMAKE_BINARY_DIR}/python/onnx2mlir/dialect")
   add_mlir_python_extension(onnx2mlir_py_onnx_dialect _onnx2mlirDialectsOnnx
+    nanobind-static
+    _PRIVATE_SUPPORT_LIB
     SOURCES
       python/onnx_dialect_bindings.cpp
     OUTPUT_DIRECTORY
@@ -82,6 +84,7 @@ if(BUILD_PYTHON_BINDINGS)
       onnx2mlir_onnx_dialect
       MLIRPythonCAPI
   )
+  set_target_properties(onnx2mlir_py_onnx_dialect PROPERTIES PREFIX "")
   add_dependencies(onnx2mlir_py_onnx_dialect MLIROnnxPythonIncGen)
   set(PY_TBLGEN_FILE "${CMAKE_CURRENT_BINARY_DIR}/Onnx.py.inc")
   add_custom_command(TARGET onnx2mlir_py_onnx_dialect
