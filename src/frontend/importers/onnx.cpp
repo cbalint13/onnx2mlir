@@ -123,11 +123,17 @@ static mlir::ElementsAttr OnnxToMlir_Tensor(const onnx::TensorProto &tensor,
 #endif
     case onnx::TensorProto::FLOAT4E2M1:
     case onnx::TensorProto::BOOL:
+#if ONNX2MLIR_ONNX_VERSION >= 121
+    case onnx::TensorProto::INT2:
+#endif
     case onnx::TensorProto::INT4:
     case onnx::TensorProto::INT8:
     case onnx::TensorProto::INT16:
     case onnx::TensorProto::INT32:
     case onnx::TensorProto::INT64:
+#if ONNX2MLIR_ONNX_VERSION >= 121
+    case onnx::TensorProto::UINT2:
+#endif
     case onnx::TensorProto::UINT4:
     case onnx::TensorProto::UINT8:
     case onnx::TensorProto::UINT16:
@@ -147,10 +153,16 @@ static mlir::ElementsAttr OnnxToMlir_Tensor(const onnx::TensorProto &tensor,
     case onnx::TensorProto::DOUBLE:
       return getMlirTensor(tensor.double_data(), tensor.dims(), dType, eAttr);
     case onnx::TensorProto::BOOL:
+#if ONNX2MLIR_ONNX_VERSION >= 121
+    case onnx::TensorProto::INT2:
+#endif
     case onnx::TensorProto::INT4:
     case onnx::TensorProto::INT8:
     case onnx::TensorProto::INT16:
     case onnx::TensorProto::INT32:
+#if ONNX2MLIR_ONNX_VERSION >= 121
+    case onnx::TensorProto::UINT2:
+#endif
     case onnx::TensorProto::UINT4:
     case onnx::TensorProto::UINT8:
     case onnx::TensorProto::UINT16:

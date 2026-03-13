@@ -44,10 +44,8 @@ static inline mlir::Type OnnxToMlir_dType(const int32_t data_type_int,
   case onnx::TensorProto_DataType_FLOAT:
     return mlir::Float32Type::get(ctx);
 #if ONNX2MLIR_ONNX_VERSION >= 121
-#if ONNX2MLIR_MLIR_VERSION >= 220
   case onnx::TensorProto_DataType_INT2:
     return mlir::IntegerType::get(ctx, 2);
-#endif
 #endif
   case onnx::TensorProto_DataType_INT4:
     return mlir::IntegerType::get(ctx, 4);
@@ -62,10 +60,8 @@ static inline mlir::Type OnnxToMlir_dType(const int32_t data_type_int,
   case onnx::TensorProto_DataType_BOOL:
     return mlir::IntegerType::get(ctx, 1);
 #if ONNX2MLIR_ONNX_VERSION >= 121
-#if ONNX2MLIR_MLIR_VERSION >= 220
   case onnx::TensorProto_DataType_UINT2:
     return mlir::IntegerType::get(ctx, 2, mlir::IntegerType::Unsigned);
-#endif
 #endif
   case onnx::TensorProto_DataType_UINT4:
     return mlir::IntegerType::get(ctx, 4, mlir::IntegerType::Unsigned);
