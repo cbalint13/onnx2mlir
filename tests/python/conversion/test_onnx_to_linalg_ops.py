@@ -484,7 +484,7 @@ def test_onnx_gemm_lower(ONNX_OPSET_VERSION):
     Test ONNX Gemm operator lowering across different opset versions.
     """
 
-    def create_onnx_model(inp_arr0, inp_arr1):
+    def create_onnx_model(inp_arr0, inp_arr1, inp_bias):
         m, k = inp_arr0.shape
         _, n = inp_arr1.shape
 
@@ -493,9 +493,8 @@ def test_onnx_gemm_lower(ONNX_OPSET_VERSION):
         input_tensor_2 = make_tensor_value_info("bias0", TensorProto.FLOAT, [m, n])
         output_tensor = make_tensor_value_info("output", TensorProto.FLOAT, [m, n])
 
-        bias_data = np.zeros((m, n)).astype(np.float32)
         bias_init = make_tensor(
-            "bias0", TensorProto.FLOAT, [m, n], bias_data.flatten().tolist()
+            "bias0", TensorProto.FLOAT, [m, n], inp_bias.flatten().tolist()
         )
 
         arith_node = make_node(
@@ -517,13 +516,13 @@ def test_onnx_gemm_lower(ONNX_OPSET_VERSION):
 
     inp_arr0 = np.random.rand(16, 32).astype(np.float32)
     inp_arr1 = np.random.rand(32, 16).astype(np.float32)
-    inp_arr2 = np.zeros((16, 16)).astype(np.float32)
+    inp_bias = np.random.rand(16, 16).astype(np.float32)
 
-    onnx_model = create_onnx_model(inp_arr0, inp_arr1)
+    onnx_model = create_onnx_model(inp_arr0, inp_arr1, inp_bias)
 
     ref = ReferenceEvaluator(onnx_model)
     onnx_result = ref.run(
-        None, {"input0": inp_arr0, "input1": inp_arr1, "bias0": inp_arr2}
+        None, {"input0": inp_arr0, "input1": inp_arr1, "bias0": inp_bias}
     )[0]
 
     with Context() as ctx, Location.unknown():
@@ -535,5 +534,5 @@ def test_onnx_gemm_lower(ONNX_OPSET_VERSION):
         llvm_module.operation.verify()
 
         res_arr = np.zeros_like(onnx_result)
-        outputs = runner(llvm_module, "main", [inp_arr0, inp_arr1, inp_arr2], [res_arr])
+        outputs = runner(llvm_module, "main", [inp_arr0, inp_arr1, inp_bias], [res_arr])
         np.testing.assert_allclose(outputs[0], onnx_result, atol=1e-3)

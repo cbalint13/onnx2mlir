@@ -80,53 +80,64 @@ mlir::LogicalResult OnnxToLinalg_GemmOp(mlir::Operation *op,
     transB = attr.getInt();
 
   // Initialize Output Buffer (handles Beta * C)
-  auto outTBuff = mlir::tensor::EmptyOp::create(
-      rewriter, loc, resType.getShape(), elementType);
   mlir::Value outBuff;
-
   bool hasC = C && !mlir::isa<mlir::NoneType>(C.getType());
 
   if (hasC) {
     auto cType = mlir::dyn_cast<mlir::RankedTensorType>(C.getType());
+    bool sameShape = (cType.getShape() == resType.getShape());
+    bool betaIsOne = std::abs(beta - 1.0f) < 1e-6;
+    // Use bias term
+    if (sameShape && betaIsOne) {
+      outBuff = C;
+    } else {
+      // Use bias and beta terms
+      auto outTBuff = mlir::tensor::EmptyOp::create(
+          rewriter, loc, resType.getShape(), elementType);
 
-    // Define indexing for C (Broadcasting logic)
-    mlir::SmallVector<mlir::AffineMap> cMaps;
-    mlir::SmallVector<mlir::AffineExpr> cExprs;
-    for (unsigned i = 0; i < cType.getRank(); ++i) {
-      int64_t resDimIdx = resType.getRank() - cType.getRank() + i;
-      if (cType.getShape()[i] == 1)
-        cExprs.push_back(rewriter.getAffineConstantExpr(0));
-      else
-        cExprs.push_back(rewriter.getAffineDimExpr(resDimIdx));
-    }
-    cMaps.push_back(
-        mlir::AffineMap::get(resType.getRank(), 0, cExprs, op->getContext()));
-    cMaps.push_back(rewriter.getMultiDimIdentityMap(resType.getRank()));
+      // Define indexing for C (Broadcasting logic)
+      mlir::SmallVector<mlir::AffineMap> cMaps;
+      mlir::SmallVector<mlir::AffineExpr> cExprs;
+      for (unsigned i = 0; i < cType.getRank(); ++i) {
+        int64_t resDimIdx = resType.getRank() - cType.getRank() + i;
+        if (cType.getShape()[i] == 1)
+          cExprs.push_back(rewriter.getAffineConstantExpr(0));
+        else
+          cExprs.push_back(rewriter.getAffineDimExpr(resDimIdx));
+      }
+      cMaps.push_back(
+          mlir::AffineMap::get(resType.getRank(), 0, cExprs, op->getContext()));
+      cMaps.push_back(rewriter.getMultiDimIdentityMap(resType.getRank()));
 
-    mlir::SmallVector<mlir::utils::IteratorType> cIters(
-        resType.getRank(), mlir::utils::IteratorType::parallel);
+      mlir::SmallVector<mlir::utils::IteratorType> cIters(
+          resType.getRank(), mlir::utils::IteratorType::parallel);
 
-    auto broadcastOp = mlir::linalg::GenericOp::create(
-        rewriter, loc, resType, mlir::ValueRange{C}, mlir::ValueRange{outTBuff},
-        cMaps, cIters,
-        [&](mlir::OpBuilder &nest, mlir::Location l, mlir::ValueRange args) {
-          mlir::Value val = args[0];
-          if (std::abs(beta - 1.0f) > 1e-6) {
-            if (isFloat) {
-              mlir::Value bConst = mlir::arith::ConstantOp::create(
-                  nest, l, nest.getFloatAttr(elementType, beta));
-              val = mlir::arith::MulFOp::create(nest, l, val, bConst);
-            } else {
-              mlir::Value bConst = mlir::arith::ConstantOp::create(
-                  nest, l,
-                  nest.getIntegerAttr(elementType, static_cast<int64_t>(beta)));
-              val = mlir::arith::MulIOp::create(nest, l, val, bConst);
+      auto broadcastOp = mlir::linalg::GenericOp::create(
+          rewriter, loc, resType, mlir::ValueRange{C},
+          mlir::ValueRange{outTBuff}, cMaps, cIters,
+          [&](mlir::OpBuilder &nest, mlir::Location l, mlir::ValueRange args) {
+            mlir::Value val = args[0];
+            if (!betaIsOne) {
+              if (isFloat) {
+                mlir::Value bConst = mlir::arith::ConstantOp::create(
+                    nest, l, nest.getFloatAttr(elementType, beta));
+                val = mlir::arith::MulFOp::create(nest, l, val, bConst);
+              } else {
+                mlir::Value bConst = mlir::arith::ConstantOp::create(
+                    nest, l,
+                    nest.getIntegerAttr(elementType,
+                                        static_cast<int64_t>(beta)));
+                val = mlir::arith::MulIOp::create(nest, l, val, bConst);
+              }
             }
-          }
-          mlir::linalg::YieldOp::create(nest, l, val);
-        });
-    outBuff = broadcastOp->getResult(0);
+            mlir::linalg::YieldOp::create(nest, l, val);
+          });
+      outBuff = broadcastOp->getResult(0);
+    }
   } else {
+    // Use zeros as bias term
+    auto outTBuff = mlir::tensor::EmptyOp::create(
+        rewriter, loc, resType.getShape(), elementType);
     auto zeroAttr = rewriter.getZeroAttr(elementType);
     mlir::Value constantZero =
         mlir::arith::ConstantOp::create(rewriter, loc, zeroAttr);
@@ -136,11 +147,10 @@ mlir::LogicalResult OnnxToLinalg_GemmOp(mlir::Operation *op,
                   ->getResult(0);
   }
 
-  // Matrix Multiplication via Linalg Generic
+  // Matrix multiplication via Linalg generic
   // Indices: m (row), n (col), k (reduction)
   mlir::AffineExpr m, n, k;
   mlir::bindDims(op->getContext(), m, n, k);
-
   // Maps for A and B based on transposition
   mlir::AffineMap mapA =
       transA ? mlir::AffineMap::get(3, 0, {k, m}, op->getContext())
