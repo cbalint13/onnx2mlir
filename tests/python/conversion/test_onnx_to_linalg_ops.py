@@ -693,3 +693,92 @@ def test_onnx_unsqueeze_lower(ONNX_OPSET_VERSION, dtype, shape, axes):
         outputs = runner(llvm_module, "main", [data_arr], [res_arr])
 
         np.testing.assert_allclose(outputs[0], onnx_result, atol=1e-5)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OPSET_VERSION, dtype, shape, axes",
+    [
+        (opset, dtype, shape, axes)
+        for opset in [
+            schema.since_version
+            for schema in get_all_schemas_with_history()
+            if "Squeeze" == schema.name
+        ]
+        for dtype in [TensorProto.FLOAT, TensorProto.INT32]
+        for shape, axes in [
+            ((1, 3, 4), [0]),  # Squeeze leading: (3, 4)
+            ((3, 1, 4), [1]),  # Squeeze middle:  (3, 4)
+            ((3, 4, 1), [2]),  # Squeeze trailing: (3, 4)
+            ((1, 3, 4, 1), [0, 3]),  # Squeeze multiple: (3, 4)
+            ((1, 1, 3, 4), [0, 1]),  # Squeeze consecutive: (3, 4)
+            ((1, 3, 1, 4), None),  # Squeeze all unit dims (Opset dependent)
+        ]
+    ],
+)
+# pylint: disable=too-many-locals
+def test_onnx_squeeze_lower(ONNX_OPSET_VERSION, dtype, shape, axes):
+    """
+    Test ONNX Squeeze operator lowering.
+    """
+    if axes is None:
+        res_shape = [d for d in shape if d != 1]
+    else:
+        res_shape = []
+        for i, d in enumerate(shape):
+            if i not in axes:
+                res_shape.append(d)
+
+    np_dtype = np.float32 if dtype == TensorProto.FLOAT else np.int32
+
+    def create_onnx_model():
+        input_tensor = make_tensor_value_info("data", dtype, shape)
+        output_tensor = make_tensor_value_info("output", dtype, res_shape)
+
+        inputs = ["data"]
+        initializers = []
+
+        # Handle Opset < 13 (axes as attribute) vs Opset >= 13 (axes as optional input)
+        if ONNX_OPSET_VERSION < 13:
+            kwargs = {}
+            if axes is not None:
+                kwargs["axes"] = axes
+            squeeze_node = make_node("Squeeze", inputs, ["output"], **kwargs)
+        else:
+            if axes is not None:
+                axes_tensor = make_tensor("axes", TensorProto.INT64, [len(axes)], axes)
+                initializers.append(axes_tensor)
+                inputs.append("axes")
+
+            squeeze_node = make_node("Squeeze", inputs, ["output"])
+
+        graph = make_graph(
+            nodes=[squeeze_node],
+            name="squeeze_test",
+            inputs=[input_tensor],
+            outputs=[output_tensor],
+            initializer=initializers,
+        )
+
+        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        model = make_model(graph, opset_imports=opset_imports)
+        check_model(model)
+        return model
+
+    data_arr = (np.random.rand(*shape) * 10).astype(np_dtype)
+    onnx_model = create_onnx_model()
+
+    ref = ReferenceEvaluator(onnx_model)
+    onnx_result = ref.run(None, {"data": data_arr})[0]
+
+    with Context() as ctx, Location.unknown():
+
+        mlir_module = import_from_onnx(onnx_model, ctx)
+        mlir_module.operation.verify()
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        res_arr = np.zeros_like(onnx_result)
+        outputs = runner(llvm_module, "main", [data_arr], [res_arr])
+
+        np.testing.assert_allclose(outputs[0], onnx_result, atol=1e-5)
