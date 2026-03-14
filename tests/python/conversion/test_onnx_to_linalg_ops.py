@@ -612,3 +612,84 @@ def test_onnx_where_lower(ONNX_OPSET_VERSION, dtype, shapes):
         outputs = runner(llvm_module, "main", [cond_arr, x_arr, y_arr], [res_arr])
 
         np.testing.assert_allclose(outputs[0], onnx_result, atol=1e-3)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OPSET_VERSION, dtype, shape, axes",
+    [
+        (opset, dtype, shape, axes)
+        for opset in [
+            schema.since_version
+            for schema in get_all_schemas_with_history()
+            if "Unsqueeze" == schema.name
+        ]
+        for dtype in [TensorProto.FLOAT, TensorProto.INT32]
+        for shape, axes in [
+            ((3, 4), [0]),  # Leading dim: (1, 3, 4)
+            ((3, 4), [1]),  # Middle dim:  (3, 1, 4)
+            ((3, 4), [2]),  # Trailing dim: (3, 4, 1)
+            ((3, 4), [0, 3]),  # Multiple: (1, 3, 4, 1)
+            ((2, 3, 2), [1, 2]),  # Consecutive: (2, 1, 1, 3, 2)
+        ]
+    ],
+)
+# pylint: disable=too-many-locals
+def test_onnx_unsqueeze_lower(ONNX_OPSET_VERSION, dtype, shape, axes):
+    """
+    Test ONNX Unsqueeze operator lowering.
+    """
+    np_dtype = np.float32 if dtype == TensorProto.FLOAT else np.int32
+
+    res_shape = list(shape)
+    for axis in sorted(axes):
+        res_shape.insert(axis, 1)
+
+    def create_onnx_model():
+        input_tensor = make_tensor_value_info("data", dtype, shape)
+        output_tensor = make_tensor_value_info("output", dtype, res_shape)
+
+        if ONNX_OPSET_VERSION < 13:
+            unsqueeze_node = make_node("Unsqueeze", ["data"], ["output"], axes=axes)
+            inputs = [input_tensor]
+            initializers = []
+        else:
+            axes_tensor = make_tensor("axes", TensorProto.INT64, [len(axes)], axes)
+            unsqueeze_node = make_node(
+                "Unsqueeze",
+                ["data", "axes"],
+                ["output"],
+            )
+            inputs = [input_tensor]
+            initializers = [axes_tensor]
+
+        graph = make_graph(
+            nodes=[unsqueeze_node],
+            name="unsqueeze_test",
+            inputs=inputs,
+            outputs=[output_tensor],
+            initializer=initializers,
+        )
+
+        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        model = make_model(graph, opset_imports=opset_imports)
+        check_model(model)
+        return model
+
+    data_arr = (np.random.rand(*shape) * 10).astype(np_dtype)
+    onnx_model = create_onnx_model()
+
+    ref = ReferenceEvaluator(onnx_model)
+    onnx_result = ref.run(None, {"data": data_arr})[0]
+
+    with Context() as ctx, Location.unknown():
+
+        mlir_module = import_from_onnx(onnx_model, ctx)
+        mlir_module.operation.verify()
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        res_arr = np.zeros_like(onnx_result)
+        outputs = runner(llvm_module, "main", [data_arr], [res_arr])
+
+        np.testing.assert_allclose(outputs[0], onnx_result, atol=1e-5)

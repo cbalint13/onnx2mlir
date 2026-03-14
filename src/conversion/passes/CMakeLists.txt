@@ -10,6 +10,7 @@ add_mlir_conversion_library(onnx2mlir_onnx_linalg_pass
     onnx_to_linalg/constant.cpp
     onnx_to_linalg/gemm.cpp
     onnx_to_linalg/transpose.cpp
+    onnx_to_linalg/unsqueeze.cpp
     onnx_to_linalg/where.cpp
   DEPENDS
     onnx2mlir_onnx_dialect

@@ -1,117 +1,117 @@
-      // 1. Access the 'data' input operand (operand 0).
-      mlir::Value inputData = op->getOperand(0);
-      auto inputType =
-          mlir::dyn_cast<mlir::RankedTensorType>(inputData.getType());
-      if (!inputType) {
-        return rewriter.notifyMatchFailure(
-            op, "onnx.Unsqueeze input must be a ranked tensor");
-      }
+/******************************************************************************
+ *
+ * ONNX2MLIR (ONNX dialect mappings for composable optimizations)
+ *
+ * Authors:
+ * Cristian Balint <cristian dot balint at gmail dot com>
+ *
+ * Copyright (c) 2021,2025
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ *****************************************************************************/
 
-      // 2. Access the output result type (result 0).
-      if (op->getNumResults() != 1) {
-        return rewriter.notifyMatchFailure(
-            op, "onnx.Unsqueeze expected a single result");
-      }
+/*!
+ * \file src/conversion/passes/onnx_to_linalg/unsqueeze.cpp
+ * \brief ONNX Unsqueeze operation to Linalg lowering
+ */
 
-      auto outputType =
-          mlir::dyn_cast<mlir::RankedTensorType>(op->getResult(0).getType());
-      if (!outputType) {
-        return rewriter.notifyMatchFailure(
-            op, "onnx.Unsqueeze output must be a ranked tensor");
-      }
+#include <mlir/Dialect/Arith/IR/Arith.h>
+#include <mlir/Dialect/Linalg/IR/Linalg.h>
+#include <mlir/Dialect/Tensor/IR/Tensor.h>
+#include <mlir/Dialect/Transform/IR/TransformOps.h>
+#include <mlir/IR/PatternMatch.h>
+#include <mlir/Support/LogicalResult.h>
 
-      // 3. Access the 'axes' input operand (operand 1).
-      mlir::Value axesValue = op->getOperand(1);
-      mlir::Operation *definingOp = axesValue.getDefiningOp();
-      if (!definingOp) {
-        return rewriter.notifyMatchFailure(
-            op, "onnx.Unsqueeze axes operand must be an op for static axes");
-      }
-      mlir::Attribute axesAttr = definingOp->getAttr("value");
-      mlir::DenseIntElementsAttr axesDenseAttr =
-          mlir::dyn_cast<mlir::DenseIntElementsAttr>(axesAttr);
-      if (!axesDenseAttr) {
-        return rewriter.notifyMatchFailure(
-            op, "onnx.Unsqueeze axes value is not DenseIntElementsAttr");
-      }
-      llvm::SmallVector<int64_t> axes;
-      for (auto val : axesDenseAttr.getValues<mlir::APInt>()) {
-        axes.push_back(val.getSExtValue());
-      }
-      for (auto &axis : axes) {
-        if (axis < 0) {
-          axis += outputType.getRank();
-        }
-      }
-      std::sort(axes.begin(), axes.end());
+#include "onnx2mlir/common/onnx.hpp"
+#include "onnx2mlir/dialect/onnx/Onnx.hpp"
 
-      // 4. Construct the output shape components (static / dynamic)
-      llvm::SmallVector<int64_t> staticOutputShape;
-      llvm::SmallVector<mlir::Value> dynamicOutputShapeValues;
-      llvm::SmallVector<mlir::Value> outputShapeSSAValues;
+namespace onnx2mlir::dialect {
 
-      int64_t currentInputDimIdx = 0;
+mlir::LogicalResult OnnxToLinalg_UnsqueezeOp(mlir::Operation *op,
+                                             mlir::PatternRewriter &rewriter) {
+  auto loc = op->getLoc();
+  auto opName = op->getName().getStringRef();
 
-      mlir::Location fusedLoc = rewriter.getFusedLoc(
-          {op->getLoc()}, rewriter.getStringAttr(op->getName().getStringRef()));
+  mlir::Value data = op->getOperand(0);
+  mlir::Value res = op->getResult(0);
 
-      for (int64_t i = 0; i < outputType.getRank(); ++i) {
-        if (std::binary_search(axes.begin(), axes.end(), i)) {
-          // an unsqueezed dimension (new dim of size 1)
-          staticOutputShape.push_back(1);
-          // create an arith.constant for '1'
-          outputShapeSSAValues.push_back(
-              rewriter.create<mlir::arith::ConstantIndexOp>(fusedLoc, 1));
-        } else {
-          // output dimension corresponds to an original input dimension.
-          if (currentInputDimIdx >= inputType.getRank()) {
-            return rewriter.notifyMatchFailure(
-                op, "onnx.Unsqueeze input-output dimension mismatch during "
-                    "reassociation construction");
-          }
-          if (inputType.isDynamicDim(currentInputDimIdx)) {
-            // dynamic dimensions
-            mlir::Value dimValue = rewriter.create<mlir::tensor::DimOp>(
-                fusedLoc, inputData,
-                rewriter.create<mlir::arith::ConstantIndexOp>(
-                    fusedLoc, currentInputDimIdx));
-            dynamicOutputShapeValues.push_back(dimValue);
-            staticOutputShape.push_back(mlir::ShapedType::kDynamic);
-            outputShapeSSAValues.push_back(dimValue);
-          } else {
-            // static dimensions
-            staticOutputShape.push_back(
-                inputType.getDimSize(currentInputDimIdx));
-            // create arith.constant for shape operand
-            outputShapeSSAValues.push_back(
-                rewriter.create<mlir::arith::ConstantIndexOp>(
-                    fusedLoc, inputType.getDimSize(currentInputDimIdx)));
-          }
-          currentInputDimIdx++;
-        }
-      }
+  auto dataType = mlir::dyn_cast<mlir::RankedTensorType>(data.getType());
+  auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
-      // check that all input dimensions have been mapped.
-      if (currentInputDimIdx != inputType.getRank()) {
-        return rewriter.notifyMatchFailure(
-            op, "onnx.Unsqueeze input-output dimension mapping incomplete");
-      }
+  if (!dataType || !resType) {
+    return mlir::emitError(loc, opName + " operand must be ranked tensor type");
+  }
 
-      // 5. Create the tensor.from_elements op to get the shape as an SSA value.
-      // The type of this shape tensor will be tensor<Rank x index>.
-      mlir::RankedTensorType shapeTensorType = mlir::RankedTensorType::get(
-          {static_cast<int64_t>(outputType.getRank())},
-          rewriter.getIndexType());
+  int64_t dataRank = dataType.getRank();
+  int64_t resRank = resType.getRank();
 
-      mlir::Value outputShapeValue =
-          rewriter.create<mlir::tensor::FromElementsOp>(
-              fusedLoc, shapeTensorType, outputShapeSSAValues);
+  if (resRank <= dataRank) {
+    return mlir::emitError(
+        loc, opName + " result rank must be greater than input rank");
+  }
 
-      // 6. Create the tensor.reshape operation.
-      mlir::Value reshapedTensor = rewriter.create<mlir::tensor::ReshapeOp>(
-          fusedLoc, outputType, inputData, outputShapeValue);
+  // Create output buffer
+  mlir::Value outBuff = mlir::tensor::EmptyOp::create(
+      rewriter, loc, resType.getShape(), resType.getElementType());
 
-      // 7. Replace the original operation.
-      rewriter.replaceOp(op, reshapedTensor);
+  // Define indexing maps for the generic op
+  llvm::SmallVector<mlir::AffineExpr, 4> exprs;
+  mlir::Builder builder(op->getContext());
 
-      return mlir::success();
+  // Unsqueeze only inserts dimensions of size 1
+  int64_t currDataDim = 0;
+  for (int64_t i = 0; i < resRank; ++i) {
+    if (currDataDim < dataRank &&
+        (dataType.getDimSize(currDataDim) == resType.getDimSize(i) ||
+         dataType.getDimSize(currDataDim) == mlir::ShapedType::kDynamic)) {
+      // If result dim is not a newly inserted unit dim, map it to input dim.
+      // Note: If both input and result have a '1' at this position, we
+      // greedily consume it as the original dimension.
+      exprs.push_back(builder.getAffineDimExpr(i));
+      currDataDim++;
+    }
+  }
+
+  // All input dimensions must be mapped
+  if (currDataDim != dataRank) {
+    return mlir::emitError(loc,
+                           opName + " failed to map input to output shape");
+  }
+
+  mlir::SmallVector<mlir::AffineMap, 2> idxMaps;
+  idxMaps.push_back(
+      mlir::AffineMap::get(resRank, 0, exprs, builder.getContext()));
+  idxMaps.push_back(rewriter.getMultiDimIdentityMap(resRank));
+
+  // Create linalg.generic
+  mlir::SmallVector<mlir::utils::IteratorType> iterators(
+      resRank, mlir::utils::IteratorType::parallel);
+
+  auto genericOp = mlir::linalg::GenericOp::create(
+      rewriter, loc, resType, mlir::ValueRange{data}, // Input
+      mlir::ValueRange{outBuff},                      // Output init
+      idxMaps, iterators,
+      [&](mlir::OpBuilder &nest, mlir::Location l, mlir::ValueRange args) {
+        mlir::linalg::YieldOp::create(nest, l, args[0]);
+      });
+
+  // Set transform tag for downstream optimization
+  genericOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
+
+  rewriter.replaceOp(op, genericOp);
+  return mlir::success();
+}
+
+} // namespace onnx2mlir::dialect

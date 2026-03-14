@@ -83,6 +83,10 @@ mlir::LogicalResult OnnxToLinalg_SoftmaxOp(mlir::Operation *op,
 mlir::LogicalResult OnnxToLinalg_TransposeOp(mlir::Operation *op,
                                              mlir::PatternRewriter &rewriter);
 
+// onnx.Unsqueeze
+mlir::LogicalResult OnnxToLinalg_UnsqueezeOp(mlir::Operation *op,
+                                             mlir::PatternRewriter &rewriter);
+
 // onnx.Where
 mlir::LogicalResult OnnxToLinalg_WhereOp(mlir::Operation *op,
                                          mlir::PatternRewriter &rewriter);

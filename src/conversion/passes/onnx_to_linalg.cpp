@@ -97,6 +97,8 @@ struct ONNXToLINALGLowering : public mlir::ConversionPattern {
       return OnnxToLinalg_SoftmaxOp(op, rewriter);
     } else if (opNameBeginsWith(opName, "Transpose")) {
       return OnnxToLinalg_TransposeOp(op, rewriter);
+    } else if (opNameBeginsWith(opName, "Unsqueeze")) {
+      return OnnxToLinalg_UnsqueezeOp(op, rewriter);
     } else if (opNameBeginsWith(opName, "Where")) {
       return OnnxToLinalg_WhereOp(op, rewriter);
     }
