@@ -93,6 +93,8 @@ struct ONNXToLINALGLowering : public mlir::ConversionPattern {
       return OnnxToLinalg_HardmaxOp(op, rewriter);
     } else if (opNameBeginsWith(opName, "LogSoftmax")) {
       return OnnxToLinalg_LogSoftmaxOp(op, rewriter);
+    } else if (opNameBeginsWith(opName, "MaxPool")) {
+      return OnnxToLinalg_MaxPoolOp(op, rewriter);
     } else if (opNameBeginsWith(opName, "Softmax")) {
       return OnnxToLinalg_SoftmaxOp(op, rewriter);
     } else if (opNameBeginsWith(opName, "Squeeze")) {

@@ -75,6 +75,10 @@ mlir::LogicalResult OnnxToLinalg_HardmaxOp(mlir::Operation *op,
 mlir::LogicalResult OnnxToLinalg_LogSoftmaxOp(mlir::Operation *op,
                                               mlir::PatternRewriter &rewriter);
 
+// onnx.Maxpool
+mlir::LogicalResult OnnxToLinalg_MaxPoolOp(mlir::Operation *op,
+                                           mlir::PatternRewriter &rewriter);
+
 // onnx.Softmax
 mlir::LogicalResult OnnxToLinalg_SoftmaxOp(mlir::Operation *op,
                                            mlir::PatternRewriter &rewriter);

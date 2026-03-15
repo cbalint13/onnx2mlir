@@ -28,6 +28,7 @@
 """
 
 import ctypes
+import warnings
 from mlir.dialects import llvm
 from mlir.execution_engine import ExecutionEngine
 from mlir.runtime import get_ranked_memref_descriptor, ranked_memref_to_numpy
@@ -62,7 +63,19 @@ def runner(module, func_entry, inputs, outputs):
     if not any(isinstance(op, llvm.LLVMFuncOp) for op in module.body.operations):
         raise TypeError("Module has no LLVM functions")
 
-    engine = ExecutionEngine(module, opt_level=3)
+    try:
+        # pylint: disable=import-outside-toplevel
+        from onnx2mlir.version import LLVM_LIBRARY_PATH
+
+        shared_libs = [
+            f"{LLVM_LIBRARY_PATH}/libmlir_runner_utils.so",
+            f"{LLVM_LIBRARY_PATH}/libmlir_c_runner_utils.so",
+        ]
+        engine = ExecutionEngine(module, opt_level=3, shared_libs=shared_libs)
+    except:  # pylint: disable=bare-except
+        warnings.warn("MLIR executor running without utility libraries", RuntimeWarning)
+        engine = ExecutionEngine(module, opt_level=3)
+
     engine.initialize()
 
     inp_descs = [get_ranked_memref_descriptor(inp) for inp in inputs]

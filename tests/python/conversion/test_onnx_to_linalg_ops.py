@@ -782,3 +782,89 @@ def test_onnx_squeeze_lower(ONNX_OPSET_VERSION, dtype, shape, axes):
         outputs = runner(llvm_module, "main", [data_arr], [res_arr])
 
         np.testing.assert_allclose(outputs[0], onnx_result, atol=1e-5)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OPSET_VERSION, dtype, input_shape, kernel, strides, pads",
+    [
+        (opset, dtype, shape, kernel, stride, pad)
+        for opset in [
+            schema.since_version
+            for schema in get_all_schemas_with_history()
+            if "MaxPool" == schema.name
+        ]
+        for dtype in [TensorProto.FLOAT, TensorProto.INT8]
+        for shape, kernel, stride, pad in [
+            ((1, 3, 32, 32), [2, 2], [2, 2], [0, 0, 0, 0]),  # Standard NCHW
+            ((1, 1, 10, 10), [3, 2], [1, 2], [0, 0, 0, 0]),  # Non-square
+            ((1, 1, 5, 5), [3, 3], [1, 1], [1, 1, 1, 1]),  # With padding
+        ]
+    ],
+)
+# pylint: disable=too-many-locals,too-many-arguments,too-many-positional-arguments
+def test_onnx_maxpool_lower(
+    ONNX_OPSET_VERSION, dtype, input_shape, kernel, strides, pads
+):
+    """
+    Test ONNX MaxPool operator lowering.
+    """
+
+    if ONNX_OPSET_VERSION < 12 and dtype == TensorProto.INT8:
+        pytest.skip(f"MaxPool V{ONNX_OPSET_VERSION} only supports Float")
+
+    np_dtype = np.float32 if dtype == TensorProto.FLOAT else np.int8
+
+    h_in, w_in = input_shape[2], input_shape[3]
+    h_out = (h_in + pads[0] + pads[2] - kernel[0]) // strides[0] + 1
+    w_out = (w_in + pads[1] + pads[3] - kernel[1]) // strides[1] + 1
+    output_shape = (input_shape[0], input_shape[1], h_out, w_out)
+
+    def create_onnx_model():
+        input_x = make_tensor_value_info("X", dtype, input_shape)
+        output_y = make_tensor_value_info("Y", dtype, output_shape)
+
+        maxpool_node = make_node(
+            "MaxPool",
+            ["X"],
+            ["Y"],
+            kernel_shape=kernel,
+            strides=strides,
+            pads=pads,
+        )
+
+        graph = make_graph(
+            nodes=[maxpool_node],
+            name=f"maxpool_opset_{ONNX_OPSET_VERSION}",
+            inputs=[input_x],
+            outputs=[output_y],
+        )
+
+        model = make_model(graph, opset_imports=[make_opsetid("", ONNX_OPSET_VERSION)])
+        check_model(model)
+        return model
+
+    x_arr = np.random.randint(-100, 100, size=input_shape).astype(np_dtype)
+
+    onnx_model = create_onnx_model()
+
+    if dtype == TensorProto.INT8:
+        float_model = create_onnx_model()
+        float_model.graph.input[0].type.tensor_type.elem_type = TensorProto.FLOAT
+        float_model.graph.output[0].type.tensor_type.elem_type = TensorProto.FLOAT
+        ref = ReferenceEvaluator(float_model)
+        onnx_result = ref.run(None, {"X": x_arr.astype(np.float32)})[0].astype(np.int8)
+    else:
+        ref = ReferenceEvaluator(onnx_model)
+        onnx_result = ref.run(None, {"X": x_arr})[0]
+
+    with Context() as ctx, Location.unknown():
+        mlir_module = import_from_onnx(onnx_model, ctx)
+        mlir_module.operation.verify()
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        res_arr = np.zeros(output_shape, dtype=np_dtype)
+        outputs = runner(llvm_module, "main", [x_arr], [res_arr])
+
+        np.testing.assert_allclose(outputs[0], onnx_result, rtol=1e-5, atol=1e-5)
