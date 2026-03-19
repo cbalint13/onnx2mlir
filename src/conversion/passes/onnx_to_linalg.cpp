@@ -87,6 +87,8 @@ struct ONNXToLINALGLowering : public mlir::ConversionPattern {
       return OnnxToLinalg_CompBinaryOps(op, rewriter);
     } else if (opNameBeginsWith(opName, "Constant")) {
       return OnnxToLinalg_ConstantOp(op, rewriter);
+    } else if (opNameBeginsWith(opName, "Conv")) {
+      return OnnxToLinalg_ConvOp(op, rewriter);
     } else if (opNameBeginsWith(opName, "Gemm")) {
       return OnnxToLinalg_GemmOp(op, rewriter);
     } else if (opNameBeginsWith(opName, "Hardmax")) {

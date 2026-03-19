@@ -868,3 +868,97 @@ def test_onnx_maxpool_lower(
         outputs = runner(llvm_module, "main", [x_arr], [res_arr])
 
         np.testing.assert_allclose(outputs[0], onnx_result, rtol=1e-5, atol=1e-5)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OPSET_VERSION, dtype, input_shape, weight_shape, strides, pads, has_bias",
+    [
+        (opset, dtype, in_shape, w_shape, stride, pad, bias)
+        for opset in [
+            schema.since_version
+            for schema in get_all_schemas_with_history()
+            if "Conv" == schema.name
+        ]
+        for dtype in [TensorProto.FLOAT, TensorProto.FLOAT16]
+        for in_shape, w_shape, stride, pad, bias in [
+            ((1, 3, 32, 32), (8, 3, 3, 3), [1, 1], [0, 0, 0, 0], False),
+            ((1, 3, 32, 32), (16, 3, 3, 3), [2, 2], [1, 1, 1, 1], True),
+            ((2, 1, 10, 10), (1, 1, 5, 5), [1, 1], [2, 2, 2, 2], False),
+        ]
+    ],
+)
+# pylint: disable=too-many-locals,too-many-arguments,too-many-positional-arguments
+def test_onnx_conv_lower(
+    ONNX_OPSET_VERSION, dtype, input_shape, weight_shape, strides, pads, has_bias
+):
+    """
+    Test ONNX Conv operator lowering.
+    """
+
+    np_dtype = np.float32 if dtype == TensorProto.FLOAT else np.float16
+
+    n, _, h_in, w_in = input_shape
+    f, _, kh, kw = weight_shape
+    h_out = (h_in + pads[0] + pads[2] - kh) // strides[0] + 1
+    w_out = (w_in + pads[1] + pads[3] - kw) // strides[1] + 1
+    output_shape = (n, f, h_out, w_out)
+
+    x_arr = np.random.randn(*input_shape).astype(np_dtype)
+    w_arr = np.random.randn(*weight_shape).astype(np_dtype)
+    b_arr = np.random.randn(f).astype(np_dtype) if has_bias else None
+
+    def create_onnx_model():
+        input_x = make_tensor_value_info("X", dtype, input_shape)
+        output_y = make_tensor_value_info("Y", dtype, output_shape)
+
+        weight_init = make_tensor("W", dtype, weight_shape, w_arr.flatten().tolist())
+
+        initializers = [weight_init]
+        input_names = ["X", "W"]
+
+        if has_bias:
+            bias_init = make_tensor("B", dtype, (f,), b_arr.flatten().tolist())
+            initializers.append(bias_init)
+            input_names.append("B")
+
+        conv_node = make_node(
+            "Conv",
+            input_names,
+            ["Y"],
+            kernel_shape=[kh, kw],
+            strides=strides,
+            pads=pads,
+            group=1,
+        )
+
+        graph = make_graph(
+            nodes=[conv_node],
+            name=f"conv_opset_{ONNX_OPSET_VERSION}",
+            inputs=[input_x],
+            outputs=[output_y],
+            initializer=initializers,
+        )
+
+        model = make_model(graph, opset_imports=[make_opsetid("", ONNX_OPSET_VERSION)])
+        check_model(model)
+        return model
+
+    onnx_model = create_onnx_model()
+
+    ref = ReferenceEvaluator(onnx_model)
+    onnx_result = ref.run(None, {"X": x_arr})[0]
+
+    with Context() as ctx, Location.unknown():
+        mlir_module = import_from_onnx(onnx_model, ctx)
+        mlir_module.operation.verify()
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        res_arr = np.zeros(output_shape, dtype=np_dtype)
+
+        outputs = runner(llvm_module, "main", [x_arr], [res_arr])
+
+        atol = 1e-1 if dtype == TensorProto.FLOAT16 else 1e-5
+        rtol = 1e-1 if dtype == TensorProto.FLOAT16 else 1e-5
+        np.testing.assert_allclose(outputs[0], onnx_result, rtol=rtol, atol=atol)

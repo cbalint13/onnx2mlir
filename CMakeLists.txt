@@ -69,7 +69,8 @@ else()
   message(FATAL_ERROR "ONNX protobuf header not found.")
 endif()
 
-if (DEFINED LLVM_CONFIG)
+find_program(LLVM_CONFIG NAMES llvm-config)
+if (LLVM_CONFIG)
   message(STATUS "Using ${LLVM_CONFIG}")
   separate_arguments(LLVM_CONFIG)
   execute_process(COMMAND ${LLVM_CONFIG} --libdir

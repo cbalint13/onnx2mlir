@@ -40,7 +40,7 @@ if ! command -v pylint &> /dev/null; then
   exit 1
 fi
 
-for f in $(git ls-files -- '*.h' '*.hpp' '*.c' '*.cc' '*.cpp' | grep -v '/onnx_to_linalg/'); do
+for f in $(git ls-files -- '*.h' '*.hpp' '*.c' '*.cc' '*.cpp'); do
 
   if [ $quiet == false ];
   then

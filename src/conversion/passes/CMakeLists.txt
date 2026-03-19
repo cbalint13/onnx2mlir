@@ -8,6 +8,7 @@ add_mlir_conversion_library(onnx2mlir_onnx_linalg_pass
     onnx_to_linalg/cast.cpp
     onnx_to_linalg/compare_binary.cpp
     onnx_to_linalg/constant.cpp
+    onnx_to_linalg/conv.cpp
     onnx_to_linalg/gemm.cpp
     onnx_to_linalg/maxpool.cpp
     onnx_to_linalg/squeeze.cpp

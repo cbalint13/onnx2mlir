@@ -65,7 +65,7 @@ mlir::LogicalResult OnnxToLinalg_MaxPoolOp(mlir::Operation *op,
         loc, opName + " only 2D (NCHW) spatial pooling is supported");
   }
 
-  // 1. Extract attributes
+  // Extract attributes
   auto getI64Array = [&](llvm::StringRef attrName, int64_t defaultValue) {
     llvm::SmallVector<int64_t> values;
     if (auto attr = op->getAttrOfType<mlir::ArrayAttr>(attrName)) {

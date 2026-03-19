@@ -72,12 +72,38 @@ static mlir::DenseElementsAttr
 getMlirTensor(const Container &data, shp_T shape, typ_T dType,
               const mlir::Attribute &eAttr = {}) {
   using dat_T = typename Container::value_type;
-  auto dims = llvm::ArrayRef(shape.data(), shape.size());
+  auto dims = llvm::ArrayRef<int64_t>(shape.data(), shape.size());
   auto shapedType = mlir::RankedTensorType::get(dims, dType, eAttr);
-  auto denseAttrs = mlir::DenseElementsAttr::get(
-      shapedType, llvm::ArrayRef<dat_T>(data.data(), data.size()));
 
-  return denseAttrs;
+  unsigned targetBitWidth = 0;
+  if (auto complexTy = mlir::dyn_cast<mlir::ComplexType>(dType)) {
+    targetBitWidth = complexTy.getElementType().getIntOrFloatBitWidth();
+  } else {
+    targetBitWidth = dType.getIntOrFloatBitWidth();
+  }
+
+  if (sizeof(dat_T) * 8 > targetBitWidth) {
+    if (targetBitWidth == 64) {
+      std::vector<uint64_t> buffer(data.begin(), data.end());
+      return mlir::DenseElementsAttr::get(shapedType, llvm::ArrayRef(buffer));
+    } else if (targetBitWidth == 32) {
+      std::vector<uint32_t> buffer(data.begin(), data.end());
+      return mlir::DenseElementsAttr::get(shapedType, llvm::ArrayRef(buffer));
+    } else if (targetBitWidth == 16) {
+      std::vector<uint16_t> buffer(data.begin(), data.end());
+      return mlir::DenseElementsAttr::get(shapedType, llvm::ArrayRef(buffer));
+    } else if (targetBitWidth <= 8) {
+      std::vector<uint8_t> buffer(data.begin(), data.end());
+      return mlir::DenseElementsAttr::get(shapedType, llvm::ArrayRef(buffer));
+    } else {
+      llvm::errs() << "ERROR: unimplemented datatype width: " << targetBitWidth
+                   << "\n";
+      exit(-1);
+    }
+  }
+
+  return mlir::DenseElementsAttr::get(
+      shapedType, llvm::ArrayRef<dat_T>(data.data(), data.size()));
 }
 
 template <typename Container>
@@ -149,9 +175,21 @@ static mlir::ElementsAttr OnnxToMlir_Tensor(const onnx::TensorProto &tensor,
   } else {
     switch (tensor.data_type()) {
     case onnx::TensorProto::FLOAT:
+    case onnx::TensorProto::COMPLEX64:
       return getMlirTensor(tensor.float_data(), tensor.dims(), dType, eAttr);
     case onnx::TensorProto::DOUBLE:
+    case onnx::TensorProto::COMPLEX128:
       return getMlirTensor(tensor.double_data(), tensor.dims(), dType, eAttr);
+    case onnx::TensorProto::FLOAT16:
+    case onnx::TensorProto::BFLOAT16:
+    case onnx::TensorProto::FLOAT8E4M3FN:
+    case onnx::TensorProto::FLOAT8E4M3FNUZ:
+    case onnx::TensorProto::FLOAT8E5M2:
+    case onnx::TensorProto::FLOAT8E5M2FNUZ:
+#if ONNX2MLIR_ONNX_VERSION >= 120
+    case onnx::TensorProto::FLOAT8E8M0:
+#endif
+    case onnx::TensorProto::FLOAT4E2M1:
     case onnx::TensorProto::BOOL:
 #if ONNX2MLIR_ONNX_VERSION >= 121
     case onnx::TensorProto::INT2:
@@ -583,7 +621,7 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
     std::vector<mlir::NamedAttribute> attrs;
     // origin
     auto nameVal = builder.getStringAttr("NoneType");
-    mlir::NamedAttribute labels("mlir.value", nameVal);
+    mlir::NamedAttribute labels("value", nameVal);
     attrs.push_back(labels);
     // result type
     mlir::Type noneType = mlir::NoneType::get(mlirCtx);
