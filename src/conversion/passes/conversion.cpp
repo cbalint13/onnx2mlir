@@ -24,7 +24,7 @@
 
 /*!
  * \file src/conversion/conversion.cpp
- * \brief Common conversion heper functions
+ * \brief Common conversion helper functions
  */
 
 #include <mlir/IR/BuiltinTypes.h>

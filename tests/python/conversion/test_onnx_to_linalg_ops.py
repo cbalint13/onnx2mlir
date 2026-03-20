@@ -21,7 +21,7 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ###############################################################################
-# pylint: disable=line-too-long,invalid-name
+# pylint: disable=line-too-long,invalid-name,too-many-lines
 
 """
 \file tests/python/conversion/test_onnx_to_linalg_ops.py
@@ -962,3 +962,99 @@ def test_onnx_conv_lower(
         atol = 1e-1 if dtype == TensorProto.FLOAT16 else 1e-5
         rtol = 1e-1 if dtype == TensorProto.FLOAT16 else 1e-5
         np.testing.assert_allclose(outputs[0], onnx_result, rtol=rtol, atol=atol)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OPSET_VERSION, dtype, input_shape, axis",
+    [
+        (ONNX_OPSET_VERSION, dtype, shape, ax)
+        for ONNX_OPSET_VERSION in [
+            schema.since_version
+            for schema in get_all_schemas_with_history()
+            if "Flatten" == schema.name
+        ]
+        for dtype in [
+            TensorProto.FLOAT,
+            TensorProto.FLOAT16,
+            TensorProto.DOUBLE,
+            TensorProto.INT32,
+        ]
+        for shape, ax in [
+            ((2, 3, 4, 5), 1),  # Default case
+            ((2, 3, 4, 5), 0),  # Axis at start
+            ((2, 3, 4, 5), 2),  # Axis in middle
+            ((2, 3, 4, 5), 4),  # Axis at end
+            ((2, 3, 4, 5), -1),  # Negative axis
+            ((5,), 1),  # Rank 1 input
+            ((1, 10), 1),  # Rank 2 input
+        ]
+    ],
+)
+# pylint: disable=too-many-locals
+def test_onnx_flatten_lower(ONNX_OPSET_VERSION, dtype, input_shape, axis):
+    """
+    Test ONNX Flatten operator lowering.
+    """
+
+    if ONNX_OPSET_VERSION == 1 and dtype == TensorProto.INT32:
+        pytest.skip(f"Flatten V{ONNX_OPSET_VERSION} only supports Float")
+
+    np_dtype = None
+    if dtype == TensorProto.FLOAT:
+        np_dtype = np.float32
+    elif dtype == TensorProto.FLOAT16:
+        np_dtype = np.float16
+    elif dtype == TensorProto.DOUBLE:
+        np_dtype = np.float64
+    elif dtype == TensorProto.INT32:
+        np_dtype = np.int32
+    else:
+        pytest.skip(f"DataType {np_dtype} not implemented in test")
+
+    x_arr = np.random.randn(*input_shape).astype(np_dtype)
+
+    rank = len(input_shape)
+    norm_axis = axis if axis >= 0 else axis + rank
+
+    dim0 = int(np.prod(input_shape[:norm_axis]))
+    dim1 = int(np.prod(input_shape[norm_axis:]))
+    output_shape = (dim0, dim1)
+
+    def create_onnx_model():
+        input_x = make_tensor_value_info("X", dtype, input_shape)
+        output_y = make_tensor_value_info("Y", dtype, output_shape)
+
+        flatten_node = make_node(
+            "Flatten",
+            ["X"],
+            ["Y"],
+            axis=axis,
+        )
+
+        graph = make_graph(
+            nodes=[flatten_node],
+            name=f"flatten_opset_{ONNX_OPSET_VERSION}",
+            inputs=[input_x],
+            outputs=[output_y],
+        )
+
+        model = make_model(graph, opset_imports=[make_opsetid("", ONNX_OPSET_VERSION)])
+        check_model(model)
+        return model
+
+    onnx_model = create_onnx_model()
+
+    ref = ReferenceEvaluator(onnx_model)
+    onnx_result = ref.run(None, {"X": x_arr})[0]
+
+    with Context() as ctx, Location.unknown():
+        mlir_module = import_from_onnx(onnx_model, ctx)
+        mlir_module.operation.verify()
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        res_arr = np.zeros(output_shape, dtype=np_dtype)
+        outputs = runner(llvm_module, "main", [x_arr], [res_arr])
+
+        np.testing.assert_allclose(onnx_result, outputs[0], rtol=1e-5, atol=1e-5)
