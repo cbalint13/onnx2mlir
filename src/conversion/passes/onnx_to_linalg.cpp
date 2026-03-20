@@ -109,7 +109,7 @@ struct ONNXToLINALGLowering : public mlir::ConversionPattern {
       return OnnxToLinalg_WhereOp(op, rewriter);
     }
 
-    return mlir::success();
+    return mlir::failure();
   }
 };
 
@@ -129,13 +129,6 @@ struct LowerONNXToLINALGPass
   void runOnOperation() override {
     mlir::ModuleOp module = getOperation();
     mlir::MLIRContext *ctx = &getContext();
-
-    // enlist all operations by name
-    std::set<std::string> onnx_op_names;
-    for (mlir::RegisteredOperationName opName :
-         ctx->getRegisteredOperationsByDialect("onnx")) {
-      onnx_op_names.insert(opName.getStringRef().str());
-    }
     mlir::ConversionTarget target(*ctx);
 
     // legal dialects
@@ -148,14 +141,11 @@ struct LowerONNXToLINALGPass
     // illegal dialects
     target.addIllegalDialect<onnx::OnnxDialect>();
 
-    // illegal operations (must convert)
-    // target.addIllegalOp<onnx::ConstantOp>();
-    // target.addIllegalOp<onnx::AbsOp>();
-
     // legal operations
     target.addLegalOp<mlir::func::FuncOp>();
     target.addLegalOp<mlir::func::ReturnOp>();
-    // allow onnx NoneType (postpone rewrite)
+
+    // allow onnx.Constant -> NoneType (postpone rewrite)
     target.addDynamicallyLegalDialect<onnx::OnnxDialect>(
         [](mlir::Operation *op) {
           if (opNameBeginsWith(op->getName().getStringRef(), "Constant")) {
@@ -171,10 +161,10 @@ struct LowerONNXToLINALGPass
 
     mlir::TypeConverter typeConverter;
 
-    // Default type
+    // default identity type (Type -> Type)
     typeConverter.addConversion([](mlir::Type type) { return type; });
 
-    // Values <- source
+    // cast target to source (New -> Old)
     typeConverter.addSourceMaterialization(
         [&](mlir::OpBuilder builder, mlir::Type resType,
             mlir::ValueRange inputs, mlir::Location loc) -> mlir::Value {
@@ -200,7 +190,7 @@ struct LowerONNXToLINALGPass
           return nullptr;
         });
 
-    // Values -> target
+    // mark type conversion as unrealized (Old -> New)
     typeConverter.addTargetMaterialization(
         [&](mlir::OpBuilder builder, mlir::Type resultType,
             mlir::ValueRange inputs,
@@ -214,7 +204,7 @@ struct LowerONNXToLINALGPass
     // create a set of patterns.
     mlir::RewritePatternSet patterns(ctx);
 
-    // add Onnx ConvOp to LINALG ConvOp pattern
+    // add type converter
     patterns.add<ONNXToLINALGLowering>(typeConverter, ctx);
 
     // apply the partial conversion pattern
