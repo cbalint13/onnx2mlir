@@ -163,7 +163,9 @@ add_custom_target(lint
 add_custom_target(tidy
   COMMAND env run-clang-tidy -quiet
     -p ${CMAKE_BINARY_DIR}
+    -checks='misc-unused-includes,llvm-*,-llvmlibc-*,-llvm-else-after*'
     -header-filter='^include/.*'
+    '^${CMAKE_SOURCE_DIR}/src'
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   COMMENT "Running clang-tidy check..."
 )

@@ -43,7 +43,7 @@ namespace onnx2mlir::dialect {
 mlir::LogicalResult OnnxToLinalg_ConvOp(mlir::Operation *op,
                                         mlir::PatternRewriter &rewriter) {
   auto loc = op->getLoc();
-  auto context = op->getContext();
+  auto *ctx = op->getContext();
   auto opName = op->getName().getStringRef();
 
   // Get operands
@@ -146,13 +146,13 @@ mlir::LogicalResult OnnxToLinalg_ConvOp(mlir::Operation *op,
       mlir::AffineMap::get(7, 0,
                            {dN, dC, dOH * strides[0] + dKH * dilations[0],
                             dOW * strides[1] + dKW * dilations[1]},
-                           context);
+                           ctx);
 
   // Weight Map: [f, c, kh, kw]
-  auto wMap = mlir::AffineMap::get(7, 0, {dF, dC, dKH, dKW}, context);
+  auto wMap = mlir::AffineMap::get(7, 0, {dF, dC, dKH, dKW}, ctx);
 
   // Output Map: [n, f, oh, ow]
-  auto outMap = mlir::AffineMap::get(7, 0, {dN, dF, dOH, dOW}, context);
+  auto outMap = mlir::AffineMap::get(7, 0, {dN, dF, dOH, dOW}, ctx);
 
   mlir::Value convRes =
       mlir::linalg::GenericOp::create(
@@ -173,8 +173,7 @@ mlir::LogicalResult OnnxToLinalg_ConvOp(mlir::Operation *op,
     llvm::SmallVector<mlir::utils::IteratorType> biasIters(
         4, mlir::utils::IteratorType::parallel);
     // Bias [F] mapped to Output [N, F, OH, OW] via dim 1
-    auto bMap =
-        mlir::AffineMap::get(4, 0, {rewriter.getAffineDimExpr(1)}, context);
+    auto bMap = mlir::AffineMap::get(4, 0, {rewriter.getAffineDimExpr(1)}, ctx);
     auto rMap = rewriter.getMultiDimIdentityMap(4);
 
     finalResult = mlir::linalg::GenericOp::create(
@@ -190,7 +189,7 @@ mlir::LogicalResult OnnxToLinalg_ConvOp(mlir::Operation *op,
   }
 
   // Set transform tag for downstream optimization
-  auto finalOp = finalResult.getDefiningOp();
+  auto *finalOp = finalResult.getDefiningOp();
   if (finalOp)
     finalOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
 

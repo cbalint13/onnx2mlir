@@ -27,7 +27,6 @@
  * \brief Onnx dialect attributes implementation
  */
 
-#include <llvm/ADT/TypeSwitch.h>
 #include <mlir/AsmParser/AsmParser.h>
 #include <mlir/IR/DialectImplementation.h>
 

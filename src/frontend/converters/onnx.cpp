@@ -38,7 +38,7 @@ namespace onnx2mlir::frontend {
 
 void ONNXConverter::convert(mlir::ModuleOp *module) {
   // context
-  auto ctx = module->getContext();
+  auto *ctx = module->getContext();
 
   // diagnostics handler
   llvm::SourceMgr srcMgr;

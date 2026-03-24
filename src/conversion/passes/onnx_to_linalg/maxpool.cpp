@@ -163,10 +163,10 @@ OnnxToLinalg_MaxPoolOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
     iterators.push_back(mlir::utils::IteratorType::reduction); // KH, KW
   }
 
-  auto context = rewriter.getContext();
+  auto *ctx = rewriter.getContext();
   // We need 6 dimensions for NCHW + KH, KW
   mlir::AffineExpr dN, dC, dOH, dOW, dKH, dKW;
-  mlir::bindDims(context, dN, dC, dOH, dOW, dKH, dKW);
+  mlir::bindDims(ctx, dN, dC, dOH, dOW, dKH, dKW);
 
   // Input Map:
   // [n, c, oh * stride_h + kh * dilation_h, ow * stride_w + kw * dilation_w]
@@ -174,13 +174,13 @@ OnnxToLinalg_MaxPoolOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
       mlir::AffineMap::get(6, 0,
                            {dN, dC, dOH * strides[0] + dKH * dilations[0],
                             dOW * strides[1] + dKW * dilations[1]},
-                           context);
+                           ctx);
 
   // Kernel Map (dummy for reduction shape): [kh, kw]
-  auto kernelMap = mlir::AffineMap::get(6, 0, {dKH, dKW}, context);
+  auto kernelMap = mlir::AffineMap::get(6, 0, {dKH, dKW}, ctx);
 
   // Output Map: [n, c, oh, ow]
-  auto outputMap = mlir::AffineMap::get(6, 0, {dN, dC, dOH, dOW}, context);
+  auto outputMap = mlir::AffineMap::get(6, 0, {dN, dC, dOH, dOW}, ctx);
 
   // We need a tensor that represents the kernel shape for the reduction loops
   auto kernelTensor = mlir::tensor::EmptyOp::create(

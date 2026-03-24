@@ -296,12 +296,10 @@ OnnxToLinalg_ArithUnaryOps(mlir::Operation *op,
             cndNeg = mlir::arith::CmpIOp::create(
                 nest, loc, mlir::arith::CmpIPredicate::slt, args[0], c0);
           }
-          auto resIfPos = mlir::arith::SelectOp::create(
-              nest, loc, cndPos, cPos1, /*else_value=*/nullptr);
-          auto resIfNonPos =
+          auto resIfNeg =
               mlir::arith::SelectOp::create(nest, loc, cndNeg, cNeg1, c0);
-          outOp = mlir::arith::SelectOp::create(nest, loc, cndPos, cPos1,
-                                                resIfNonPos);
+          outOp =
+              mlir::arith::SelectOp::create(nest, loc, cndPos, cPos1, resIfNeg);
         }
         if (opNameBeginsWith(opName, "Sin"))
           outOp = mlir::math::SinOp::create(nest, loc, args[0]);
@@ -359,7 +357,7 @@ OnnxToLinalg_ArithUnaryOps(mlir::Operation *op,
 
 mlir::LogicalResult OnnxToLinalg_SoftmaxOp(mlir::Operation *op,
                                            mlir::PatternRewriter &rewriter) {
-  auto ctx = rewriter.getContext();
+  auto *ctx = rewriter.getContext();
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
@@ -417,7 +415,6 @@ mlir::LogicalResult OnnxToLinalg_SoftmaxOp(mlir::Operation *op,
       reduce_outputMapExprs.push_back(rewriter.getAffineDimExpr(i));
     }
   }
-  auto reduceType = mlir::RankedTensorType::get(reduce_shape, inpElmType);
 
   // affine maps for broadcasting
   mlir::AffineMap reduce_broadcast_map =
@@ -512,7 +509,7 @@ mlir::LogicalResult OnnxToLinalg_SoftmaxOp(mlir::Operation *op,
 
 mlir::LogicalResult OnnxToLinalg_LogSoftmaxOp(mlir::Operation *op,
                                               mlir::PatternRewriter &rewriter) {
-  auto ctx = rewriter.getContext();
+  auto *ctx = rewriter.getContext();
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
@@ -570,7 +567,6 @@ mlir::LogicalResult OnnxToLinalg_LogSoftmaxOp(mlir::Operation *op,
       reduce_outputMapExprs.push_back(rewriter.getAffineDimExpr(i));
     }
   }
-  auto reduceType = mlir::RankedTensorType::get(reduce_shape, inpElmType);
 
   // affine map for broadcasting
   mlir::AffineMap reduce_broadcast_map =
@@ -670,7 +666,7 @@ mlir::LogicalResult OnnxToLinalg_LogSoftmaxOp(mlir::Operation *op,
 
 mlir::LogicalResult OnnxToLinalg_HardmaxOp(mlir::Operation *op,
                                            mlir::PatternRewriter &rewriter) {
-  auto ctx = rewriter.getContext();
+  auto *ctx = rewriter.getContext();
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
@@ -726,7 +722,6 @@ mlir::LogicalResult OnnxToLinalg_HardmaxOp(mlir::Operation *op,
   }
 
   // affine maps for broadcasting
-  auto reduceType = mlir::RankedTensorType::get(reduce_shape, inpElmType);
   mlir::AffineMap reduce_broadcast_map =
       mlir::AffineMap::get(rank, 0, reduce_outputMapExprs, ctx);
 

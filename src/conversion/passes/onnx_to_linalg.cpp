@@ -190,7 +190,6 @@ struct LowerONNXToLINALGPass
     typeConverter.addSourceMaterialization(
         [&](mlir::OpBuilder &builder, mlir::Type resType,
             mlir::ValueRange inputs, mlir::Location loc) -> mlir::Value {
-          mlir::Type signlessResType = getSignlessType(resType);
           return mlir::UnrealizedConversionCastOp::create(builder, loc, resType,
                                                           inputs)
               .getResult(0);
