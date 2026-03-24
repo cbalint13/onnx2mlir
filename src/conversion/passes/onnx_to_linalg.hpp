@@ -60,8 +60,9 @@ mlir::LogicalResult OnnxToLinalg_CompBinaryOps(mlir::Operation *op,
                                                mlir::PatternRewriter &rewriter);
 
 // onnx.Constant
-mlir::LogicalResult OnnxToLinalg_ConstantOp(mlir::Operation *op,
-                                            mlir::PatternRewriter &rewriter);
+mlir::LogicalResult
+OnnxToLinalg_ConstantOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                        const mlir::TypeConverter *typeConverter);
 
 // onnx.Conv
 mlir::LogicalResult OnnxToLinalg_ConvOp(mlir::Operation *op,
@@ -84,8 +85,9 @@ mlir::LogicalResult OnnxToLinalg_LogSoftmaxOp(mlir::Operation *op,
                                               mlir::PatternRewriter &rewriter);
 
 // onnx.Maxpool
-mlir::LogicalResult OnnxToLinalg_MaxPoolOp(mlir::Operation *op,
-                                           mlir::PatternRewriter &rewriter);
+mlir::LogicalResult
+OnnxToLinalg_MaxPoolOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                       const mlir::TypeConverter *typeConverter);
 
 // onnx.Softmax
 mlir::LogicalResult OnnxToLinalg_SoftmaxOp(mlir::Operation *op,

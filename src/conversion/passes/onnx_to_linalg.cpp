@@ -86,7 +86,7 @@ struct ONNXToLINALGLowering : public mlir::ConversionPattern {
         })) { // clang-format on
       return OnnxToLinalg_CompBinaryOps(op, rewriter);
     } else if (opNameBeginsWith(opName, "Constant")) {
-      return OnnxToLinalg_ConstantOp(op, rewriter);
+      return OnnxToLinalg_ConstantOp(op, rewriter, typeConverter);
     } else if (opNameBeginsWith(opName, "Conv")) {
       return OnnxToLinalg_ConvOp(op, rewriter);
     } else if (opNameBeginsWith(opName, "Flatten")) {
@@ -98,7 +98,7 @@ struct ONNXToLINALGLowering : public mlir::ConversionPattern {
     } else if (opNameBeginsWith(opName, "LogSoftmax")) {
       return OnnxToLinalg_LogSoftmaxOp(op, rewriter);
     } else if (opNameBeginsWith(opName, "MaxPool")) {
-      return OnnxToLinalg_MaxPoolOp(op, rewriter);
+      return OnnxToLinalg_MaxPoolOp(op, rewriter, typeConverter);
     } else if (opNameBeginsWith(opName, "Softmax")) {
       return OnnxToLinalg_SoftmaxOp(op, rewriter);
     } else if (opNameBeginsWith(opName, "Squeeze")) {
@@ -123,6 +123,7 @@ struct LowerONNXToLINALGPass
 
   void getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<mlir::arith::ArithDialect>();
+    registry.insert<mlir::func::FuncDialect>();
     registry.insert<mlir::linalg::LinalgDialect>();
     registry.insert<mlir::tensor::TensorDialect>();
     registry.insert<onnx::OnnxDialect>();
@@ -163,40 +164,46 @@ struct LowerONNXToLINALGPass
 
     mlir::TypeConverter typeConverter;
 
-    // default identity type (Type -> Type)
-    typeConverter.addConversion([](mlir::Type type) { return type; });
+    // default mappings (Type -> Type)
+    typeConverter.addConversion([](mlir::Type type) -> mlir::Type {
+      if (!type)
+        return nullptr;
+      // scalar integer type convert (ui/si -> signless)
+      if (auto intType = mlir::dyn_cast<mlir::IntegerType>(type)) {
+        if (!intType.isSignless()) {
+          return mlir::IntegerType::get(type.getContext(), intType.getWidth());
+        }
+      }
+      // shaped integer type convert (ui/si -> signless)
+      if (auto shapedType = mlir::dyn_cast<mlir::ShapedType>(type)) {
+        mlir::Type elementType = shapedType.getElementType();
+        mlir::Type signlessElt = getSignlessType(elementType);
+        if (signlessElt != elementType) {
+          return shapedType.clone(signlessElt);
+        }
+      }
+      // default
+      return type;
+    });
 
-    // cast target to source (New -> Old)
+    // mark type conversion as unrealized (New -> Old)
     typeConverter.addSourceMaterialization(
-        [&](mlir::OpBuilder builder, mlir::Type resType,
+        [&](mlir::OpBuilder &builder, mlir::Type resType,
             mlir::ValueRange inputs, mlir::Location loc) -> mlir::Value {
-          if (inputs.size() != 1) {
-            return nullptr;
-          }
-
-          mlir::Value inp = inputs[0];
-          mlir::Type inpType = inp.getType();
-          auto inpSType = mlir::dyn_cast<mlir::ShapedType>(inpType);
-          auto resSType = mlir::dyn_cast<mlir::ShapedType>(resType);
-
-          // dynamic source and static target
-          if (inpSType && resSType && !inpSType.hasStaticShape() &&
-              resSType.hasStaticShape()) {
-            // same rank & element type
-            if ((inpSType.getRank() == resSType.getRank()) &&
-                (inpSType.getElementType() == resSType.getElementType())) {
-              return mlir::tensor::CastOp::create(builder, loc, resType, inp);
-            }
-          }
-
-          return nullptr;
+          mlir::Type signlessResType = getSignlessType(resType);
+          return mlir::UnrealizedConversionCastOp::create(builder, loc, resType,
+                                                          inputs)
+              .getResult(0);
         });
 
     // mark type conversion as unrealized (Old -> New)
     typeConverter.addTargetMaterialization(
-        [&](mlir::OpBuilder builder, mlir::Type resultType,
-            mlir::ValueRange inputs,
-            mlir::Location loc) -> mlir::Value { return nullptr; });
+        [&](mlir::OpBuilder &builder, mlir::Type resType,
+            mlir::ValueRange inputs, mlir::Location loc) -> mlir::Value {
+          return mlir::UnrealizedConversionCastOp::create(builder, loc, resType,
+                                                          inputs)
+              .getResult(0);
+        });
 
     /*
      * Rewriter patterns

@@ -29,32 +29,50 @@
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/IR/PatternMatch.h>
+#include <mlir/Transforms/DialectConversion.h>
 
-#include "onnx2mlir/dialect/onnx/Onnx.hpp"
+#include "onnx2mlir/conversion/onnx_passes.hpp"
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_ConstantOp(mlir::Operation *op,
-                                            mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_ConstantOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                        const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
+
+  // Get legit result type
+  auto resType = typeConverter->convertType(op->getResult(0));
+
   // Cannot handle NoneType return
-  if (mlir::isa<mlir::NoneType>(op->getResult(0).getType())) {
+  if (mlir::isa<mlir::NoneType>(resType)) {
     return mlir::emitError(loc,
                            "onnx.Constant with 'NoneType' is not supported");
   }
-
+  // Get the 'value' attribute
   mlir::Attribute valueAttr = op->getAttr("value");
-  auto elemValueAttr = mlir::dyn_cast_or_null<mlir::ElementsAttr>(valueAttr);
+  auto typedAttr = mlir::dyn_cast_or_null<mlir::TypedAttr>(valueAttr);
 
   // Cannot handle empty tensor
-  if (!elemValueAttr) {
+  if (!typedAttr) {
     return mlir::emitError(
         loc, "onnx.Constant without a valid tensor 'value' attribute");
   }
 
+  bool isChanged = false;
+  // Match value type to result type
+  if (resType != typedAttr.getType()) {
+    isChanged = true;
+    typedAttr = changeAttrType(valueAttr, resType);
+  }
+
   // Create the new arithmetic constant op
-  rewriter.replaceOpWithNewOp<mlir::arith::ConstantOp>(
-      op, elemValueAttr.getType(), elemValueAttr);
+  auto constOp = rewriter.replaceOpWithNewOp<mlir::arith::ConstantOp>(
+      op, resType, typedAttr);
+
+  if (isChanged) {
+    // preserve metadata
+    constOp->setAttr("onnx_value", valueAttr);
+  }
 
   return mlir::success();
 }

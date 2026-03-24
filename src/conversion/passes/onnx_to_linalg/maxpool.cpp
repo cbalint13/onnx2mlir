@@ -36,33 +36,42 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Support/LogicalResult.h>
 
-#include "onnx2mlir/common/onnx.hpp"
-#include "onnx2mlir/dialect/onnx/Onnx.hpp"
+#include "onnx2mlir/conversion/onnx_passes.hpp"
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_MaxPoolOp(mlir::Operation *op,
-                                           mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_MaxPoolOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                       const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
   mlir::Value input = op->getOperand(0);
   mlir::Value result = op->getResult(0);
 
-  auto inputType = mlir::dyn_cast<mlir::RankedTensorType>(input.getType());
+  auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(input.getType());
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(result.getType());
 
-  if (!inputType || !resType) {
+  if (!inpType || !resType) {
     return mlir::emitError(loc, opName + " operand must be ranked tensor type");
   }
 
-  auto elementType = inputType.getElementType();
-  int64_t rank = inputType.getRank();
+  auto elementType = typeConverter->convertType(inpType.getElementType());
+  int64_t rank = inpType.getRank();
   int64_t spatialRank = rank - 2;
 
   if (spatialRank != 2) {
     return mlir::emitError(
         loc, opName + " only 2D (NCHW) spatial pooling is supported");
+  }
+
+  // Signless integer for arith/linalg
+  if (elementType != inpType.getElementType()) {
+    auto signlessTType =
+        mlir::RankedTensorType::get(inpType.getShape(), elementType);
+    input = mlir::UnrealizedConversionCastOp::create(rewriter, loc,
+                                                     signlessTType, input)
+                .getResult(0);
   }
 
   // Extract attributes
@@ -90,10 +99,17 @@ mlir::LogicalResult OnnxToLinalg_MaxPoolOp(mlir::Operation *op,
     initValue = mlir::arith::ConstantOp::create(
         rewriter, loc, rewriter.getFloatAttr(elementType, minFloat));
   } else {
-    auto minInt =
-        llvm::APInt::getSignedMinValue(elementType.getIntOrFloatBitWidth());
-    initValue = mlir::arith::ConstantOp::create(
-        rewriter, loc, rewriter.getIntegerAttr(elementType, minInt));
+    // Handle init using original input signedness
+    auto origInt = mlir::dyn_cast<mlir::IntegerType>(inpType.getElementType());
+    if (origInt && origInt.isUnsigned()) {
+      initValue = mlir::arith::ConstantOp::create(
+          rewriter, loc, rewriter.getIntegerAttr(elementType, 0));
+    } else {
+      auto minInt =
+          llvm::APInt::getSignedMinValue(elementType.getIntOrFloatBitWidth());
+      initValue = mlir::arith::ConstantOp::create(
+          rewriter, loc, rewriter.getIntegerAttr(elementType, minInt));
+    }
   }
 
   // Handle Padding
@@ -131,6 +147,8 @@ mlir::LogicalResult OnnxToLinalg_MaxPoolOp(mlir::Operation *op,
   }
 
   // Output buffer
+  auto signlessResType =
+      mlir::RankedTensorType::get(resType.getShape(), elementType);
   auto emptyTensor = mlir::tensor::EmptyOp::create(
       rewriter, loc, resType.getShape(), elementType);
   auto fillOp = mlir::linalg::FillOp::create(rewriter, loc, initValue,
@@ -150,8 +168,8 @@ mlir::LogicalResult OnnxToLinalg_MaxPoolOp(mlir::Operation *op,
   mlir::AffineExpr dN, dC, dOH, dOW, dKH, dKW;
   mlir::bindDims(context, dN, dC, dOH, dOW, dKH, dKW);
 
-  // Input Map: [n, c, oh * stride_h + kh * dilation_h, ow * stride_w + kw *
-  // dilation_w]
+  // Input Map:
+  // [n, c, oh * stride_h + kh * dilation_h, ow * stride_w + kw * dilation_w]
   auto inputMap =
       mlir::AffineMap::get(6, 0,
                            {dN, dC, dOH * strides[0] + dKH * dilations[0],
@@ -172,7 +190,7 @@ mlir::LogicalResult OnnxToLinalg_MaxPoolOp(mlir::Operation *op,
                                                      outputMap};
 
   auto genericOp = mlir::linalg::GenericOp::create(
-      rewriter, loc, resType,
+      rewriter, loc, signlessResType,
       mlir::ValueRange{paddedInput, kernelTensor.getResult()},
       mlir::ValueRange{outBuff}, indexingMaps, iterators,
       [&](mlir::OpBuilder &nest, mlir::Location l, mlir::ValueRange args) {
@@ -182,14 +200,30 @@ mlir::LogicalResult OnnxToLinalg_MaxPoolOp(mlir::Operation *op,
         if (mlir::isa<mlir::FloatType>(elementType)) {
           maxVal = mlir::arith::MaximumFOp::create(nest, l, inputVal, outVal);
         } else {
-          maxVal = mlir::arith::MaxSIOp::create(nest, l, inputVal, outVal);
+          auto origInt =
+              mlir::dyn_cast<mlir::IntegerType>(inpType.getElementType());
+          if (origInt && origInt.isUnsigned()) {
+            maxVal = mlir::arith::MaxUIOp::create(nest, l, inputVal, outVal);
+          } else {
+            maxVal = mlir::arith::MaxSIOp::create(nest, l, inputVal, outVal);
+          }
         }
         mlir::linalg::YieldOp::create(nest, l, maxVal);
       });
 
   genericOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
 
-  rewriter.replaceOp(op, genericOp->getResults());
+  mlir::Value output = genericOp.getResult(0);
+
+  // Cast back to signedness
+  if (output.getType() != resType) {
+    output =
+        mlir::UnrealizedConversionCastOp::create(rewriter, loc, resType, output)
+            .getResult(0);
+  }
+
+  rewriter.replaceOp(op, output);
+
   return mlir::success();
 }
 

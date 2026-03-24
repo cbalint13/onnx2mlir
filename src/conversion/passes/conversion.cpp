@@ -27,6 +27,7 @@
  * \brief Common conversion helper functions
  */
 
+#include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinTypes.h>
 
 #include <algorithm>
@@ -89,6 +90,65 @@ mlir::RankedTensorType getBroadcastShape(mlir::RankedTensorType lhsType,
   }
 
   return mlir::RankedTensorType::get(resultShape, lhsType.getElementType());
+}
+
+/**
+ * Helper to ensure a type is signless for the arith dialect.
+ * Converts unsigned/signed to signless recursively for tensors.
+ */
+mlir::Type getSignlessType(mlir::Type type) {
+  if (!type)
+    return nullptr;
+
+  // handle scalars
+  if (auto intType = mlir::dyn_cast<mlir::IntegerType>(type)) {
+    if (!intType.isSignless()) {
+      return mlir::IntegerType::get(type.getContext(), intType.getWidth());
+    }
+    return type;
+  }
+
+  // handle shaped types
+  if (auto shapedType = mlir::dyn_cast<mlir::ShapedType>(type)) {
+    mlir::Type elementType = shapedType.getElementType();
+    mlir::Type signlessElt = getSignlessType(elementType);
+
+    // recreate on change
+    if (signlessElt != elementType) {
+      return shapedType.clone(signlessElt);
+    }
+  }
+
+  return type;
+}
+
+/**
+ * Public helper to change attribute signedness
+ * from a potentially signed/unsigned attribute.
+ */
+mlir::TypedAttr changeAttrType(mlir::Attribute attr, mlir::Type toType) {
+  if (!attr || !toType)
+    return nullptr;
+
+  if (auto denseAttr = mlir::dyn_cast<mlir::DenseElementsAttr>(attr)) {
+    // element types mismatch, bitcast the data
+    auto targetEltType = mlir::cast<mlir::ShapedType>(toType).getElementType();
+    if (denseAttr.getElementType() != targetEltType) {
+      return mlir::cast<mlir::TypedAttr>(denseAttr.bitcast(targetEltType));
+    }
+    return denseAttr;
+  }
+
+  if (auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(attr)) {
+    // scalar types mismatch, re-wrap the value
+    if (intAttr.getType() != toType) {
+      return mlir::IntegerAttr::get(toType, intAttr.getValue());
+    }
+    return intAttr;
+  }
+
+  // default
+  return mlir::dyn_cast<mlir::TypedAttr>(attr);
 }
 
 } // namespace onnx2mlir::dialect

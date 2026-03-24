@@ -64,6 +64,13 @@ bool opNameBeginsWith(const llvm::StringRef &opName,
 mlir::RankedTensorType getBroadcastShape(mlir::RankedTensorType lhsType,
                                          mlir::RankedTensorType rhsType);
 
+mlir::Type getSignlessType(mlir::Type type);
+
+mlir::TypedAttr changeAttrType(mlir::Attribute attr, mlir::Type dstType);
+
+mlir::Value createArithConstant(mlir::OpBuilder &builder, mlir::Location loc,
+                                mlir::Type type, mlir::Attribute attr);
+
 } // namespace onnx2mlir::dialect
 
 #endif // INCLUDE_ONNX2MLIR_CONVERSION_ONNX_PASSES_HPP_
