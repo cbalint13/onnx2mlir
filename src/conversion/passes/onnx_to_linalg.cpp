@@ -40,7 +40,9 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "onnx2mlir/common/onnx.hpp"
 #include "onnx2mlir/conversion/onnx_passes.hpp"
@@ -50,65 +52,85 @@
 
 namespace onnx2mlir::dialect {
 
+using LoweringFunc = std::function<mlir::LogicalResult(
+    mlir::Operation *, mlir::PatternRewriter &, const mlir::TypeConverter *)>;
+
+template <typename Func>
+static void registerOps(const std::vector<std::string> &opNames,
+                        std::unordered_map<std::string, LoweringFunc> &map,
+                        Func func) {
+  for (const auto &opname : opNames) {
+    map[opname] = [func](mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                         const mlir::TypeConverter *typconv) {
+      if constexpr (std::is_invocable_v<Func, mlir::Operation *,
+                                        mlir::PatternRewriter &,
+                                        const mlir::TypeConverter *>) {
+        return func(op, rewriter, typconv);
+      } else {
+        return func(op, rewriter);
+      }
+    };
+  }
+}
+
+static const std::unordered_map<std::string, LoweringFunc> &getLoweringMap() {
+  static const auto loweringMap = [] {
+    std::unordered_map<std::string, LoweringFunc> map;
+    registerOps( // clang-format off
+                {"Add",      "Sub",        "Mul",       "Div",
+                 "Pow"}, map,
+        OnnxToLinalg_ArithBinaryOps); // clang-format on
+    registerOps( // clang-format off
+                {"Abs",      "Acos",       "Acosh",     "Asin",
+                 "Asinh",    "Atan",       "Atanh",     "Ceil",
+                 "Cos",      "Cosh",       "Elu",       "Erf",
+                 "Exp",      "Floor",      "HardSwish", "Identity",
+                 "IsInf",    "IsNaN",      "Log",       "Neg",
+                 "Not",      "Reciprocal", "Relu",      "Round",
+                 "Sign",     "Sigmoid",    "Sin",       "Sinh",
+                 "Softplus", "Softsign",   "Sqrt",      "Tan",
+                 "Tanh"}, map,
+        OnnxToLinalg_ArithUnaryOps);  // clang-format on
+    registerOps({"Cast"}, map, OnnxToLinalg_CastOp);
+    registerOps( // clang-format off
+                {"Equal",    "Greater",    "GreatherOrEqual",
+                 "Less",     "LessOrEqual"}, map,
+        OnnxToLinalg_CompBinaryOps); // clang-format on
+    registerOps({"Constant"}, map, OnnxToLinalg_ConstantOp);
+    registerOps({"Conv"}, map, OnnxToLinalg_ConvOp);
+    registerOps({"Flatten"}, map, OnnxToLinalg_FlattenOp);
+    registerOps({"Gemm"}, map, OnnxToLinalg_GemmOp);
+    registerOps({"Hardmax"}, map, OnnxToLinalg_HardmaxOp);
+    registerOps({"LogSoftmax"}, map, OnnxToLinalg_LogSoftmaxOp);
+    registerOps({"MaxPool"}, map, OnnxToLinalg_MaxPoolOp);
+    registerOps({"Softmax"}, map, OnnxToLinalg_SoftmaxOp);
+    registerOps({"Squeeze"}, map, OnnxToLinalg_SqueezeOp);
+    registerOps({"Transpose"}, map, OnnxToLinalg_TransposeOp);
+    registerOps({"Unsqueeze"}, map, OnnxToLinalg_UnsqueezeOp);
+    registerOps({"Where"}, map, OnnxToLinalg_WhereOp);
+    return map;
+  }();
+
+  return loweringMap;
+}
+
 struct ONNXToLINALGLowering : public mlir::ConversionPattern {
   explicit ONNXToLINALGLowering(mlir::TypeConverter &typeConverter,
                                 mlir::MLIRContext *ctx)
       : mlir::ConversionPattern(typeConverter,
                                 mlir::Pattern::MatchAnyOpTypeTag(),
                                 /*PatternBenefit=*/true, ctx) {}
-
   mlir::LogicalResult
   matchAndRewrite(mlir::Operation *op, mlir::ArrayRef<mlir::Value> operands,
                   mlir::ConversionPatternRewriter &rewriter) const override {
-    // triage by onnx operation names
-    llvm::StringRef opName = op->getName().getStringRef();
-
-    if (opNameBeginsWith(opName, {"Add", "Sub", "Mul", "Div", "Pow"})) {
-      return OnnxToLinalg_ArithBinaryOps(op, rewriter);
-    } else if (opNameBeginsWith( // clang-format off
-        opName,
-        {"Abs",      "Acos",       "Acosh",     "Asin",
-         "Asinh",    "Atan",       "Atanh",     "Ceil",
-         "Cos",      "Cosh",       "Elu",       "Erf",
-         "Exp",      "Floor",      "HardSwish", "Identity",
-         "IsInf",    "IsNaN",      "Log",       "Neg",
-         "Not",      "Reciprocal", "Relu",      "Round",
-         "Sign",     "Sigmoid",    "Sin",       "Sinh",
-         "Softplus", "Softsign",   "Sqrt",      "Tan",
-         "Tanh"
-        })) { // clang-format on
-      return OnnxToLinalg_ArithUnaryOps(op, rewriter);
-    } else if (opNameBeginsWith(opName, "Cast")) {
-      return OnnxToLinalg_CastOp(op, rewriter);
-    } else if (opNameBeginsWith( // clang-format off
-        opName, {
-        "Equal", "Greater", "GreatherOrEqual", "Less", "LessOrEqual",
-        })) { // clang-format on
-      return OnnxToLinalg_CompBinaryOps(op, rewriter);
-    } else if (opNameBeginsWith(opName, "Constant")) {
-      return OnnxToLinalg_ConstantOp(op, rewriter, typeConverter);
-    } else if (opNameBeginsWith(opName, "Conv")) {
-      return OnnxToLinalg_ConvOp(op, rewriter);
-    } else if (opNameBeginsWith(opName, "Flatten")) {
-      return OnnxToLinalg_FlattenOp(op, rewriter);
-    } else if (opNameBeginsWith(opName, "Gemm")) {
-      return OnnxToLinalg_GemmOp(op, rewriter);
-    } else if (opNameBeginsWith(opName, "Hardmax")) {
-      return OnnxToLinalg_HardmaxOp(op, rewriter);
-    } else if (opNameBeginsWith(opName, "LogSoftmax")) {
-      return OnnxToLinalg_LogSoftmaxOp(op, rewriter);
-    } else if (opNameBeginsWith(opName, "MaxPool")) {
-      return OnnxToLinalg_MaxPoolOp(op, rewriter, typeConverter);
-    } else if (opNameBeginsWith(opName, "Softmax")) {
-      return OnnxToLinalg_SoftmaxOp(op, rewriter);
-    } else if (opNameBeginsWith(opName, "Squeeze")) {
-      return OnnxToLinalg_SqueezeOp(op, rewriter);
-    } else if (opNameBeginsWith(opName, "Transpose")) {
-      return OnnxToLinalg_TransposeOp(op, rewriter);
-    } else if (opNameBeginsWith(opName, "Unsqueeze")) {
-      return OnnxToLinalg_UnsqueezeOp(op, rewriter);
-    } else if (opNameBeginsWith(opName, "Where")) {
-      return OnnxToLinalg_WhereOp(op, rewriter);
+    const llvm::StringRef opName = op->getName().getStringRef();
+    // lookup op register catalog
+    const auto &map = getLoweringMap();
+    for (const auto &[name, func] : map) {
+      if (opNameBeginsWith(opName, name)) {
+        // lower the named op
+        return func(op, rewriter, typeConverter);
+      }
     }
 
     return mlir::failure();
@@ -238,8 +260,13 @@ std::unique_ptr<mlir::Pass> createLowerONNXToLINALGPass() {
   return std::make_unique<onnx2mlir::dialect::LowerONNXToLINALGPass>();
 }
 
-void registerLowerONNXToLINALGPass() {
+std::vector<std::string> registerLowerONNXToLINALGPass() {
   mlir::PassRegistration<onnx2mlir::dialect::LowerONNXToLINALGPass>();
+  std::vector<std::string> supportedOps;
+  const auto &map = getLoweringMap();
+  for (const auto &[name, func] : map)
+    supportedOps.push_back(name);
+  return supportedOps;
 }
 
 } // namespace onnx2mlir::dialect

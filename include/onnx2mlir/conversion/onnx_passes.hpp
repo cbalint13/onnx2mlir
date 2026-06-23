@@ -48,7 +48,7 @@ namespace onnx2mlir::dialect {
  *  Onnx to Linalg
  *
  */
-void registerLowerONNXToLINALGPass();
+std::vector<std::string> registerLowerONNXToLINALGPass();
 std::unique_ptr<mlir::Pass> createLowerONNXToLINALGPass();
 
 /*

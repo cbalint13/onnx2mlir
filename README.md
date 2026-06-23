@@ -64,36 +64,37 @@ module {
 
 ---------------------------------------------------------------------------------------------------------
 
-## Status
+
+## About
 
 #### Overview
   * API design with booth: **python** (first) and **c++**
-  * ONNX2MLIR ships reusable library for any ML/MLC project
-  * ONNX2MLIR ships standalone tools as graph optimizers
-  
+  * ONNX2MLIR ships as reusable library for any ML/MLC project
+  * ONNX2MLIR ships with standalone tools as graph optimizers
+
 #### The ONNX dialect
   * MLIR Onnx dialect is **self generated** out of onnx internal schema
-  * MLIR Onnx dialect covers all ops including their **backward versions**
+  * MLIR Onnx dialect covers the ops including historic **backward versions**
   * MLIR Onnx dialect is fully **assembled**, **parametrized** and **tracked**
-  * MLIR Onnx dialect ops are **test covered** assureing no future regressions
+  * MLIR Onnx dialect ops are **test covered** ensurring specs compliance
 
 #### The MLIR Linalg lowering backend
   * MLIR Onnx dialect gets lowered to **Linalg** (**TOSA** is considered WiP)
   * MLIR Linalg uses **Transform** dialect **tags** for further optimizations
-  * MLIR lowered Ops are **covered by tests** against original onnx evaluators
+  * MLIR lowered ops are **test covered** against original onnx evaluators
 
-#### The LLVM executor runtime
+#### The LLVM runtime executor
   * The executor runtime is **python first** and can lower via LLVM
   * The executor runtime use **reconfigurable passes** on lowering pipeline
   * The executor runtime can emmit reusable DSO for **any target machine**
 
 ---------------------------------------------------------------------------------------------------------
 
-## WiP
-  * Coverage of all ONNX ops lowering with on-line auto-generated status table
-  * Add Transform schedules as templates, use knobs to control loops and layouts
-  * Standardize transform templates to be fully shareable, reusable and configurable
-  * Add schedule/knob tunner module possibly use xgboost (see halide/tvm)
+## Coverage
+
+#### Onnx to Linalg
+![ONNX2Linalg Coverage](docs/coverage-onnx2linalg.svg)
+The latest coverage report is also in: [docs/coverage-onnx2linalg.htm](docs/coverage-onnx2linalg.htm)
 
 ## Motto
 

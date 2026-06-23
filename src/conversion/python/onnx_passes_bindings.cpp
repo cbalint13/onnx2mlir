@@ -37,6 +37,12 @@ NB_MODULE(_onnx2mlirOnnxPasses, m) {
 
   m.def(
       "register_onnx_to_linag_pass",
-      []() { onnx2mlir::dialect::registerLowerONNXToLINALGPass(); },
+      []() -> nanobind::set {
+        auto ops = onnx2mlir::dialect::registerLowerONNXToLINALGPass();
+        nanobind::set s;
+        for (const auto &op : ops)
+          s.add(nanobind::str(op.c_str()));
+        return s;
+      },
       "Registers the ONNX to Linalg conversion pass.");
 }

@@ -1,0 +1,681 @@
+<svg width='817' height='1939' xmlns='http://www.w3.org/2000/svg'>
+<style>.op-text { font-family: sans-serif; font-size: 10px; } .ver-text { font-size: 7px; }</style>
+  <rect x='1' y='1' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='68' y='26' text-anchor='middle' font-weight='bold' class='op-text'>Abs</text>
+  <text x='68' y='41' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>]</text>
+  <rect x='137' y='1' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='204' y='26' text-anchor='middle' font-weight='bold' class='op-text'>Acos</text>
+  <text x='204' y='41' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>7 </tspan>]</text>
+  <rect x='273' y='1' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='340' y='26' text-anchor='middle' font-weight='bold' class='op-text'>Acosh</text>
+  <text x='340' y='41' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
+  <rect x='409' y='1' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='26' text-anchor='middle' font-weight='bold' class='op-text'>Adagrad</text>
+  <text x='476' y='41' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>1 </tspan>]</text>
+  <rect x='545' y='1' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='26' text-anchor='middle' font-weight='bold' class='op-text'>Adam</text>
+  <text x='612' y='41' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>1 </tspan>]</text>
+  <rect x='681' y='1' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='748' y='26' text-anchor='middle' font-weight='bold' class='op-text'>Add</text>
+  <text x='748' y='41' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>14 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>13 </tspan>]</text>
+  <rect x='1' y='52' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='77' text-anchor='middle' font-weight='bold' class='op-text'>AffineGrid</text>
+  <text x='68' y='92' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>20 </tspan>]</text>
+  <rect x='137' y='52' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='77' text-anchor='middle' font-weight='bold' class='op-text'>And</text>
+  <text x='204' y='92' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>7 </tspan>, <tspan fill='gray'>1 </tspan>]</text>
+  <rect x='273' y='52' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='77' text-anchor='middle' font-weight='bold' class='op-text'>ArgMax</text>
+  <text x='340' y='92' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>12 </tspan>]</text>
+  <rect x='409' y='52' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='77' text-anchor='middle' font-weight='bold' class='op-text'>ArgMin</text>
+  <text x='476' y='92' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>12 </tspan>]</text>
+  <rect x='545' y='52' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='77' text-anchor='middle' font-weight='bold' class='op-text'>ArrayFeatureExtractor</text>
+  <text x='612' y='92' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>1 </tspan>]</text>
+  <rect x='681' y='52' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='748' y='77' text-anchor='middle' font-weight='bold' class='op-text'>Asin</text>
+  <text x='748' y='92' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>7 </tspan>]</text>
+  <rect x='1' y='103' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='68' y='128' text-anchor='middle' font-weight='bold' class='op-text'>Asinh</text>
+  <text x='68' y='143' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
+  <rect x='137' y='103' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='204' y='128' text-anchor='middle' font-weight='bold' class='op-text'>Atan</text>
+  <text x='204' y='143' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>7 </tspan>]</text>
+  <rect x='273' y='103' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='340' y='128' text-anchor='middle' font-weight='bold' class='op-text'>Atanh</text>
+  <text x='340' y='143' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
+  <rect x='409' y='103' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='128' text-anchor='middle' font-weight='bold' class='op-text'>Attention</text>
+  <text x='476' y='143' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>24 </tspan>, <tspan fill='gray'>23 </tspan>]</text>
+  <rect x='545' y='103' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='128' text-anchor='middle' font-weight='bold' class='op-text'>AveragePool</text>
+  <text x='612' y='143' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>10 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>19 </tspan>]</text>
+  <rect x='681' y='103' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='128' text-anchor='middle' font-weight='bold' class='op-text'>BatchNormalization</text>
+  <text x='748' y='143' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>15 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>9 </tspan>, <tspan fill='gray'>14 </tspan>]</text>
+  <rect x='1' y='154' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='179' text-anchor='middle' font-weight='bold' class='op-text'>Bernoulli</text>
+  <text x='68' y='194' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>15 </tspan>]</text>
+  <rect x='137' y='154' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='179' text-anchor='middle' font-weight='bold' class='op-text'>Binarizer</text>
+  <text x='204' y='194' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>1 </tspan>]</text>
+  <rect x='273' y='154' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='179' text-anchor='middle' font-weight='bold' class='op-text'>BitCast</text>
+  <text x='340' y='194' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>26 </tspan>]</text>
+  <rect x='409' y='154' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='179' text-anchor='middle' font-weight='bold' class='op-text'>BitShift</text>
+  <text x='476' y='194' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>11 </tspan>]</text>
+  <rect x='545' y='154' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='179' text-anchor='middle' font-weight='bold' class='op-text'>BitwiseAnd</text>
+  <text x='612' y='194' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>]</text>
+  <rect x='681' y='154' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='179' text-anchor='middle' font-weight='bold' class='op-text'>BitwiseNot</text>
+  <text x='748' y='194' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>]</text>
+  <rect x='1' y='205' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='230' text-anchor='middle' font-weight='bold' class='op-text'>BitwiseOr</text>
+  <text x='68' y='245' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>]</text>
+  <rect x='137' y='205' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='230' text-anchor='middle' font-weight='bold' class='op-text'>BitwiseXor</text>
+  <text x='204' y='245' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>]</text>
+  <rect x='273' y='205' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='230' text-anchor='middle' font-weight='bold' class='op-text'>BlackmanWindow</text>
+  <text x='340' y='245' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>17 </tspan>]</text>
+  <rect x='409' y='205' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='476' y='230' text-anchor='middle' font-weight='bold' class='op-text'>Cast</text>
+  <text x='476' y='245' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>9 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
+  <rect x='545' y='205' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='230' text-anchor='middle' font-weight='bold' class='op-text'>CastLike</text>
+  <text x='612' y='245' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>15 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
+  <rect x='681' y='205' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='230' text-anchor='middle' font-weight='bold' class='op-text'>CastMap</text>
+  <text x='748' y='245' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>1 </tspan>]</text>
+  <rect x='1' y='256' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='281' text-anchor='middle' font-weight='bold' class='op-text'>CategoryMapper</text>
+  <text x='68' y='296' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>1 </tspan>]</text>
+  <rect x='137' y='256' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='281' text-anchor='middle' font-weight='bold' class='op-text'>CausalConvWithState</text>
+  <text x='204' y='296' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>27 </tspan>]</text>
+  <rect x='273' y='256' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='340' y='281' text-anchor='middle' font-weight='bold' class='op-text'>Ceil</text>
+  <text x='340' y='296' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>]</text>
+  <rect x='409' y='256' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='281' text-anchor='middle' font-weight='bold' class='op-text'>Celu</text>
+  <text x='476' y='296' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>12 </tspan>]</text>
+  <rect x='545' y='256' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='281' text-anchor='middle' font-weight='bold' class='op-text'>CenterCropPad</text>
+  <text x='612' y='296' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>]</text>
+  <rect x='681' y='256' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='281' text-anchor='middle' font-weight='bold' class='op-text'>Clip</text>
+  <text x='748' y='296' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>12 </tspan>]</text>
+  <rect x='1' y='307' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='332' text-anchor='middle' font-weight='bold' class='op-text'>Col2Im</text>
+  <text x='68' y='347' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>]</text>
+  <rect x='137' y='307' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='332' text-anchor='middle' font-weight='bold' class='op-text'>Compress</text>
+  <text x='204' y='347' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>11 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
+  <rect x='273' y='307' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='332' text-anchor='middle' font-weight='bold' class='op-text'>Concat</text>
+  <text x='340' y='347' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>4 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
+  <rect x='409' y='307' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='332' text-anchor='middle' font-weight='bold' class='op-text'>ConcatFromSequence</text>
+  <text x='476' y='347' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>11 </tspan>]</text>
+  <rect x='545' y='307' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='612' y='332' text-anchor='middle' font-weight='bold' class='op-text'>Constant</text>
+  <text x='612' y='347' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>9 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>12 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
+  <rect x='681' y='307' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='332' text-anchor='middle' font-weight='bold' class='op-text'>ConstantOfShape</text>
+  <text x='748' y='347' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>9 </tspan>, <tspan fill='gray'>20 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
+  <rect x='1' y='358' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='68' y='383' text-anchor='middle' font-weight='bold' class='op-text'>Conv</text>
+  <text x='68' y='398' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
+  <rect x='137' y='358' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='383' text-anchor='middle' font-weight='bold' class='op-text'>ConvInteger</text>
+  <text x='204' y='398' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>10 </tspan>]</text>
+  <rect x='273' y='358' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='383' text-anchor='middle' font-weight='bold' class='op-text'>ConvTranspose</text>
+  <text x='340' y='398' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
+  <rect x='409' y='358' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='476' y='383' text-anchor='middle' font-weight='bold' class='op-text'>Cos</text>
+  <text x='476' y='398' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>7 </tspan>]</text>
+  <rect x='545' y='358' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='612' y='383' text-anchor='middle' font-weight='bold' class='op-text'>Cosh</text>
+  <text x='612' y='398' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
+  <rect x='681' y='358' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='383' text-anchor='middle' font-weight='bold' class='op-text'>CumProd</text>
+  <text x='748' y='398' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>26 </tspan>]</text>
+  <rect x='1' y='409' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='434' text-anchor='middle' font-weight='bold' class='op-text'>CumSum</text>
+  <text x='68' y='449' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>14 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
+  <rect x='137' y='409' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='434' text-anchor='middle' font-weight='bold' class='op-text'>DFT</text>
+  <text x='204' y='449' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>20 </tspan>, <tspan fill='gray'>17 </tspan>]</text>
+  <rect x='273' y='409' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='434' text-anchor='middle' font-weight='bold' class='op-text'>DeformConv</text>
+  <text x='340' y='449' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>19 </tspan>]</text>
+  <rect x='409' y='409' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='434' text-anchor='middle' font-weight='bold' class='op-text'>DepthToSpace</text>
+  <text x='476' y='449' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
+  <rect x='545' y='409' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='434' text-anchor='middle' font-weight='bold' class='op-text'>DequantizeLinear</text>
+  <text x='612' y='449' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>10 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
+  <rect x='681' y='409' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='434' text-anchor='middle' font-weight='bold' class='op-text'>Det</text>
+  <text x='748' y='449' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
+  <rect x='1' y='460' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='485' text-anchor='middle' font-weight='bold' class='op-text'>DictVectorizer</text>
+  <text x='68' y='500' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>1 </tspan>]</text>
+  <rect x='137' y='460' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='204' y='485' text-anchor='middle' font-weight='bold' class='op-text'>Div</text>
+  <text x='204' y='500' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>14 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>13 </tspan>]</text>
+  <rect x='273' y='460' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='485' text-anchor='middle' font-weight='bold' class='op-text'>Dropout</text>
+  <text x='340' y='500' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>10 </tspan>, <tspan fill='gray'>12 </tspan>, <tspan fill='gray'>13 </tspan>]</text>
+  <rect x='409' y='460' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='485' text-anchor='middle' font-weight='bold' class='op-text'>DynamicQuantizeLinear</text>
+  <text x='476' y='500' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>11 </tspan>]</text>
+  <rect x='545' y='460' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='485' text-anchor='middle' font-weight='bold' class='op-text'>Einsum</text>
+  <text x='612' y='500' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>12 </tspan>]</text>
+  <rect x='681' y='460' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='748' y='485' text-anchor='middle' font-weight='bold' class='op-text'>Elu</text>
+  <text x='748' y='500' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>]</text>
+  <rect x='1' y='511' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='68' y='536' text-anchor='middle' font-weight='bold' class='op-text'>Equal</text>
+  <text x='68' y='551' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>19 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>13 </tspan>]</text>
+  <rect x='137' y='511' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='204' y='536' text-anchor='middle' font-weight='bold' class='op-text'>Erf</text>
+  <text x='204' y='551' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
+  <rect x='273' y='511' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='340' y='536' text-anchor='middle' font-weight='bold' class='op-text'>Exp</text>
+  <text x='340' y='551' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>]</text>
+  <rect x='409' y='511' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='536' text-anchor='middle' font-weight='bold' class='op-text'>Expand</text>
+  <text x='476' y='551' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>8 </tspan>]</text>
+  <rect x='545' y='511' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='536' text-anchor='middle' font-weight='bold' class='op-text'>EyeLike</text>
+  <text x='612' y='551' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
+  <rect x='681' y='511' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='536' text-anchor='middle' font-weight='bold' class='op-text'>FeatureVectorizer</text>
+  <text x='748' y='551' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>1 </tspan>]</text>
+  <rect x='1' y='562' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='68' y='587' text-anchor='middle' font-weight='bold' class='op-text'>Flatten</text>
+  <text x='68' y='602' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>9 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
+  <rect x='137' y='562' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='587' text-anchor='middle' font-weight='bold' class='op-text'>FlexAttention</text>
+  <text x='204' y='602' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>1 </tspan>]</text>
+  <rect x='273' y='562' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='340' y='587' text-anchor='middle' font-weight='bold' class='op-text'>Floor</text>
+  <text x='340' y='602' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>]</text>
+  <rect x='409' y='562' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='587' text-anchor='middle' font-weight='bold' class='op-text'>GRU</text>
+  <text x='476' y='602' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>3 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>14 </tspan>]</text>
+  <rect x='545' y='562' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='587' text-anchor='middle' font-weight='bold' class='op-text'>Gather</text>
+  <text x='612' y='602' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
+  <rect x='681' y='562' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='587' text-anchor='middle' font-weight='bold' class='op-text'>GatherElements</text>
+  <text x='748' y='602' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
+  <rect x='1' y='613' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='638' text-anchor='middle' font-weight='bold' class='op-text'>GatherND</text>
+  <text x='68' y='653' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>12 </tspan>]</text>
+  <rect x='137' y='613' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='638' text-anchor='middle' font-weight='bold' class='op-text'>Gelu</text>
+  <text x='204' y='653' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>20 </tspan>]</text>
+  <rect x='273' y='613' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='340' y='638' text-anchor='middle' font-weight='bold' class='op-text'>Gemm</text>
+  <text x='340' y='653' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>9 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
+  <rect x='409' y='613' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='638' text-anchor='middle' font-weight='bold' class='op-text'>GlobalAveragePool</text>
+  <text x='476' y='653' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>]</text>
+  <rect x='545' y='613' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='638' text-anchor='middle' font-weight='bold' class='op-text'>GlobalLpPool</text>
+  <text x='612' y='653' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>2 </tspan>]</text>
+  <rect x='681' y='613' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='638' text-anchor='middle' font-weight='bold' class='op-text'>GlobalMaxPool</text>
+  <text x='748' y='653' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>]</text>
+  <rect x='1' y='664' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='689' text-anchor='middle' font-weight='bold' class='op-text'>Gradient</text>
+  <text x='68' y='704' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>1 </tspan>]</text>
+  <rect x='137' y='664' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='204' y='689' text-anchor='middle' font-weight='bold' class='op-text'>Greater</text>
+  <text x='204' y='704' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
+  <rect x='273' y='664' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='689' text-anchor='middle' font-weight='bold' class='op-text'>GreaterOrEqual</text>
+  <text x='340' y='704' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>16 </tspan>, <tspan fill='gray'>12 </tspan>]</text>
+  <rect x='409' y='664' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='689' text-anchor='middle' font-weight='bold' class='op-text'>GridSample</text>
+  <text x='476' y='704' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>16 </tspan>, <tspan fill='gray'>20 </tspan>]</text>
+  <rect x='545' y='664' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='689' text-anchor='middle' font-weight='bold' class='op-text'>GroupNormalization</text>
+  <text x='612' y='704' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>21 </tspan>, <tspan fill='gray'>18 </tspan>]</text>
+  <rect x='681' y='664' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='689' text-anchor='middle' font-weight='bold' class='op-text'>HammingWindow</text>
+  <text x='748' y='704' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>17 </tspan>]</text>
+  <rect x='1' y='715' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='740' text-anchor='middle' font-weight='bold' class='op-text'>HannWindow</text>
+  <text x='68' y='755' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>17 </tspan>]</text>
+  <rect x='137' y='715' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='740' text-anchor='middle' font-weight='bold' class='op-text'>HardSigmoid</text>
+  <text x='204' y='755' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>]</text>
+  <rect x='273' y='715' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='340' y='740' text-anchor='middle' font-weight='bold' class='op-text'>HardSwish</text>
+  <text x='340' y='755' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>14 </tspan>]</text>
+  <rect x='409' y='715' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='476' y='740' text-anchor='middle' font-weight='bold' class='op-text'>Hardmax</text>
+  <text x='476' y='755' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
+  <rect x='545' y='715' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='612' y='740' text-anchor='middle' font-weight='bold' class='op-text'>Identity</text>
+  <text x='612' y='755' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>14 </tspan>, <tspan fill='gray'>16 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
+  <rect x='681' y='715' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='740' text-anchor='middle' font-weight='bold' class='op-text'>If</text>
+  <text x='748' y='755' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>16 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
+  <rect x='1' y='766' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='791' text-anchor='middle' font-weight='bold' class='op-text'>ImageDecoder</text>
+  <text x='68' y='806' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>20 </tspan>]</text>
+  <rect x='137' y='766' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='791' text-anchor='middle' font-weight='bold' class='op-text'>Imputer</text>
+  <text x='204' y='806' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>1 </tspan>]</text>
+  <rect x='273' y='766' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='791' text-anchor='middle' font-weight='bold' class='op-text'>InstanceNormalization</text>
+  <text x='340' y='806' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>]</text>
+  <rect x='409' y='766' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='476' y='791' text-anchor='middle' font-weight='bold' class='op-text'>IsInf</text>
+  <text x='476' y='806' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>20 </tspan>, <tspan fill='gray'>10 </tspan>]</text>
+  <rect x='545' y='766' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='612' y='791' text-anchor='middle' font-weight='bold' class='op-text'>IsNaN</text>
+  <text x='612' y='806' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>20 </tspan>, <tspan fill='gray'>9 </tspan>, <tspan fill='gray'>13 </tspan>]</text>
+  <rect x='681' y='766' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='791' text-anchor='middle' font-weight='bold' class='op-text'>LRN</text>
+  <text x='748' y='806' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>]</text>
+  <rect x='1' y='817' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='842' text-anchor='middle' font-weight='bold' class='op-text'>LSTM</text>
+  <text x='68' y='857' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>14 </tspan>]</text>
+  <rect x='137' y='817' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='842' text-anchor='middle' font-weight='bold' class='op-text'>LabelEncoder</text>
+  <text x='204' y='857' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>4 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>2 </tspan>]</text>
+  <rect x='273' y='817' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='842' text-anchor='middle' font-weight='bold' class='op-text'>LayerNormalization</text>
+  <text x='340' y='857' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>17 </tspan>]</text>
+  <rect x='409' y='817' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='842' text-anchor='middle' font-weight='bold' class='op-text'>LeakyRelu</text>
+  <text x='476' y='857' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>16 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>]</text>
+  <rect x='545' y='817' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='612' y='842' text-anchor='middle' font-weight='bold' class='op-text'>Less</text>
+  <text x='612' y='857' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
+  <rect x='681' y='817' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='748' y='842' text-anchor='middle' font-weight='bold' class='op-text'>LessOrEqual</text>
+  <text x='748' y='857' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>16 </tspan>, <tspan fill='gray'>12 </tspan>]</text>
+  <rect x='1' y='868' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='893' text-anchor='middle' font-weight='bold' class='op-text'>LinearAttention</text>
+  <text x='68' y='908' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>27 </tspan>]</text>
+  <rect x='137' y='868' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='893' text-anchor='middle' font-weight='bold' class='op-text'>LinearClassifier</text>
+  <text x='204' y='908' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>1 </tspan>]</text>
+  <rect x='273' y='868' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='893' text-anchor='middle' font-weight='bold' class='op-text'>LinearRegressor</text>
+  <text x='340' y='908' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>1 </tspan>]</text>
+  <rect x='409' y='868' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='476' y='893' text-anchor='middle' font-weight='bold' class='op-text'>Log</text>
+  <text x='476' y='908' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>]</text>
+  <rect x='545' y='868' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='612' y='893' text-anchor='middle' font-weight='bold' class='op-text'>LogSoftmax</text>
+  <text x='612' y='908' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
+  <rect x='681' y='868' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='893' text-anchor='middle' font-weight='bold' class='op-text'>Loop</text>
+  <text x='748' y='908' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>16 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
+  <rect x='1' y='919' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='944' text-anchor='middle' font-weight='bold' class='op-text'>LpNormalization</text>
+  <text x='68' y='959' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>]</text>
+  <rect x='137' y='919' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='944' text-anchor='middle' font-weight='bold' class='op-text'>LpPool</text>
+  <text x='204' y='959' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>2 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>18 </tspan>]</text>
+  <rect x='273' y='919' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='944' text-anchor='middle' font-weight='bold' class='op-text'>MatMul</text>
+  <text x='340' y='959' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
+  <rect x='409' y='919' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='944' text-anchor='middle' font-weight='bold' class='op-text'>MatMulInteger</text>
+  <text x='476' y='959' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>10 </tspan>]</text>
+  <rect x='545' y='919' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='944' text-anchor='middle' font-weight='bold' class='op-text'>Max</text>
+  <text x='612' y='959' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>8 </tspan>, <tspan fill='gray'>12 </tspan>]</text>
+  <rect x='681' y='919' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='748' y='944' text-anchor='middle' font-weight='bold' class='op-text'>MaxPool</text>
+  <text x='748' y='959' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>8 </tspan>, <tspan fill='gray'>10 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>12 </tspan>]</text>
+  <rect x='1' y='970' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='995' text-anchor='middle' font-weight='bold' class='op-text'>MaxRoiPool</text>
+  <text x='68' y='1010' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>]</text>
+  <rect x='137' y='970' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='995' text-anchor='middle' font-weight='bold' class='op-text'>MaxUnpool</text>
+  <text x='204' y='1010' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>9 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
+  <rect x='273' y='970' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='995' text-anchor='middle' font-weight='bold' class='op-text'>Mean</text>
+  <text x='340' y='1010' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>8 </tspan>]</text>
+  <rect x='409' y='970' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='995' text-anchor='middle' font-weight='bold' class='op-text'>MeanVarianceNormalization</text>
+  <text x='476' y='1010' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
+  <rect x='545' y='970' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='995' text-anchor='middle' font-weight='bold' class='op-text'>MelWeightMatrix</text>
+  <text x='612' y='1010' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>17 </tspan>]</text>
+  <rect x='681' y='970' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='995' text-anchor='middle' font-weight='bold' class='op-text'>Min</text>
+  <text x='748' y='1010' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>8 </tspan>, <tspan fill='gray'>12 </tspan>]</text>
+  <rect x='1' y='1021' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='1046' text-anchor='middle' font-weight='bold' class='op-text'>Mish</text>
+  <text x='68' y='1061' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>18 </tspan>]</text>
+  <rect x='137' y='1021' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='1046' text-anchor='middle' font-weight='bold' class='op-text'>Mod</text>
+  <text x='204' y='1061' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>10 </tspan>]</text>
+  <rect x='273' y='1021' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='1046' text-anchor='middle' font-weight='bold' class='op-text'>Momentum</text>
+  <text x='340' y='1061' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>1 </tspan>]</text>
+  <rect x='409' y='1021' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='476' y='1046' text-anchor='middle' font-weight='bold' class='op-text'>Mul</text>
+  <text x='476' y='1061' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>14 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>13 </tspan>]</text>
+  <rect x='545' y='1021' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='1046' text-anchor='middle' font-weight='bold' class='op-text'>Multinomial</text>
+  <text x='612' y='1061' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>7 </tspan>]</text>
+  <rect x='681' y='1021' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='748' y='1046' text-anchor='middle' font-weight='bold' class='op-text'>Neg</text>
+  <text x='748' y='1061' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>]</text>
+  <rect x='1' y='1072' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='1097' text-anchor='middle' font-weight='bold' class='op-text'>NegativeLogLikelihoodLoss</text>
+  <text x='68' y='1112' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>12 </tspan>, <tspan fill='gray'>13 </tspan>]</text>
+  <rect x='137' y='1072' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='1097' text-anchor='middle' font-weight='bold' class='op-text'>NonMaxSuppression</text>
+  <text x='204' y='1112' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>11 </tspan>, <tspan fill='gray'>10 </tspan>]</text>
+  <rect x='273' y='1072' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='1097' text-anchor='middle' font-weight='bold' class='op-text'>NonZero</text>
+  <text x='340' y='1112' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
+  <rect x='409' y='1072' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='1097' text-anchor='middle' font-weight='bold' class='op-text'>Normalizer</text>
+  <text x='476' y='1112' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>1 </tspan>]</text>
+  <rect x='545' y='1072' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='612' y='1097' text-anchor='middle' font-weight='bold' class='op-text'>Not</text>
+  <text x='612' y='1112' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>1 </tspan>]</text>
+  <rect x='681' y='1072' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='1097' text-anchor='middle' font-weight='bold' class='op-text'>OneHot</text>
+  <text x='748' y='1112' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>11 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
+  <rect x='1' y='1123' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='1148' text-anchor='middle' font-weight='bold' class='op-text'>OneHotEncoder</text>
+  <text x='68' y='1163' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>1 </tspan>]</text>
+  <rect x='137' y='1123' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='1148' text-anchor='middle' font-weight='bold' class='op-text'>Optional</text>
+  <text x='204' y='1163' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>15 </tspan>]</text>
+  <rect x='273' y='1123' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='1148' text-anchor='middle' font-weight='bold' class='op-text'>OptionalGetElement</text>
+  <text x='340' y='1163' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>, <tspan fill='gray'>15 </tspan>]</text>
+  <rect x='409' y='1123' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='1148' text-anchor='middle' font-weight='bold' class='op-text'>OptionalHasElement</text>
+  <text x='476' y='1163' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>, <tspan fill='gray'>15 </tspan>]</text>
+  <rect x='545' y='1123' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='1148' text-anchor='middle' font-weight='bold' class='op-text'>Or</text>
+  <text x='612' y='1163' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>7 </tspan>, <tspan fill='gray'>1 </tspan>]</text>
+  <rect x='681' y='1123' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='1148' text-anchor='middle' font-weight='bold' class='op-text'>PRelu</text>
+  <text x='748' y='1163' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>16 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
+  <rect x='1' y='1174' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='1199' text-anchor='middle' font-weight='bold' class='op-text'>Pad</text>
+  <text x='68' y='1214' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>2 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>18 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
+  <rect x='137' y='1174' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='204' y='1199' text-anchor='middle' font-weight='bold' class='op-text'>Pow</text>
+  <text x='204' y='1214' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>15 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>12 </tspan>, <tspan fill='gray'>13 </tspan>]</text>
+  <rect x='273' y='1174' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='1199' text-anchor='middle' font-weight='bold' class='op-text'>QLinearConv</text>
+  <text x='340' y='1214' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>10 </tspan>]</text>
+  <rect x='409' y='1174' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='1199' text-anchor='middle' font-weight='bold' class='op-text'>QLinearMatMul</text>
+  <text x='476' y='1214' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>21 </tspan>, <tspan fill='gray'>10 </tspan>]</text>
+  <rect x='545' y='1174' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='1199' text-anchor='middle' font-weight='bold' class='op-text'>QuantizeLinear</text>
+  <text x='612' y='1214' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>10 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
+  <rect x='681' y='1174' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='1199' text-anchor='middle' font-weight='bold' class='op-text'>RMSNormalization</text>
+  <text x='748' y='1214' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>23 </tspan>]</text>
+  <rect x='1' y='1225' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='1250' text-anchor='middle' font-weight='bold' class='op-text'>RNN</text>
+  <text x='68' y='1265' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>14 </tspan>]</text>
+  <rect x='137' y='1225' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='1250' text-anchor='middle' font-weight='bold' class='op-text'>RandomNormal</text>
+  <text x='204' y='1265' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>]</text>
+  <rect x='273' y='1225' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='1250' text-anchor='middle' font-weight='bold' class='op-text'>RandomNormalLike</text>
+  <text x='340' y='1265' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>]</text>
+  <rect x='409' y='1225' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='1250' text-anchor='middle' font-weight='bold' class='op-text'>RandomUniform</text>
+  <text x='476' y='1265' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>]</text>
+  <rect x='545' y='1225' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='1250' text-anchor='middle' font-weight='bold' class='op-text'>RandomUniformLike</text>
+  <text x='612' y='1265' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>]</text>
+  <rect x='681' y='1225' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='1250' text-anchor='middle' font-weight='bold' class='op-text'>Range</text>
+  <text x='748' y='1265' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>27 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
+  <rect x='1' y='1276' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='68' y='1301' text-anchor='middle' font-weight='bold' class='op-text'>Reciprocal</text>
+  <text x='68' y='1316' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>]</text>
+  <rect x='137' y='1276' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='1301' text-anchor='middle' font-weight='bold' class='op-text'>ReduceL1</text>
+  <text x='204' y='1316' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>13 </tspan>]</text>
+  <rect x='273' y='1276' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='1301' text-anchor='middle' font-weight='bold' class='op-text'>ReduceL2</text>
+  <text x='340' y='1316' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>13 </tspan>]</text>
+  <rect x='409' y='1276' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='1301' text-anchor='middle' font-weight='bold' class='op-text'>ReduceLogSum</text>
+  <text x='476' y='1316' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>13 </tspan>]</text>
+  <rect x='545' y='1276' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='1301' text-anchor='middle' font-weight='bold' class='op-text'>ReduceLogSumExp</text>
+  <text x='612' y='1316' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>13 </tspan>]</text>
+  <rect x='681' y='1276' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='1301' text-anchor='middle' font-weight='bold' class='op-text'>ReduceMax</text>
+  <text x='748' y='1316' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>20 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>12 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>18 </tspan>]</text>
+  <rect x='1' y='1327' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='1352' text-anchor='middle' font-weight='bold' class='op-text'>ReduceMean</text>
+  <text x='68' y='1367' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>13 </tspan>]</text>
+  <rect x='137' y='1327' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='1352' text-anchor='middle' font-weight='bold' class='op-text'>ReduceMin</text>
+  <text x='204' y='1367' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>20 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>12 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>18 </tspan>]</text>
+  <rect x='273' y='1327' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='1352' text-anchor='middle' font-weight='bold' class='op-text'>ReduceProd</text>
+  <text x='340' y='1367' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>13 </tspan>]</text>
+  <rect x='409' y='1327' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='1352' text-anchor='middle' font-weight='bold' class='op-text'>ReduceSum</text>
+  <text x='476' y='1367' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
+  <rect x='545' y='1327' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='1352' text-anchor='middle' font-weight='bold' class='op-text'>ReduceSumSquare</text>
+  <text x='612' y='1367' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>13 </tspan>]</text>
+  <rect x='681' y='1327' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='1352' text-anchor='middle' font-weight='bold' class='op-text'>RegexFullMatch</text>
+  <text x='748' y='1367' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>20 </tspan>]</text>
+  <rect x='1' y='1378' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='68' y='1403' text-anchor='middle' font-weight='bold' class='op-text'>Relu</text>
+  <text x='68' y='1418' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>14 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>13 </tspan>]</text>
+  <rect x='137' y='1378' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='1403' text-anchor='middle' font-weight='bold' class='op-text'>Reshape</text>
+  <text x='204' y='1418' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>5 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>14 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
+  <rect x='273' y='1378' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='1403' text-anchor='middle' font-weight='bold' class='op-text'>Resize</text>
+  <text x='340' y='1418' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>19 </tspan>, <tspan fill='gray'>10 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>18 </tspan>]</text>
+  <rect x='409' y='1378' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='1403' text-anchor='middle' font-weight='bold' class='op-text'>ReverseSequence</text>
+  <text x='476' y='1418' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>10 </tspan>]</text>
+  <rect x='545' y='1378' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='1403' text-anchor='middle' font-weight='bold' class='op-text'>RoiAlign</text>
+  <text x='612' y='1418' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>10 </tspan>, <tspan fill='gray'>16 </tspan>]</text>
+  <rect x='681' y='1378' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='1403' text-anchor='middle' font-weight='bold' class='op-text'>RotaryEmbedding</text>
+  <text x='748' y='1418' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>23 </tspan>]</text>
+  <rect x='1' y='1429' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='68' y='1454' text-anchor='middle' font-weight='bold' class='op-text'>Round</text>
+  <text x='68' y='1469' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
+  <rect x='137' y='1429' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='1454' text-anchor='middle' font-weight='bold' class='op-text'>STFT</text>
+  <text x='204' y='1469' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>17 </tspan>]</text>
+  <rect x='273' y='1429' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='1454' text-anchor='middle' font-weight='bold' class='op-text'>SVMClassifier</text>
+  <text x='340' y='1469' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>1 </tspan>]</text>
+  <rect x='409' y='1429' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='1454' text-anchor='middle' font-weight='bold' class='op-text'>SVMRegressor</text>
+  <text x='476' y='1469' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>1 </tspan>]</text>
+  <rect x='545' y='1429' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='1454' text-anchor='middle' font-weight='bold' class='op-text'>Scaler</text>
+  <text x='612' y='1469' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>1 </tspan>]</text>
+  <rect x='681' y='1429' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='1454' text-anchor='middle' font-weight='bold' class='op-text'>Scan</text>
+  <text x='748' y='1469' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>8 </tspan>, <tspan fill='gray'>9 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>16 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
+  <rect x='1' y='1480' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='1505' text-anchor='middle' font-weight='bold' class='op-text'>Scatter</text>
+  <text x='68' y='1520' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>11 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
+  <rect x='137' y='1480' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='1505' text-anchor='middle' font-weight='bold' class='op-text'>ScatterElements</text>
+  <text x='204' y='1520' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>16 </tspan>]</text>
+  <rect x='273' y='1480' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='1505' text-anchor='middle' font-weight='bold' class='op-text'>ScatterND</text>
+  <text x='340' y='1520' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>16 </tspan>]</text>
+  <rect x='409' y='1480' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='1505' text-anchor='middle' font-weight='bold' class='op-text'>Selu</text>
+  <text x='476' y='1520' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>]</text>
+  <rect x='545' y='1480' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='1505' text-anchor='middle' font-weight='bold' class='op-text'>SequenceAt</text>
+  <text x='612' y='1520' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>11 </tspan>]</text>
+  <rect x='681' y='1480' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='1505' text-anchor='middle' font-weight='bold' class='op-text'>SequenceConstruct</text>
+  <text x='748' y='1520' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>11 </tspan>]</text>
+  <rect x='1' y='1531' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='1556' text-anchor='middle' font-weight='bold' class='op-text'>SequenceEmpty</text>
+  <text x='68' y='1571' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>11 </tspan>]</text>
+  <rect x='137' y='1531' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='1556' text-anchor='middle' font-weight='bold' class='op-text'>SequenceErase</text>
+  <text x='204' y='1571' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>11 </tspan>]</text>
+  <rect x='273' y='1531' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='1556' text-anchor='middle' font-weight='bold' class='op-text'>SequenceInsert</text>
+  <text x='340' y='1571' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>11 </tspan>]</text>
+  <rect x='409' y='1531' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='1556' text-anchor='middle' font-weight='bold' class='op-text'>SequenceLength</text>
+  <text x='476' y='1571' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>11 </tspan>]</text>
+  <rect x='545' y='1531' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='1556' text-anchor='middle' font-weight='bold' class='op-text'>SequenceMap</text>
+  <text x='612' y='1571' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>17 </tspan>]</text>
+  <rect x='681' y='1531' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='1556' text-anchor='middle' font-weight='bold' class='op-text'>Shape</text>
+  <text x='748' y='1571' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>15 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
+  <rect x='1' y='1582' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='1607' text-anchor='middle' font-weight='bold' class='op-text'>Shrink</text>
+  <text x='68' y='1622' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>9 </tspan>]</text>
+  <rect x='137' y='1582' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='204' y='1607' text-anchor='middle' font-weight='bold' class='op-text'>Sigmoid</text>
+  <text x='204' y='1622' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>]</text>
+  <rect x='273' y='1582' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='340' y='1607' text-anchor='middle' font-weight='bold' class='op-text'>Sign</text>
+  <text x='340' y='1622' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
+  <rect x='409' y='1582' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='476' y='1607' text-anchor='middle' font-weight='bold' class='op-text'>Sin</text>
+  <text x='476' y='1622' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>7 </tspan>]</text>
+  <rect x='545' y='1582' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='612' y='1607' text-anchor='middle' font-weight='bold' class='op-text'>Sinh</text>
+  <text x='612' y='1622' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
+  <rect x='681' y='1582' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='1607' text-anchor='middle' font-weight='bold' class='op-text'>Size</text>
+  <text x='748' y='1622' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
+  <rect x='1' y='1633' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='1658' text-anchor='middle' font-weight='bold' class='op-text'>Slice</text>
+  <text x='68' y='1673' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>10 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
+  <rect x='137' y='1633' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='204' y='1658' text-anchor='middle' font-weight='bold' class='op-text'>Softmax</text>
+  <text x='204' y='1673' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
+  <rect x='273' y='1633' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='1658' text-anchor='middle' font-weight='bold' class='op-text'>SoftmaxCrossEntropyLoss</text>
+  <text x='340' y='1673' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>12 </tspan>]</text>
+  <rect x='409' y='1633' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='476' y='1658' text-anchor='middle' font-weight='bold' class='op-text'>Softplus</text>
+  <text x='476' y='1673' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>]</text>
+  <rect x='545' y='1633' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='612' y='1658' text-anchor='middle' font-weight='bold' class='op-text'>Softsign</text>
+  <text x='612' y='1673' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>]</text>
+  <rect x='681' y='1633' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='1658' text-anchor='middle' font-weight='bold' class='op-text'>SpaceToDepth</text>
+  <text x='748' y='1673' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>]</text>
+  <rect x='1' y='1684' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='1709' text-anchor='middle' font-weight='bold' class='op-text'>Split</text>
+  <text x='68' y='1724' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>2 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>13 </tspan>]</text>
+  <rect x='137' y='1684' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='1709' text-anchor='middle' font-weight='bold' class='op-text'>SplitToSequence</text>
+  <text x='204' y='1724' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>24 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
+  <rect x='273' y='1684' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='340' y='1709' text-anchor='middle' font-weight='bold' class='op-text'>Sqrt</text>
+  <text x='340' y='1724' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>]</text>
+  <rect x='409' y='1684' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='476' y='1709' text-anchor='middle' font-weight='bold' class='op-text'>Squeeze</text>
+  <text x='476' y='1724' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
+  <rect x='545' y='1684' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='1709' text-anchor='middle' font-weight='bold' class='op-text'>StringConcat</text>
+  <text x='612' y='1724' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>20 </tspan>]</text>
+  <rect x='681' y='1684' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='748' y='1709' text-anchor='middle' font-weight='bold' class='op-text'>StringNormalizer</text>
+  <text x='748' y='1724' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>10 </tspan>]</text>
+  <rect x='1' y='1735' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='1760' text-anchor='middle' font-weight='bold' class='op-text'>StringSplit</text>
+  <text x='68' y='1775' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>20 </tspan>]</text>
+  <rect x='137' y='1735' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='204' y='1760' text-anchor='middle' font-weight='bold' class='op-text'>Sub</text>
+  <text x='204' y='1775' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>14 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>13 </tspan>]</text>
+  <rect x='273' y='1735' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='1760' text-anchor='middle' font-weight='bold' class='op-text'>Sum</text>
+  <text x='340' y='1775' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>8 </tspan>]</text>
+  <rect x='409' y='1735' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='1760' text-anchor='middle' font-weight='bold' class='op-text'>Swish</text>
+  <text x='476' y='1775' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>24 </tspan>]</text>
+  <rect x='545' y='1735' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='612' y='1760' text-anchor='middle' font-weight='bold' class='op-text'>Tan</text>
+  <text x='612' y='1775' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>7 </tspan>]</text>
+  <rect x='681' y='1735' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='748' y='1760' text-anchor='middle' font-weight='bold' class='op-text'>Tanh</text>
+  <text x='748' y='1775' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>]</text>
+  <rect x='1' y='1786' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='1811' text-anchor='middle' font-weight='bold' class='op-text'>TensorScatter</text>
+  <text x='68' y='1826' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>24 </tspan>]</text>
+  <rect x='137' y='1786' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='1811' text-anchor='middle' font-weight='bold' class='op-text'>TfIdfVectorizer</text>
+  <text x='204' y='1826' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>9 </tspan>]</text>
+  <rect x='273' y='1786' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='1811' text-anchor='middle' font-weight='bold' class='op-text'>ThresholdedRelu</text>
+  <text x='340' y='1826' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>10 </tspan>]</text>
+  <rect x='409' y='1786' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='1811' text-anchor='middle' font-weight='bold' class='op-text'>Tile</text>
+  <text x='476' y='1826' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>]</text>
+  <rect x='545' y='1786' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='1811' text-anchor='middle' font-weight='bold' class='op-text'>TopK</text>
+  <text x='612' y='1826' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>24 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>10 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
+  <rect x='681' y='1786' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='748' y='1811' text-anchor='middle' font-weight='bold' class='op-text'>Transpose</text>
+  <text x='748' y='1826' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
+  <rect x='1' y='1837' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='1862' text-anchor='middle' font-weight='bold' class='op-text'>TreeEnsemble</text>
+  <text x='68' y='1877' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>5 </tspan>]</text>
+  <rect x='137' y='1837' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='204' y='1862' text-anchor='middle' font-weight='bold' class='op-text'>TreeEnsembleClassifier</text>
+  <text x='204' y='1877' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>5 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>3 </tspan>]</text>
+  <rect x='273' y='1837' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='1862' text-anchor='middle' font-weight='bold' class='op-text'>TreeEnsembleRegressor</text>
+  <text x='340' y='1877' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>5 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>3 </tspan>]</text>
+  <rect x='409' y='1837' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='1862' text-anchor='middle' font-weight='bold' class='op-text'>Trilu</text>
+  <text x='476' y='1877' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>14 </tspan>]</text>
+  <rect x='545' y='1837' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='612' y='1862' text-anchor='middle' font-weight='bold' class='op-text'>Unique</text>
+  <text x='612' y='1877' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>11 </tspan>]</text>
+  <rect x='681' y='1837' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='748' y='1862' text-anchor='middle' font-weight='bold' class='op-text'>Unsqueeze</text>
+  <text x='748' y='1877' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
+  <rect x='1' y='1888' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='68' y='1913' text-anchor='middle' font-weight='bold' class='op-text'>Upsample</text>
+  <text x='68' y='1928' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>10 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
+  <rect x='137' y='1888' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
+  <text x='204' y='1913' text-anchor='middle' font-weight='bold' class='op-text'>Where</text>
+  <text x='204' y='1928' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>16 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
+  <rect x='273' y='1888' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='340' y='1913' text-anchor='middle' font-weight='bold' class='op-text'>Xor</text>
+  <text x='340' y='1928' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>7 </tspan>, <tspan fill='gray'>1 </tspan>]</text>
+  <rect x='409' y='1888' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <text x='476' y='1913' text-anchor='middle' font-weight='bold' class='op-text'>ZipMap</text>
+  <text x='476' y='1928' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>1 </tspan>]</text>
+</svg>
