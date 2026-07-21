@@ -94,7 +94,8 @@ module {
 
 #### Onnx to Linalg
 ![ONNX2Linalg Coverage](docs/coverage-onnx2linalg.svg)
-The latest coverage report is also in: [docs/coverage-onnx2linalg.htm](docs/coverage-onnx2linalg.htm)
+
+The latest coverage report is also in: [docs/coverage-onnx2linalg.htm](https://htmlpreview.github.io/?https://raw.githubusercontent.com/cbalint13/onnx2mlir/refs/heads/main/docs/coverage-onnx2linalg.htm)
 
 ## Motto
 
