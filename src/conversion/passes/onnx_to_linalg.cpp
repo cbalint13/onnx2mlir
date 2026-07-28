@@ -101,6 +101,10 @@ static const std::unordered_map<std::string, LoweringFunc> &getLoweringMap() {
     registerOps({"Flatten"}, map, OnnxToLinalg_FlattenOp);
     registerOps({"Gemm"}, map, OnnxToLinalg_GemmOp);
     registerOps({"Hardmax"}, map, OnnxToLinalg_HardmaxOp);
+    registerOps( // clang-format off
+                {"BitwiseAnd",    "BitwiseOr",    "BitwiseXor"}, map,
+        OnnxToLinalg_BitwiseBinaryOps); // clang-format on
+    registerOps({"BitwiseNot"}, map, OnnxToLinalg_BitwiseUnaryOps);
     registerOps({"LogSoftmax"}, map, OnnxToLinalg_LogSoftmaxOp);
     registerOps({"MaxPool"}, map, OnnxToLinalg_MaxPoolOp);
     registerOps({"Softmax"}, map, OnnxToLinalg_SoftmaxOp);

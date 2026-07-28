@@ -84,6 +84,16 @@ mlir::LogicalResult OnnxToLinalg_HardmaxOp(mlir::Operation *op,
 mlir::LogicalResult OnnxToLinalg_LogSoftmaxOp(mlir::Operation *op,
                                               mlir::PatternRewriter &rewriter);
 
+// onnx.{BitwiseAnd, BitwiseOr, BitwiseXor}
+mlir::LogicalResult
+OnnxToLinalg_BitwiseBinaryOps(mlir::Operation *op,
+                              mlir::PatternRewriter &rewriter);
+
+// onnx.BitwiseNot
+mlir::LogicalResult
+OnnxToLinalg_BitwiseUnaryOps(mlir::Operation *op,
+                             mlir::PatternRewriter &rewriter);
+
 // onnx.Maxpool
 mlir::LogicalResult
 OnnxToLinalg_MaxPoolOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,

@@ -47,8 +47,7 @@ def test_onnx_mlir_parse_ir():
     """
     Test ONNX dialect IR parser.
     """
-    ONNX_MLIR_SAMPLE = textwrap.dedent(
-        """
+    ONNX_MLIR_SAMPLE = textwrap.dedent("""
         module {
           func.func @main(%arg0: tensor<2x2xf32>, %arg1: tensor<2x2xf32>) -> tensor<2x2xf32> {
             %0 = onnx.Mul(
@@ -67,8 +66,7 @@ def test_onnx_mlir_parse_ir():
             return %2 : tensor<2x2xf32>
           }
         }
-        """
-    )
+        """)
 
     def onnx_module_parse():
         with Context() as ctx:
@@ -98,8 +96,7 @@ def test_onnx_mlir_generation():
     """
     Test ONNX dialect ops MLIR generation.
     """
-    EXPECTED_OUTPUT = textwrap.dedent(
-        """
+    EXPECTED_OUTPUT = textwrap.dedent("""
         module {
           func.func @main(%arg0: tensor<2x2xf32>, %arg1: tensor<2x2xf32>) -> tensor<2x2xf32> {
             %0 = onnx.Mul(
@@ -118,8 +115,7 @@ def test_onnx_mlir_generation():
             return %2 : tensor<2x2xf32>
           }
         }
-        """
-    )
+        """)
 
     def create_mlir_module():
         with Context() as ctx, Location.unknown() as unk:

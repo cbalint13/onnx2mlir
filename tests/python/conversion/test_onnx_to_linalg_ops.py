@@ -21,7 +21,7 @@
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 ###############################################################################
-# pylint: disable=line-too-long,invalid-name,too-many-lines
+# pylint: disable=line-too-long,invalid-name,too-many-lines,too-many-locals
 
 """
 \file tests/python/conversion/test_onnx_to_linalg_ops.py
@@ -1058,3 +1058,177 @@ def test_onnx_flatten_lower(ONNX_OPSET_VERSION, dtype, input_shape, axis):
         outputs = runner(llvm_module, "main", [x_arr], [res_arr])
 
         np.testing.assert_allclose(onnx_result, outputs[0], rtol=1e-5, atol=1e-5)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape0, shape1",
+    [
+        (schema.name, schema.since_version, dtype_proto, shape0, shape1)
+        for schema in get_all_schemas_with_history()
+        if schema.name in ["BitwiseAnd", "BitwiseOr", "BitwiseXor"]
+        for dtype_proto in [
+            TensorProto.UINT8,
+            TensorProto.UINT16,
+            TensorProto.UINT32,
+            TensorProto.UINT64,
+            TensorProto.INT8,
+            TensorProto.INT16,
+            TensorProto.INT32,
+            TensorProto.INT64,
+        ]
+        for shape0, shape1 in [
+            ((2, 3, 4), (2, 3, 4)),  # Non-broadcast
+            ((1, 3, 1), (4, 1, 5)),  # Broadcast (3D expansion)
+            ((2, 3, 4), (1, 3, 4)),  # Broadcast (outer dimension)
+        ]
+    ],
+)
+def test_onnx_bitwise_binary_lower(
+    ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape0, shape1
+):
+    """
+    Test ONNX Bitwise binary operators lowering.
+    """
+    np_dtype = None
+    if dtype_proto == TensorProto.UINT8:
+        np_dtype = np.uint8
+    elif dtype_proto == TensorProto.UINT16:
+        np_dtype = np.uint16
+    elif dtype_proto == TensorProto.UINT32:
+        np_dtype = np.uint32
+    elif dtype_proto == TensorProto.UINT64:
+        np_dtype = np.uint64
+    elif dtype_proto == TensorProto.INT8:
+        np_dtype = np.int8
+    elif dtype_proto == TensorProto.INT16:
+        np_dtype = np.int16
+    elif dtype_proto == TensorProto.INT32:
+        np_dtype = np.int32
+    elif dtype_proto == TensorProto.INT64:
+        np_dtype = np.int64
+    else:
+        pytest.skip(f"DataType {dtype_proto} not implemented in test")
+
+    low, high = (0, 200) if np.issubdtype(np_dtype, np.unsignedinteger) else (-100, 100)
+    inp0 = np.random.randint(low, high, size=shape0).astype(np_dtype)
+    inp1 = np.random.randint(low, high, size=shape1).astype(np_dtype)
+
+    input_tensor_0 = make_tensor_value_info("input0", dtype_proto, inp0.shape)
+    input_tensor_1 = make_tensor_value_info("input1", dtype_proto, inp1.shape)
+
+    out_shape = np.broadcast_shapes(inp0.shape, inp1.shape)
+    output_tensor = make_tensor_value_info("output", dtype_proto, out_shape)
+
+    logic_node = make_node(
+        ONNX_OP_NAME,
+        ["input0", "input1"],
+        ["output"],
+    )
+    graph = make_graph(
+        nodes=[logic_node],
+        name="logic_graph",
+        inputs=[input_tensor_0, input_tensor_1],
+        outputs=[output_tensor],
+        initializer=[],
+    )
+    opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+    onnx_model = make_model(graph, opset_imports=opset_imports)
+    check_model(onnx_model)
+
+    ref = ReferenceEvaluator(onnx_model)
+    onnx_result = ref.run(None, {"input0": inp0, "input1": inp1})[0]
+
+    with Context() as ctx, Location.unknown():
+        mlir_module = import_from_onnx(onnx_model, ctx)
+        mlir_module.operation.verify()
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        res_array = np.zeros_like(onnx_result)
+        outputs = runner(llvm_module, "main", [inp0, inp1], [res_array])
+        np.testing.assert_array_equal(outputs[0], onnx_result)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape",
+    [
+        (schema.name, schema.since_version, dtype_proto, shape)
+        for schema in get_all_schemas_with_history()
+        if schema.name in ["BitwiseNot"]
+        for dtype_proto in [
+            TensorProto.UINT8,
+            TensorProto.UINT16,
+            TensorProto.UINT32,
+            TensorProto.UINT64,
+            TensorProto.INT8,
+            TensorProto.INT16,
+            TensorProto.INT32,
+            TensorProto.INT64,
+        ]
+        for shape in [
+            (5,),
+            (2, 3),
+            (2, 3, 4),
+        ]
+    ],
+)
+def test_onnx_bitwise_unary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape):
+    """
+    Test ONNX Bitwise unary operators lowering.
+    """
+    np_dtype = None
+    if dtype_proto == TensorProto.UINT8:
+        np_dtype = np.uint8
+    elif dtype_proto == TensorProto.UINT16:
+        np_dtype = np.uint16
+    elif dtype_proto == TensorProto.UINT32:
+        np_dtype = np.uint32
+    elif dtype_proto == TensorProto.UINT64:
+        np_dtype = np.uint64
+    elif dtype_proto == TensorProto.INT8:
+        np_dtype = np.int8
+    elif dtype_proto == TensorProto.INT16:
+        np_dtype = np.int16
+    elif dtype_proto == TensorProto.INT32:
+        np_dtype = np.int32
+    elif dtype_proto == TensorProto.INT64:
+        np_dtype = np.int64
+    else:
+        pytest.skip(f"DataType {dtype_proto} not implemented in test")
+
+    low, high = (0, 200) if np.issubdtype(np_dtype, np.unsignedinteger) else (-100, 100)
+    inp0 = np.random.randint(low, high, size=shape).astype(np_dtype)
+
+    input_tensor_0 = make_tensor_value_info("input0", dtype_proto, inp0.shape)
+    output_tensor = make_tensor_value_info("output", dtype_proto, inp0.shape)
+
+    logic_node = make_node(
+        ONNX_OP_NAME,
+        ["input0"],
+        ["output"],
+    )
+    graph = make_graph(
+        nodes=[logic_node],
+        name="logic_unary_graph",
+        inputs=[input_tensor_0],
+        outputs=[output_tensor],
+        initializer=[],
+    )
+    opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+    onnx_model = make_model(graph, opset_imports=opset_imports)
+    check_model(onnx_model)
+
+    ref = ReferenceEvaluator(onnx_model)
+    onnx_result = ref.run(None, {"input0": inp0})[0]
+
+    with Context() as ctx, Location.unknown():
+        mlir_module = import_from_onnx(onnx_model, ctx)
+        mlir_module.operation.verify()
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        res_array = np.zeros_like(onnx_result)
+        outputs = runner(llvm_module, "main", [inp0], [res_array])
+        np.testing.assert_array_equal(outputs[0], onnx_result)
