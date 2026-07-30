@@ -44,6 +44,7 @@ from onnx.helper import (
 )
 from onnx.checker import check_model
 from onnx.reference import ReferenceEvaluator
+from onnx.reference.op_run import OpRun
 
 from mlir.ir import (
     Context,
@@ -1252,8 +1253,7 @@ def test_onnx_boolean_binary_lower(
     ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape0, shape1
 ):
     """
-    Test ONNX binary logical operators (And, Or, Xor) lowering for boolean tensors.
-    Covering non-broadcast and multi-dimensional broadcasting shapes.
+    Test ONNX Boolean binary operators lowering.
     """
     np_dtype = None
     if dtype_proto == TensorProto.BOOL:
@@ -1300,3 +1300,271 @@ def test_onnx_boolean_binary_lower(
         outputs = runner(llvm_module, "main", [inp0, inp1], [res_array])
 
         np.testing.assert_array_equal(outputs[0], onnx_result)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape",
+    [
+        (schema.name, schema.since_version, dtype_proto, shape)
+        for schema in get_all_schemas_with_history()
+        if schema.name in ["GlobalAveragePool"]
+        for dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.DOUBLE,
+            TensorProto.FLOAT16,
+        ]
+        for shape in [
+            (2, 3, 10),  # 3D (1D spatial) #
+            (2, 3, 4, 5),  # 4D (2D spatial NCHW) #
+            (2, 3, 2, 4, 4),  # 5D (3D spatial NCDHW)
+        ]
+    ],
+)
+def test_onnx_global_average_pooling_lower(
+    ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape
+):
+    """
+    Test ONNX GlobalAveragePooling lowering.
+    """
+    np_dtype = None
+    if dtype_proto == TensorProto.FLOAT:
+        np_dtype = np.float32
+    elif dtype_proto == TensorProto.DOUBLE:
+        np_dtype = np.float64
+    elif dtype_proto == TensorProto.FLOAT16:
+        np_dtype = np.float16
+    else:
+        pytest.skip(f"DataType {dtype_proto} not implemented in test")
+
+    # Generate random test inputs (negative & positive values)
+    inp0 = np.random.uniform(-5.0, 5.0, size=shape).astype(np_dtype)
+
+    # Global pooling output shape: (N, C, 1, 1, ...)
+    out_shape = list(shape[:2]) + [1] * (len(shape) - 2)
+
+    input_tensor = make_tensor_value_info("input0", dtype_proto, inp0.shape)
+    output_tensor = make_tensor_value_info("output", dtype_proto, out_shape)
+
+    pool_node = make_node(ONNX_OP_NAME, ["input0"], ["output"])
+    graph = make_graph(
+        nodes=[pool_node],
+        name="global_average_pooling_graph",
+        inputs=[input_tensor],
+        outputs=[output_tensor],
+        initializer=[],
+    )
+    opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+    onnx_model = make_model(graph, opset_imports=opset_imports)
+    check_model(onnx_model)
+
+    ref = ReferenceEvaluator(onnx_model)
+    onnx_result = ref.run(None, {"input0": inp0})[0]
+
+    with Context() as ctx, Location.unknown():
+        mlir_module = import_from_onnx(onnx_model, ctx)
+        mlir_module.operation.verify()
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        res_array = np.zeros_like(onnx_result)
+        outputs = runner(llvm_module, "main", [inp0], [res_array])
+
+        # Assert numeric precision within standard tolerances
+        atol = 1e-2 if np_dtype == np.float16 else 1e-5
+        rtol = 1e-2 if np_dtype == np.float16 else 1e-5
+        np.testing.assert_allclose(outputs[0], onnx_result, rtol=rtol, atol=atol)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape, p_val",
+    [
+        (schema.name, schema.since_version, dtype_proto, shape, p_val)
+        for schema in get_all_schemas_with_history()
+        if schema.name in ["GlobalLpPool"]
+        for dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.DOUBLE,
+            TensorProto.FLOAT16,
+        ]
+        for shape in [
+            (2, 3, 10),  # 3D (1D spatial)
+            (2, 3, 4, 5),  # 4D (2D spatial NCHW)
+            (2, 3, 2, 4, 4),  # 5D (3D spatial NCDHW)
+        ]
+        for p_val in ([1, 2, 3])
+    ],
+)
+def test_onnx_global_lp_pooling_lower(
+    ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape, p_val
+):
+    """
+    Test ONNX GlobalLpPooling lowering.
+    """
+
+    # ReferenceEvaluator
+    class GlobalLpPool(OpRun):
+        """
+        Global Lp Pooling reduces spatial dimensions (H, W, ...) using p-norm
+        Ins: (N, C, D1, D2, ..., Dn)
+        Out: (N, C, 1, 1, ..., 1)
+        """
+
+        def _run(self, x, p=2):  # pylint: disable=arguments-differ
+            axes = tuple(range(2, len(x.shape)))
+            if p == 1:
+                res = np.sum(np.abs(x), axis=axes, keepdims=True)
+            elif p == 2:
+                res = np.sqrt(np.sum(np.square(x), axis=axes, keepdims=True))
+            else:
+                res = np.power(
+                    np.sum(np.power(np.abs(x), p), axis=axes, keepdims=True), 1.0 / p
+                )
+            return (res,)
+
+    np_dtype = None
+    if dtype_proto == TensorProto.FLOAT:
+        np_dtype = np.float32
+    elif dtype_proto == TensorProto.DOUBLE:
+        np_dtype = np.float64
+    elif dtype_proto == TensorProto.FLOAT16:
+        np_dtype = np.float16
+    else:
+        pytest.skip(f"DataType {dtype_proto} not implemented in test")
+
+    # Generate random test inputs (negative & positive values)
+    inp0 = np.random.uniform(-5.0, 5.0, size=shape).astype(np_dtype)
+
+    # Global pooling output shape: (N, C, 1, 1, ...)
+    out_shape = list(shape[:2]) + [1] * (len(shape) - 2)
+
+    input_tensor = make_tensor_value_info("input0", dtype_proto, inp0.shape)
+    output_tensor = make_tensor_value_info("output", dtype_proto, out_shape)
+
+    kwargs = {}
+    if p_val is not None:
+        if ONNX_OPSET_VERSION == 1:
+            if dtype_proto == TensorProto.FLOAT16:
+                pytest.skip(f"GlobalLpPool V{ONNX_OPSET_VERSION} float16 overflow")
+            else:
+                p_val = np_dtype(p_val)
+
+        kwargs["p"] = p_val
+
+    pool_node = make_node(ONNX_OP_NAME, ["input0"], ["output"], **kwargs)
+    graph = make_graph(
+        nodes=[pool_node],
+        name="global_lp_pooling_graph",
+        inputs=[input_tensor],
+        outputs=[output_tensor],
+        initializer=[],
+    )
+    opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+    onnx_model = make_model(graph, opset_imports=opset_imports)
+    check_model(onnx_model)
+
+    ref = ReferenceEvaluator(onnx_model, new_ops=[GlobalLpPool])
+    onnx_result = ref.run(None, {"input0": inp0})[0]
+
+    with Context() as ctx, Location.unknown():
+        mlir_module = import_from_onnx(onnx_model, ctx)
+        mlir_module.operation.verify()
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        res_array = np.zeros_like(onnx_result)
+        outputs = runner(llvm_module, "main", [inp0], [res_array])
+
+        # Assert numeric precision within standard tolerances
+        atol = 1e-2 if np_dtype == np.float16 else 1e-5
+        rtol = 1e-2 if np_dtype == np.float16 else 1e-5
+        np.testing.assert_allclose(outputs[0], onnx_result, rtol=rtol, atol=atol)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape",
+    [
+        (schema.name, schema.since_version, dtype_proto, shape)
+        for schema in get_all_schemas_with_history()
+        if schema.name in ["GlobalMaxPool"]
+        for dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.DOUBLE,
+            TensorProto.FLOAT16,
+        ]
+        for shape in [
+            (2, 3, 10),  # 3D (1D spatial) #
+            (2, 3, 4, 5),  # 4D (2D spatial NCHW) #
+            (2, 3, 2, 4, 4),  # 5D (3D spatial NCDHW)
+        ]
+    ],
+)
+def test_onnx_global_max_pooling_lower(
+    ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape
+):
+    """
+    Test ONNX GlobalMaxPooling lowering.
+    """
+
+    # ReferenceEvaluator
+    class GlobalMaxPool(OpRun):
+        """
+        Global Max Pooling reduces spatial dimensions (D1, D2, ..., Dn).
+        Ins: (N, C, D1, D2, ..., Dn)
+        Out: (N, C, 1, 1, ..., 1)
+        """
+
+        def _run(self, x):  # pylint: disable=arguments-differ
+            spatial_axes = tuple(range(2, len(x.shape)))
+            res = np.max(x, axis=spatial_axes, keepdims=True)
+            return (res,)
+
+    np_dtype = None
+    if dtype_proto == TensorProto.FLOAT:
+        np_dtype = np.float32
+    elif dtype_proto == TensorProto.DOUBLE:
+        np_dtype = np.float64
+    elif dtype_proto == TensorProto.FLOAT16:
+        np_dtype = np.float16
+    else:
+        pytest.skip(f"DataType {dtype_proto} not implemented in test")
+
+    # Generate random test inputs (negative & positive values)
+    inp0 = np.random.uniform(-5.0, 5.0, size=shape).astype(np_dtype)
+
+    # Global pooling output shape: (N, C, 1, 1, ...)
+    out_shape = list(shape[:2]) + [1] * (len(shape) - 2)
+
+    input_tensor = make_tensor_value_info("input0", dtype_proto, inp0.shape)
+    output_tensor = make_tensor_value_info("output", dtype_proto, out_shape)
+
+    pool_node = make_node(ONNX_OP_NAME, ["input0"], ["output"])
+    graph = make_graph(
+        nodes=[pool_node],
+        name="global_max_pooling_graph",
+        inputs=[input_tensor],
+        outputs=[output_tensor],
+        initializer=[],
+    )
+    opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+    onnx_model = make_model(graph, opset_imports=opset_imports)
+    check_model(onnx_model)
+
+    ref = ReferenceEvaluator(onnx_model, new_ops=[GlobalMaxPool])
+    onnx_result = ref.run(None, {"input0": inp0})[0]
+
+    with Context() as ctx, Location.unknown():
+        mlir_module = import_from_onnx(onnx_model, ctx)
+        mlir_module.operation.verify()
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        res_array = np.zeros_like(onnx_result)
+        outputs = runner(llvm_module, "main", [inp0], [res_array])
+
+        # Assert numeric precision within standard tolerances
+        atol = 1e-2 if np_dtype == np.float16 else 1e-5
+        rtol = 1e-2 if np_dtype == np.float16 else 1e-5
+        np.testing.assert_allclose(outputs[0], onnx_result, rtol=rtol, atol=atol)

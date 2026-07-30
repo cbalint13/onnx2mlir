@@ -91,6 +91,21 @@ mlir::LogicalResult OnnxToLinalg_FlattenOp(mlir::Operation *op,
 mlir::LogicalResult OnnxToLinalg_GemmOp(mlir::Operation *op,
                                         mlir::PatternRewriter &rewriter);
 
+// onnx.GlobalAveragePool
+mlir::LogicalResult
+OnnxToLinalg_GlobalAveragePoolOp(mlir::Operation *op,
+                                 mlir::PatternRewriter &rewriter);
+
+// onnx.GlobalLpPool
+mlir::LogicalResult
+OnnxToLinalg_GlobalLpPoolOp(mlir::Operation *op,
+                            mlir::PatternRewriter &rewriter);
+
+// onnx.GlobalMaxPool
+mlir::LogicalResult
+OnnxToLinalg_GlobalMaxPoolOp(mlir::Operation *op,
+                             mlir::PatternRewriter &rewriter);
+
 // onnx.Hardmax
 mlir::LogicalResult OnnxToLinalg_HardmaxOp(mlir::Operation *op,
                                            mlir::PatternRewriter &rewriter);
