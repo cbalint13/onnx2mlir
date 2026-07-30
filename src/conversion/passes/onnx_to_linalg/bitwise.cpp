@@ -41,7 +41,7 @@ namespace onnx2mlir::dialect {
 
 mlir::LogicalResult
 OnnxToLinalg_BitwiseBinaryOps(mlir::Operation *op,
-                            mlir::PatternRewriter &rewriter) {
+                              mlir::PatternRewriter &rewriter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
@@ -190,7 +190,7 @@ OnnxToLinalg_BitwiseBinaryOps(mlir::Operation *op,
 
 mlir::LogicalResult
 OnnxToLinalg_BitwiseUnaryOps(mlir::Operation *op,
-                           mlir::PatternRewriter &rewriter) {
+                             mlir::PatternRewriter &rewriter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
@@ -201,8 +201,7 @@ OnnxToLinalg_BitwiseUnaryOps(mlir::Operation *op,
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
   if (!inputType) {
-    return mlir::emitError(loc,
-                           opName + " operand must be ranked tensor type");
+    return mlir::emitError(loc, opName + " operand must be ranked tensor type");
   }
 
   if (!resType) {
@@ -245,9 +244,10 @@ OnnxToLinalg_BitwiseUnaryOps(mlir::Operation *op,
 
         // Convert signed (si*)/(ui*) integer types to signless (i*)
         if (!elemType.isSignless()) {
-          scalarInput = mlir::UnrealizedConversionCastOp::create(
-                            nestedBuilder, nestedLoc, signlessIntType, scalarInput)
-                            .getResult(0);
+          scalarInput =
+              mlir::UnrealizedConversionCastOp::create(
+                  nestedBuilder, nestedLoc, signlessIntType, scalarInput)
+                  .getResult(0);
         }
 
         // Create an all-ones constant mask

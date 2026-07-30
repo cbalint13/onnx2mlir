@@ -21,7 +21,7 @@
   <rect x='1' y='52' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
   <text x='68' y='77' text-anchor='middle' font-weight='bold' class='op-text'>AffineGrid</text>
   <text x='68' y='92' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>20 </tspan>]</text>
-  <rect x='137' y='52' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <rect x='137' y='52' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='204' y='77' text-anchor='middle' font-weight='bold' class='op-text'>And</text>
   <text x='204' y='92' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>7 </tspan>, <tspan fill='gray'>1 </tspan>]</text>
   <rect x='273' y='52' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
@@ -408,7 +408,7 @@
   <rect x='409' y='1123' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
   <text x='476' y='1148' text-anchor='middle' font-weight='bold' class='op-text'>OptionalHasElement</text>
   <text x='476' y='1163' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>, <tspan fill='gray'>15 </tspan>]</text>
-  <rect x='545' y='1123' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <rect x='545' y='1123' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='612' y='1148' text-anchor='middle' font-weight='bold' class='op-text'>Or</text>
   <text x='612' y='1163' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>7 </tspan>, <tspan fill='gray'>1 </tspan>]</text>
   <rect x='681' y='1123' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
@@ -675,7 +675,7 @@
   <rect x='273' y='1888' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='340' y='1913' text-anchor='middle' font-weight='bold' class='op-text'>Where</text>
   <text x='340' y='1928' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>16 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
-  <rect x='409' y='1888' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <rect x='409' y='1888' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='476' y='1913' text-anchor='middle' font-weight='bold' class='op-text'>Xor</text>
   <text x='476' y='1928' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>7 </tspan>, <tspan fill='gray'>1 </tspan>]</text>
   <rect x='545' y='1888' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>

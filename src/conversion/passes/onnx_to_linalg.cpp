@@ -77,34 +77,37 @@ static const std::unordered_map<std::string, LoweringFunc> &getLoweringMap() {
   static const auto loweringMap = [] {
     std::unordered_map<std::string, LoweringFunc> map;
     registerOps( // clang-format off
-                {"Add",      "Sub",        "Mul",       "Div",
+                {"Add",        "Sub",          "Mul",         "Div",
                  "Pow"}, map,
-        OnnxToLinalg_ArithBinaryOps); // clang-format on
+        OnnxToLinalg_ArithBinaryOps);   // clang-format on
     registerOps( // clang-format off
-                {"Abs",      "Acos",       "Acosh",     "Asin",
-                 "Asinh",    "Atan",       "Atanh",     "Ceil",
-                 "Cos",      "Cosh",       "Elu",       "Erf",
-                 "Exp",      "Floor",      "HardSwish", "Identity",
-                 "IsInf",    "IsNaN",      "Log",       "Neg",
-                 "Not",      "Reciprocal", "Relu",      "Round",
-                 "Sign",     "Sigmoid",    "Sin",       "Sinh",
-                 "Softplus", "Softsign",   "Sqrt",      "Tan",
+                {"Abs",        "Acos",         "Acosh",       "Asin",
+                 "Asinh",      "Atan",         "Atanh",       "Ceil",
+                 "Cos",        "Cosh",         "Elu",         "Erf",
+                 "Exp",        "Floor",        "HardSwish",   "Identity",
+                 "IsInf",      "IsNaN",        "Log",         "Neg",
+                 "Not",        "Reciprocal",   "Relu",        "Round",
+                 "Sign",       "Sigmoid",      "Sin",         "Sinh",
+                 "Softplus",   "Softsign",     "Sqrt",        "Tan",
                  "Tanh"}, map,
-        OnnxToLinalg_ArithUnaryOps);  // clang-format on
+        OnnxToLinalg_ArithUnaryOps);    // clang-format on
+    registerOps( // clang-format off
+                {"BitwiseAnd", "BitwiseOr",    "BitwiseXor"}, map,
+        OnnxToLinalg_BitwiseBinaryOps); // clang-format on
+    registerOps({"BitwiseNot"}, map, OnnxToLinalg_BitwiseUnaryOps);
+    registerOps( // clang-format off
+                {"And",        "Or",           "Xor"}, map,
+        OnnxToLinalg_BooleanBinaryOps); // clang-format on
     registerOps({"Cast"}, map, OnnxToLinalg_CastOp);
     registerOps( // clang-format off
-                {"Equal",    "Greater",    "GreatherOrEqual",
-                 "Less",     "LessOrEqual"}, map,
+                {"Equal",      "Greater",      "GreatherOrEqual",
+                 "Less",       "LessOrEqual"}, map,
         OnnxToLinalg_CompBinaryOps); // clang-format on
     registerOps({"Constant"}, map, OnnxToLinalg_ConstantOp);
     registerOps({"Conv"}, map, OnnxToLinalg_ConvOp);
     registerOps({"Flatten"}, map, OnnxToLinalg_FlattenOp);
     registerOps({"Gemm"}, map, OnnxToLinalg_GemmOp);
     registerOps({"Hardmax"}, map, OnnxToLinalg_HardmaxOp);
-    registerOps( // clang-format off
-                {"BitwiseAnd",    "BitwiseOr",    "BitwiseXor"}, map,
-        OnnxToLinalg_BitwiseBinaryOps); // clang-format on
-    registerOps({"BitwiseNot"}, map, OnnxToLinalg_BitwiseUnaryOps);
     registerOps({"LogSoftmax"}, map, OnnxToLinalg_LogSoftmaxOp);
     registerOps({"MaxPool"}, map, OnnxToLinalg_MaxPoolOp);
     registerOps({"Softmax"}, map, OnnxToLinalg_SoftmaxOp);
