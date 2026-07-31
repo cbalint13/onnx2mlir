@@ -40,7 +40,7 @@
 namespace onnx2mlir::dialect {
 
 mlir::LogicalResult OnnxToLinalg_SplitOp(mlir::Operation *op,
-                                             mlir::PatternRewriter &rewriter) {
+                                         mlir::PatternRewriter &rewriter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
@@ -49,8 +49,8 @@ mlir::LogicalResult OnnxToLinalg_SplitOp(mlir::Operation *op,
   auto inputType = mlir::dyn_cast<mlir::RankedTensorType>(input.getType());
 
   if (!inputType) {
-    return mlir::emitError(loc,
-                           opName + " input operand must be ranked tensor type");
+    return mlir::emitError(
+        loc, opName + " input operand must be ranked tensor type");
   }
 
   int64_t inputRank = inputType.getRank();
@@ -75,8 +75,8 @@ mlir::LogicalResult OnnxToLinalg_SplitOp(mlir::Operation *op,
 
   unsigned numResults = op->getNumResults();
   if (numResults == 0) {
-    return mlir::emitError(loc,
-                           opName + " operation must produce at least 1 result");
+    return mlir::emitError(
+        loc, opName + " operation must produce at least 1 result");
   }
 
   llvm::SmallVector<int64_t, 4> splitSizes;
@@ -103,7 +103,7 @@ mlir::LogicalResult OnnxToLinalg_SplitOp(mlir::Operation *op,
     }
   }
 
-  // Populate split sizes for equal splitting if split operand/attribute was omitted
+  // Populate split sizes for equal splitting if operand/attr was omitted
   if (splitSizes.empty()) {
     int64_t axisDim = inputType.getDimSize(axisValue);
     if (axisDim != mlir::ShapedType::kDynamic && numResults > 0) {
@@ -167,7 +167,8 @@ mlir::LogicalResult OnnxToLinalg_SplitOp(mlir::Operation *op,
         rewriter, loc, resType, input, offsets, sizes, strides);
 
     // Tag the slice for the transform dialect
-    slice.getDefiningOp()->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
+    slice.getDefiningOp()->setAttr("transform.target_tag",
+                                   rewriter.getStringAttr(opName));
 
     newResults.push_back(slice);
 

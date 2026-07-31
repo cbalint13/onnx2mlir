@@ -103,6 +103,7 @@ static const std::unordered_map<std::string, LoweringFunc> &getLoweringMap() {
                 {"Equal",      "Greater",      "GreatherOrEqual",
                  "Less",       "LessOrEqual"}, map,
         OnnxToLinalg_CompBinaryOps); // clang-format on
+    registerOps({"Concat"}, map, OnnxToLinalg_ConcatOp);
     registerOps({"Constant"}, map, OnnxToLinalg_ConstantOp);
     registerOps({"Conv"}, map, OnnxToLinalg_ConvOp);
     registerOps({"Flatten"}, map, OnnxToLinalg_FlattenOp);

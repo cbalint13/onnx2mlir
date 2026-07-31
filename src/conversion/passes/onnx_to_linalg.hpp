@@ -74,6 +74,10 @@ mlir::LogicalResult OnnxToLinalg_CastOp(mlir::Operation *op,
 mlir::LogicalResult OnnxToLinalg_CompBinaryOps(mlir::Operation *op,
                                                mlir::PatternRewriter &rewriter);
 
+// onnx.Concat
+mlir::LogicalResult OnnxToLinalg_ConcatOp(mlir::Operation *op,
+                                          mlir::PatternRewriter &rewriter);
+
 // onnx.Constant
 mlir::LogicalResult
 OnnxToLinalg_ConstantOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,

@@ -1580,7 +1580,7 @@ def test_onnx_global_max_pooling_lower(
             if "Split" == schema.name
         ]
         for dtype in [TensorProto.FLOAT, TensorProto.INT32]
-        # Opset 1 only supports Floating-point types according to spec
+        # Opset 1 only supports Floating-point types
         if not (opset == 1 and dtype != TensorProto.FLOAT)
         for shape, axis, split_sizes in [
             ((6, 4), 0, [2, 4]),  # Unequal split along leading axis
@@ -1705,3 +1705,89 @@ def test_onnx_split_lower(ONNX_OPSET_VERSION, dtype, shape, axis, split_sizes):
 
         for res, onnx_res in zip(outputs, onnx_results):
             np.testing.assert_allclose(res, onnx_res, atol=1e-5)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OPSET_VERSION, dtype, input_shapes, axis",
+    [
+        (opset, dtype, shapes, axis)
+        for opset in [
+            schema.since_version
+            for schema in get_all_schemas_with_history()
+            if "Concat" == schema.name
+        ]
+        for dtype in [TensorProto.FLOAT, TensorProto.INT32]
+        # Opset 1 only supports Floating-point types
+        if not (opset == 1 and dtype != TensorProto.FLOAT)
+        for shapes, axis in [
+            ([(2, 3), (2, 3)], 0),  # Concat along dim 0
+            ([(3, 4), (3, 4)], 1),  # Concat along dim 1
+            ([(2, 2, 2), (2, 2, 2)], 2),  # Concat along dim 2
+            ([(2, 3), (2, 3)], -1),  # Negative axis
+        ]
+    ],
+)
+def test_onnx_concat_lower(ONNX_OPSET_VERSION, dtype, input_shapes, axis):
+    """
+    Test ONNX Concat operator lowering.
+    """
+    np_dtype = np.float32 if dtype == TensorProto.FLOAT else np.int32
+    num_inputs = len(input_shapes)
+    input_names = [f"input_{i}" for i in range(num_inputs)]
+
+    # Calculate output shape based on input shapes and axis
+    rank = len(input_shapes[0])
+    norm_axis = axis if axis >= 0 else axis + rank
+
+    output_shape = list(input_shapes[0])
+    concat_dim_sum = sum(shape[norm_axis] for shape in input_shapes)
+    output_shape[norm_axis] = concat_dim_sum
+
+    def create_onnx_model():
+        input_tensors = [
+            make_tensor_value_info(name, dtype, shape)
+            for name, shape in zip(input_names, input_shapes)
+        ]
+        output_tensor = make_tensor_value_info("output", dtype, output_shape)
+
+        kwargs = {"axis": axis}
+
+        concat_node = make_node(
+            "Concat",
+            input_names,
+            ["output"],
+            **kwargs,
+        )
+
+        graph = make_graph(
+            nodes=[concat_node],
+            name="concat_test",
+            inputs=input_tensors,
+            outputs=[output_tensor],
+        )
+
+        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        model = make_model(graph, opset_imports=opset_imports)
+        check_model(model)
+        return model
+
+    data_arrs = [
+        (np.random.rand(*shape) * 10).astype(np_dtype) for shape in input_shapes
+    ]
+    onnx_model = create_onnx_model()
+
+    ref = ReferenceEvaluator(onnx_model)
+    onnx_results = ref.run(None, dict(zip(input_names, data_arrs)))
+
+    with Context() as ctx, Location.unknown():
+        mlir_module = import_from_onnx(onnx_model, ctx)
+        mlir_module.operation.verify()
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        outputs = runner(
+            llvm_module, "main", data_arrs, [np.zeros(output_shape, dtype=np_dtype)]
+        )
+
+        np.testing.assert_allclose(outputs[0], onnx_results[0], atol=1e-5)
