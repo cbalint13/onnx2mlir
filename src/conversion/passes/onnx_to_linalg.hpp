@@ -123,6 +123,10 @@ OnnxToLinalg_MaxPoolOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
 mlir::LogicalResult OnnxToLinalg_SoftmaxOp(mlir::Operation *op,
                                            mlir::PatternRewriter &rewriter);
 
+// onnx.Split
+mlir::LogicalResult OnnxToLinalg_SplitOp(mlir::Operation *op,
+                                         mlir::PatternRewriter &rewriter);
+
 // onnx.Squeeze
 mlir::LogicalResult OnnxToLinalg_SqueezeOp(mlir::Operation *op,
                                            mlir::PatternRewriter &rewriter);

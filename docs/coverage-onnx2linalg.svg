@@ -594,7 +594,7 @@
   <rect x='681' y='1633' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
   <text x='748' y='1658' text-anchor='middle' font-weight='bold' class='op-text'>SpaceToDepth</text>
   <text x='748' y='1673' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>]</text>
-  <rect x='1' y='1684' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <rect x='1' y='1684' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='68' y='1709' text-anchor='middle' font-weight='bold' class='op-text'>Split</text>
   <text x='68' y='1724' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>2 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>13 </tspan>]</text>
   <rect x='137' y='1684' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>

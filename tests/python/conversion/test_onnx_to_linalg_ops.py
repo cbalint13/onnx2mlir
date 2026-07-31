@@ -1568,3 +1568,140 @@ def test_onnx_global_max_pooling_lower(
         atol = 1e-2 if np_dtype == np.float16 else 1e-5
         rtol = 1e-2 if np_dtype == np.float16 else 1e-5
         np.testing.assert_allclose(outputs[0], onnx_result, rtol=rtol, atol=atol)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OPSET_VERSION, dtype, shape, axis, split_sizes",
+    [
+        (opset, dtype, shape, axis, split_sizes)
+        for opset in [
+            schema.since_version
+            for schema in get_all_schemas_with_history()
+            if "Split" == schema.name
+        ]
+        for dtype in [TensorProto.FLOAT, TensorProto.INT32]
+        # Opset 1 only supports Floating-point types according to spec
+        if not (opset == 1 and dtype != TensorProto.FLOAT)
+        for shape, axis, split_sizes in [
+            ((6, 4), 0, [2, 4]),  # Unequal split along leading axis
+            ((6, 4), 0, None),  # Equal split along leading axis (3, 3)
+            ((4, 6), 1, [1, 2, 3]),  # Multi-part split along inner axis
+            ((4, 6), 1, None),  # Equal split along inner axis (3, 3)
+            ((4, 8), -1, [3, 5]),  # Negative axis indexing
+        ]
+    ],
+)
+# pylint: disable=too-many-statements
+def test_onnx_split_lower(ONNX_OPSET_VERSION, dtype, shape, axis, split_sizes):
+    """
+    Test ONNX Split lowering.
+    """
+
+    # ReferenceEvaluator
+    class Split(OpRun):
+        """
+        Global Lp Pooling reduces spatial dimensions (H, W, ...) using p-norm
+        Ins: (N, C, D1, D2, ..., Dn)
+        Out: (N, C, 1, 1, ..., 1)
+        """
+
+        # pylint: disable=arguments-differ,unused-argument
+        def _run(self, x, split=None, axis=0, num_outputs=None):
+            onnx_results = []
+            curr_idx = 0
+            for s_size in effective_splits:
+                slc = [slice(None)] * len(x.shape)
+                slc[norm_axis] = slice(curr_idx, curr_idx + s_size)
+                onnx_results.append(x[tuple(slc)])
+                curr_idx += s_size
+            return tuple(onnx_results)
+
+    np_dtype = np.float32 if dtype == TensorProto.FLOAT else np.int32
+
+    # Normalize axis and calculate target split dimension sizes
+    norm_axis = axis if axis >= 0 else axis + len(shape)
+    axis_dim_size = shape[norm_axis]
+
+    if split_sizes is None:
+        num_outputs = 2
+        effective_splits = [axis_dim_size // num_outputs] * num_outputs
+    else:
+        num_outputs = len(split_sizes)
+        effective_splits = split_sizes
+
+    # Calculate output shapes
+    output_shapes = []
+    for split_size in effective_splits:
+        res_shape = list(shape)
+        res_shape[norm_axis] = split_size
+        output_shapes.append(res_shape)
+
+    def create_onnx_model():
+        input_tensor = make_tensor_value_info("input", dtype, shape)
+        output_names = [f"output_{i}" for i in range(num_outputs)]
+        output_tensors = [
+            make_tensor_value_info(name, dtype, out_shape)
+            for name, out_shape in zip(output_names, output_shapes)
+        ]
+
+        inputs = [input_tensor]
+        initializers = []
+        kwargs = {"axis": axis}
+
+        if ONNX_OPSET_VERSION < 13:
+            # Opsets 1 - 11: split attribute
+            if split_sizes is not None:
+                kwargs["split"] = split_sizes
+        else:
+            # Opsets 13+: split is passed as 1D INT64 input tensor
+            if split_sizes is not None:
+                split_tensor = make_tensor(
+                    "split",
+                    TensorProto.INT64,
+                    [len(split_sizes)],
+                    split_sizes,
+                )
+                inputs.append(split_tensor)
+                initializers.append(split_tensor)
+            elif ONNX_OPSET_VERSION >= 18:
+                kwargs["num_outputs"] = num_outputs
+
+        split_node = make_node(
+            "Split",
+            [inp.name if hasattr(inp, "name") else inp for inp in inputs],
+            output_names,
+            **kwargs,
+        )
+
+        graph = make_graph(
+            nodes=[split_node],
+            name="split_test",
+            inputs=[input_tensor],
+            outputs=output_tensors,
+            initializer=initializers,
+        )
+
+        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        model = make_model(graph, opset_imports=opset_imports)
+        check_model(model)
+        return model
+
+    data_arr = (np.random.rand(*shape) * 10).astype(np_dtype)
+    onnx_model = create_onnx_model()
+
+    new_ops = [Split] if ONNX_OPSET_VERSION == 1 else []
+    ref = ReferenceEvaluator(onnx_model, new_ops=new_ops)
+    onnx_results = ref.run(None, {"input": data_arr})
+
+    with Context() as ctx, Location.unknown():
+        mlir_module = import_from_onnx(onnx_model, ctx)
+        mlir_module.operation.verify()
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        res_arrs = [np.zeros(out_shape, dtype=np_dtype) for out_shape in output_shapes]
+        outputs = runner(llvm_module, "main", [data_arr], res_arrs)
+
+        for res, onnx_res in zip(outputs, onnx_results):
+            np.testing.assert_allclose(res, onnx_res, atol=1e-5)
