@@ -56,7 +56,8 @@ mlir::LogicalResult OnnxToLinalg_ConcatOp(mlir::Operation *op,
   }
 
   // Normalize axis if needed
-  auto inputType = mlir::dyn_cast<mlir::RankedTensorType>(op->getOperand(0).getType());
+  auto inputType =
+      mlir::dyn_cast<mlir::RankedTensorType>(op->getOperand(0).getType());
   if (!inputType) {
     return mlir::emitError(loc, opName + " input must be ranked tensor");
   }
@@ -66,7 +67,8 @@ mlir::LogicalResult OnnxToLinalg_ConcatOp(mlir::Operation *op,
     axisValue += rank;
   }
 
-  auto concatOp = mlir::tensor::ConcatOp::create(rewriter, loc, axisValue, op->getOperands());
+  auto concatOp = mlir::tensor::ConcatOp::create(rewriter, loc, axisValue,
+                                                 op->getOperands());
 
   // Tag for transform dialect
   concatOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));

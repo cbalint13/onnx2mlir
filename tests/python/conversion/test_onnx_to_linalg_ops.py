@@ -1600,9 +1600,7 @@ def test_onnx_split_lower(ONNX_OPSET_VERSION, dtype, shape, axis, split_sizes):
     # ReferenceEvaluator
     class Split(OpRun):
         """
-        Global Lp Pooling reduces spatial dimensions (H, W, ...) using p-norm
-        Ins: (N, C, D1, D2, ..., Dn)
-        Out: (N, C, 1, 1, ..., 1)
+        SplitOp reference implementation.
         """
 
         # pylint: disable=arguments-differ,unused-argument
@@ -1789,5 +1787,119 @@ def test_onnx_concat_lower(ONNX_OPSET_VERSION, dtype, input_shapes, axis):
         outputs = runner(
             llvm_module, "main", data_arrs, [np.zeros(output_shape, dtype=np_dtype)]
         )
+
+        np.testing.assert_allclose(outputs[0], onnx_results[0], atol=1e-5)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OPSET_VERSION, dtype, input_shape, target_shape",
+    [
+        (opset, dtype, in_shape, out_shape)
+        for opset in [
+            schema.since_version
+            for schema in get_all_schemas_with_history()
+            if "Reshape" == schema.name
+        ]
+        for dtype in [TensorProto.FLOAT, TensorProto.INT32]
+        if not (opset == 1 and dtype != TensorProto.FLOAT)
+        for in_shape, out_shape in [
+            ((2, 3), (3, 2)),  # Transpose-like reshape
+            ((2, 4), (8,)),  # Flatten
+            ((1, 2, 2), (4,)),  # 3D to 1D
+            ((2, 2, 1), (1, 4)),  # 3D to 2D
+        ]
+    ],
+)
+def test_onnx_reshape_lower(ONNX_OPSET_VERSION, dtype, input_shape, target_shape):
+    """
+    Test ONNX Reshape operator lowering.
+    """
+
+    # ReferenceEvaluator
+    class Reshape(OpRun):
+        """
+        ReshapeOp reference implementation.
+        """
+
+        @staticmethod
+        def _impl(
+            data: np.ndarray, shape: np.ndarray, allowzero: int = 0
+        ) -> np.ndarray:
+            new_shape = np.copy(shape)
+            if allowzero == 0:
+                zeros_index = np.where(shape == 0)
+                new_shape[zeros_index] = np.array(data.shape)[zeros_index]
+            return np.reshape(data, new_shape)
+
+        # pylint: disable=arguments-differ,unused-argument
+        def _run(self, data, shape=None, allowzero=0):
+            target = (
+                shape if shape is not None else getattr(self, "shape", target_shape)
+            )
+            return (self._impl(data, np.asarray(target), 0),)
+
+    np_dtype = np.float32 if dtype == TensorProto.FLOAT else np.int32
+    shape_arr = np.array(target_shape, dtype=np.int64)
+
+    def create_onnx_model():
+        input_tensor = make_tensor_value_info("input", dtype, input_shape)
+        output_tensor = make_tensor_value_info("output", dtype, target_shape)
+
+        inputs = [input_tensor]
+        kwargs = {}
+
+        if ONNX_OPSET_VERSION < 5:
+            # Opsets 1 - 4: shape is an attribute
+            kwargs["shape"] = target_shape
+        else:
+            # Opsets 5+: shape is an input operand
+            shape_info = make_tensor_value_info(
+                "shape", TensorProto.INT64, [len(target_shape)]
+            )
+            inputs.append(shape_info)
+
+        reshape_node = make_node(
+            "Reshape",
+            [inp.name if hasattr(inp, "name") else inp for inp in inputs],
+            ["output"],
+            **kwargs,
+        )
+
+        graph = make_graph(
+            nodes=[reshape_node],
+            name="reshape_test",
+            inputs=inputs,
+            outputs=[output_tensor],
+        )
+
+        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        model = make_model(graph, opset_imports=opset_imports)
+        check_model(model)
+        return model
+
+    data_arr = (np.random.rand(*input_shape) * 10).astype(np_dtype)
+    onnx_model = create_onnx_model()
+
+    new_ops = [Reshape] if ONNX_OPSET_VERSION == 1 else []
+    ref = ReferenceEvaluator(onnx_model, new_ops=new_ops)
+    feed_dict = {"input": data_arr}
+    runner_inputs = [data_arr]
+
+    if ONNX_OPSET_VERSION >= 5:
+        feed_dict["shape"] = shape_arr
+        runner_inputs.append(shape_arr)
+
+    onnx_results = ref.run(None, feed_dict)
+
+    with Context() as ctx, Location.unknown():
+        mlir_module = import_from_onnx(onnx_model, ctx)
+        mlir_module.operation.verify()
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        # Execute
+        res_arr = np.zeros(target_shape, dtype=np_dtype)
+        outputs = runner(llvm_module, "main", runner_inputs, [res_arr])
 
         np.testing.assert_allclose(outputs[0], onnx_results[0], atol=1e-5)
