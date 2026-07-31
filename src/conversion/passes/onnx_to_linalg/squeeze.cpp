@@ -35,7 +35,7 @@
 #include <mlir/Support/LogicalResult.h>
 
 #include "onnx2mlir/common/onnx.hpp"
-#include "onnx2mlir/dialect/onnx/Onnx.hpp"
+#include "onnx2mlir/support/support.hpp"
 
 namespace onnx2mlir::dialect {
 
@@ -51,7 +51,8 @@ mlir::LogicalResult OnnxToLinalg_SqueezeOp(mlir::Operation *op,
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
   if (!dataType || !resType) {
-    return mlir::emitError(loc, opName + " operand must be ranked tensor type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " operand must be ranked tensor type");
   }
 
   int64_t dataRank = dataType.getRank();
@@ -59,7 +60,8 @@ mlir::LogicalResult OnnxToLinalg_SqueezeOp(mlir::Operation *op,
 
   if (resRank > dataRank) {
     return mlir::emitError(
-        loc, opName + " result rank cannot be greater than input rank");
+        Onnx2Mlir_SrcLoc(rewriter),
+        opName + " result rank cannot be greater than input rank");
   }
 
   // Create output buffer
@@ -88,7 +90,8 @@ mlir::LogicalResult OnnxToLinalg_SqueezeOp(mlir::Operation *op,
   // Map exactly the number of result dimensions
   if (currResDim != resRank) {
     return mlir::emitError(
-        loc, opName + " failed to map input to output shape correctly");
+        Onnx2Mlir_SrcLoc(rewriter),
+        opName + " failed to map input to output shape correctly");
   }
 
   mlir::SmallVector<mlir::AffineMap, 2> idxMaps;

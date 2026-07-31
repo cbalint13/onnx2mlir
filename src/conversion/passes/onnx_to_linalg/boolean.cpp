@@ -23,8 +23,8 @@
  *****************************************************************************/
 
 /*!
- * \file src/conversion/passes/onnx_to_linalg/arith_binary.cpp
- * \brief ONNX Arith binary operations to Linalg lowering
+ * \file src/conversion/passes/onnx_to_linalg/boolean.cpp
+ * \brief ONNX boolean operations to Linalg lowering
  */
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
@@ -41,8 +41,8 @@
 namespace onnx2mlir::dialect {
 
 mlir::LogicalResult
-OnnxToLinalg_ArithBinaryOps(mlir::Operation *op,
-                            mlir::PatternRewriter &rewriter) {
+OnnxToLinalg_BooleanBinaryOps(mlir::Operation *op,
+                              mlir::PatternRewriter &rewriter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
@@ -69,13 +69,12 @@ OnnxToLinalg_ArithBinaryOps(mlir::Operation *op,
                            opName + " result must be a ranked tensor type");
   }
 
-  if (opNameBeginsWith(opName, "Pow") &&
-      mlir::isa<mlir::IntegerType>(resType.getElementType())) {
+  auto elemType = mlir::dyn_cast<mlir::IntegerType>(resType.getElementType());
+  if (!elemType || elemType.getWidth() != 1) {
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " not supported with integer types");
+                           opName + " requires boolean element type");
   }
 
-  // Infer broadcasted shape output
   auto outBrdType = getBroadcastShape(lhsType, rhsType);
 
   if (!outBrdType) {
@@ -88,21 +87,20 @@ OnnxToLinalg_ArithBinaryOps(mlir::Operation *op,
                            opName + " result not match operands broadcast");
   }
 
-  // Create an empty tensor for the output
+  // Create an empty tensor for the output buffer
   mlir::Value outBuff = mlir::tensor::EmptyOp::create(
       rewriter, loc, resType.getShape(), resType.getElementType());
 
-  // Create indexing maps for the elementwise op
-  llvm::SmallVector<mlir::AffineMap, 4> idxMaps;
+  llvm::SmallVector<mlir::AffineMap, 3> idxMaps;
   mlir::AffineMap lhsMap, rhsMap, resMap;
 
-  // Create identity map for the result
+  // Create identity map for the result tensor
   resMap = rewriter.getMultiDimIdentityMap(resType.getRank());
 
   mlir::Builder builder(op->getContext());
   mlir::AffineExpr zero = builder.getAffineConstantExpr(0);
 
-  // Create the map for the LHS
+  // Create broadcast mapping for the LHS tensor
   llvm::SmallVector<mlir::AffineExpr, 4> lhsExprs;
   for (unsigned i = 0; i < resType.getRank(); ++i) {
     int64_t lhsDimIndex = lhsType.getRank() - (resType.getRank() - i);
@@ -116,7 +114,7 @@ OnnxToLinalg_ArithBinaryOps(mlir::Operation *op,
   lhsMap = mlir::AffineMap::get(resType.getRank(), 0, lhsExprs,
                                 builder.getContext());
 
-  // Create the map for the RHS
+  // Create broadcast mapping for the RHS tensor
   llvm::SmallVector<mlir::AffineExpr, 4> rhsExprs;
   for (unsigned i = 0; i < resType.getRank(); ++i) {
     int64_t rhsDimIndex = rhsType.getRank() - (resType.getRank() - i);
@@ -134,40 +132,37 @@ OnnxToLinalg_ArithBinaryOps(mlir::Operation *op,
   idxMaps.push_back(rhsMap);
   idxMaps.push_back(resMap);
 
-  auto idxMapsAttr = rewriter.getAffineMapArrayAttr(idxMaps);
+  // Loop iterator types for generic operation (all dims are parallel)
+  llvm::SmallVector<mlir::utils::IteratorType, 4> iteratorTypes(
+      resType.getRank(), mlir::utils::IteratorType::parallel);
 
-  mlir::linalg::ElementwiseKind kindEnum;
-  if (opNameBeginsWith(opName, "Add")) {
-    kindEnum = mlir::linalg::ElementwiseKind::add;
-  } else if (opNameBeginsWith(opName, "Sub")) {
-    kindEnum = mlir::linalg::ElementwiseKind::sub;
-  } else if (opNameBeginsWith(opName, "Mul")) {
-    kindEnum = mlir::linalg::ElementwiseKind::mul;
-  } else if (opNameBeginsWith(opName, "Div")) {
-    kindEnum = mlir::linalg::ElementwiseKind::div;
-  } else if (opNameBeginsWith(opName, "Pow")) {
-    if (mlir::isa<mlir::FloatType>(resType.getElementType()))
-      kindEnum = mlir::linalg::ElementwiseKind::powf;
-    else
-      return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                             opName + " supports only float element types");
-  } else {
-    return mlir::emitError(
-        Onnx2Mlir_SrcLoc(rewriter),
-        opName + " is unsupported for linalg.elementwise operation");
-  }
+  auto genericOp = mlir::linalg::GenericOp::create(
+      rewriter, loc, mlir::TypeRange{resType}, mlir::ValueRange{lhs, rhs},
+      mlir::ValueRange{outBuff}, idxMaps, iteratorTypes,
+      [&](mlir::OpBuilder &nestedBuilder, mlir::Location nestedLoc,
+          mlir::ValueRange args) {
+        mlir::Value scalarLhs = args[0];
+        mlir::Value scalarRhs = args[1];
+        mlir::Value logicRes;
 
-  auto kindAttr =
-      mlir::linalg::ElementwiseKindAttr::get(op->getContext(), kindEnum);
+        if (opNameBeginsWith(opName, "And")) {
+          logicRes = mlir::arith::AndIOp::create(nestedBuilder, nestedLoc,
+                                                 scalarLhs, scalarRhs);
+        } else if (opNameBeginsWith(opName, "Or")) {
+          logicRes = mlir::arith::OrIOp::create(nestedBuilder, nestedLoc,
+                                                scalarLhs, scalarRhs);
+        } else if (opNameBeginsWith(opName, "Xor")) {
+          logicRes = mlir::arith::XOrIOp::create(nestedBuilder, nestedLoc,
+                                                 scalarLhs, scalarRhs);
+        }
 
-  auto elmwiseOp = mlir::linalg::ElementwiseOp::create(
-      rewriter, loc, mlir::ValueRange{lhs, rhs}, mlir::ValueRange{outBuff},
-      kindAttr, idxMapsAttr);
+        mlir::linalg::YieldOp::create(nestedBuilder, nestedLoc, logicRes);
+      });
 
-  // Tag for transform optimization
-  elmwiseOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
+  // Tag operation for downstream pass transform optimizations
+  genericOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
 
-  rewriter.replaceOp(op, elmwiseOp);
+  rewriter.replaceOp(op, genericOp.getResults());
 
   return mlir::success();
 }

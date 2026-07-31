@@ -37,7 +37,7 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Support/LogicalResult.h>
 
-#include "onnx2mlir/conversion/onnx_passes.hpp"
+#include "onnx2mlir/support/support.hpp"
 
 namespace onnx2mlir::dialect {
 
@@ -55,18 +55,20 @@ OnnxToLinalg_GlobalAveragePoolOp(mlir::Operation *op,
 
   if (!inpType || !resType) {
     return mlir::emitError(
-        loc, opName + " operand and result must be ranked tensor type");
+        Onnx2Mlir_SrcLoc(rewriter),
+        opName + " operand and result must be ranked tensor type");
   }
 
   auto elemType = inpType.getElementType();
   auto floatType = mlir::dyn_cast<mlir::FloatType>(elemType);
   if (!floatType) {
-    return mlir::emitError(loc, opName + " requires float element type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " requires float element type");
   }
 
   int64_t rank = inpType.getRank();
   if (rank < 3) {
-    return mlir::emitError(loc,
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " input tensor rank must be at least 3");
   }
 
@@ -75,7 +77,8 @@ OnnxToLinalg_GlobalAveragePoolOp(mlir::Operation *op,
     int64_t dimSize = inpType.getDimSize(i);
     if (dimSize == mlir::ShapedType::kDynamic) {
       return mlir::emitError(
-          loc, opName + " dynamic spatial dimensions are not supported");
+          Onnx2Mlir_SrcLoc(rewriter),
+          opName + " dynamic spatial dimensions are not supported");
     }
     numSpatialElements *= dimSize;
   }
@@ -186,18 +189,20 @@ OnnxToLinalg_GlobalLpPoolOp(mlir::Operation *op,
 
   if (!inpType || !resType) {
     return mlir::emitError(
-        loc, opName + " operand and result must be ranked tensor type");
+        Onnx2Mlir_SrcLoc(rewriter),
+        opName + " operand and result must be ranked tensor type");
   }
 
   auto elemType = inpType.getElementType();
   auto floatType = mlir::dyn_cast<mlir::FloatType>(elemType);
   if (!floatType) {
-    return mlir::emitError(loc, opName + " requires float element type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " requires float element type");
   }
 
   int64_t rank = inpType.getRank();
   if (rank < 3) {
-    return mlir::emitError(loc,
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " input tensor rank must be at least 3");
   }
 
@@ -206,7 +211,8 @@ OnnxToLinalg_GlobalLpPoolOp(mlir::Operation *op,
     int64_t dimSize = inpType.getDimSize(i);
     if (dimSize == mlir::ShapedType::kDynamic) {
       return mlir::emitError(
-          loc, opName + " dynamic spatial dimensions are not supported");
+          Onnx2Mlir_SrcLoc(rewriter),
+          opName + " dynamic spatial dimensions are not supported");
     }
     numSpatialElements *= dimSize;
   }
@@ -348,18 +354,20 @@ OnnxToLinalg_GlobalMaxPoolOp(mlir::Operation *op,
 
   if (!inpType || !resType) {
     return mlir::emitError(
-        loc, opName + " operand and result must be ranked tensor type");
+        Onnx2Mlir_SrcLoc(rewriter),
+        opName + " operand and result must be ranked tensor type");
   }
 
   auto elemType = inpType.getElementType();
   auto floatType = mlir::dyn_cast<mlir::FloatType>(elemType);
   if (!floatType) {
-    return mlir::emitError(loc, opName + " requires float element type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " requires float element type");
   }
 
   int64_t rank = inpType.getRank();
   if (rank < 3) {
-    return mlir::emitError(loc,
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " input tensor rank must be at least 3");
   }
 

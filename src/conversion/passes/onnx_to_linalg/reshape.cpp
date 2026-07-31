@@ -35,7 +35,7 @@
 #include <mlir/Support/LogicalResult.h>
 
 #include "onnx2mlir/common/onnx.hpp"
-#include "onnx2mlir/dialect/onnx/Onnx.hpp"
+#include "onnx2mlir/support/support.hpp"
 
 namespace onnx2mlir::dialect {
 
@@ -73,7 +73,7 @@ mlir::LogicalResult OnnxToLinalg_ReshapeOp(mlir::Operation *op,
     }
 
     if (shapeValues.empty()) {
-      return mlir::emitError(loc,
+      return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                              opName + " missing or invalid shape attribute");
     }
 

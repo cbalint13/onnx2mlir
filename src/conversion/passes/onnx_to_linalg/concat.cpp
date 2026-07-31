@@ -35,7 +35,7 @@
 #include <mlir/Support/LogicalResult.h>
 
 #include "onnx2mlir/common/onnx.hpp"
-#include "onnx2mlir/dialect/onnx/Onnx.hpp"
+#include "onnx2mlir/support/support.hpp"
 
 namespace onnx2mlir::dialect {
 
@@ -46,7 +46,8 @@ mlir::LogicalResult OnnxToLinalg_ConcatOp(mlir::Operation *op,
 
   // Validate operands
   if (op->getNumOperands() == 0) {
-    return mlir::emitError(loc, opName + " must have at least one input");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " must have at least one input");
   }
 
   // Get 'axis' attribute (default is 0 if absent)
@@ -59,7 +60,8 @@ mlir::LogicalResult OnnxToLinalg_ConcatOp(mlir::Operation *op,
   auto inputType =
       mlir::dyn_cast<mlir::RankedTensorType>(op->getOperand(0).getType());
   if (!inputType) {
-    return mlir::emitError(loc, opName + " input must be ranked tensor");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " input must be ranked tensor");
   }
 
   int64_t rank = inputType.getRank();

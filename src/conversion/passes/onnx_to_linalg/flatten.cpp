@@ -40,7 +40,7 @@
 #include <algorithm>
 
 #include "onnx2mlir/common/onnx.hpp"
-#include "onnx2mlir/dialect/onnx/Onnx.hpp"
+#include "onnx2mlir/support/support.hpp"
 
 namespace onnx2mlir::dialect {
 
@@ -57,7 +57,8 @@ mlir::LogicalResult OnnxToLinalg_FlattenOp(mlir::Operation *op,
       mlir::dyn_cast<mlir::RankedTensorType>(op->getResult(0).getType());
 
   if (!inpType || !resType) {
-    return mlir::emitError(loc, opName + " requires ranked tensor types");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " requires ranked tensor types");
   }
 
   // Get axis attribute

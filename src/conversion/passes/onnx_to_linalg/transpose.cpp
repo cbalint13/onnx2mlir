@@ -36,7 +36,7 @@
 #include <mlir/Support/LogicalResult.h>
 
 #include "onnx2mlir/common/onnx.hpp"
-#include "onnx2mlir/dialect/onnx/Onnx.hpp"
+#include "onnx2mlir/support/support.hpp"
 
 namespace onnx2mlir::dialect {
 
@@ -51,11 +51,12 @@ mlir::LogicalResult OnnxToLinalg_TransposeOp(mlir::Operation *op,
   auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(inp.getType());
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
   if (!inpType) {
-    return mlir::emitError(loc, opName + " operand must be ranked tensor type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " operand must be ranked tensor type");
   }
 
   if (!resType) {
-    return mlir::emitError(loc,
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " result must be a ranked tensor type");
   }
 

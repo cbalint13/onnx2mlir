@@ -36,7 +36,7 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Support/LogicalResult.h>
 
-#include "onnx2mlir/conversion/onnx_passes.hpp"
+#include "onnx2mlir/support/support.hpp"
 
 namespace onnx2mlir::dialect {
 
@@ -53,7 +53,8 @@ OnnxToLinalg_MaxPoolOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(result.getType());
 
   if (!inpType || !resType) {
-    return mlir::emitError(loc, opName + " operand must be ranked tensor type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " operand must be ranked tensor type");
   }
 
   auto elementType = typeConverter->convertType(inpType.getElementType());
@@ -61,8 +62,9 @@ OnnxToLinalg_MaxPoolOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
   int64_t spatialRank = rank - 2;
 
   if (spatialRank != 2) {
-    return mlir::emitError(
-        loc, opName + " only 2D (NCHW) spatial pooling is supported");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName +
+                               " only 2D (NCHW) spatial pooling is supported");
   }
 
   // Signless integer for arith/linalg

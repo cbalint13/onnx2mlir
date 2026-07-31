@@ -36,7 +36,7 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Support/LogicalResult.h>
 
-#include "onnx2mlir/dialect/onnx/Onnx.hpp"
+#include "onnx2mlir/support/support.hpp"
 
 namespace onnx2mlir::dialect {
 
@@ -56,7 +56,8 @@ mlir::LogicalResult OnnxToLinalg_GemmOp(mlir::Operation *op,
       mlir::dyn_cast<mlir::RankedTensorType>(op->getResult(0).getType());
 
   if (!aType || !bType || !resType) {
-    return mlir::emitError(loc, opName + " operand must be ranked tensor type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " operand must be ranked tensor type");
   }
 
   mlir::Type elementType = resType.getElementType();

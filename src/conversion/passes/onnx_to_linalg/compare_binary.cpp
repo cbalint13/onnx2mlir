@@ -35,6 +35,7 @@
 
 #include "onnx2mlir/common/onnx.hpp"
 #include "onnx2mlir/conversion/onnx_passes.hpp"
+#include "onnx2mlir/support/support.hpp"
 
 namespace onnx2mlir::dialect {
 

@@ -32,21 +32,22 @@
 #include <mlir/Transforms/DialectConversion.h>
 
 #include "onnx2mlir/conversion/onnx_passes.hpp"
+#include "onnx2mlir/support/support.hpp"
 
 namespace onnx2mlir::dialect {
 
 mlir::LogicalResult
 OnnxToLinalg_ConstantOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
                         const mlir::TypeConverter *typeConverter) {
-  auto loc = op->getLoc();
+  auto opName = op->getName().getStringRef();
 
   // Get legit result type
   auto resType = typeConverter->convertType(op->getResult(0));
 
   // Cannot handle NoneType return
   if (mlir::isa<mlir::NoneType>(resType)) {
-    return mlir::emitError(loc,
-                           "onnx.Constant with 'NoneType' is not supported");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " with 'NoneType' is not supported");
   }
   // Get the 'value' attribute
   mlir::Attribute valueAttr = op->getAttr("value");
@@ -54,8 +55,9 @@ OnnxToLinalg_ConstantOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
 
   // Cannot handle empty tensor
   if (!typedAttr) {
-    return mlir::emitError(
-        loc, "onnx.Constant without a valid tensor 'value' attribute");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName +
+                               " without a valid tensor 'value' attribute");
   }
 
   bool isChanged = false;

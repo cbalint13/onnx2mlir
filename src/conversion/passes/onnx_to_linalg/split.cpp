@@ -35,7 +35,7 @@
 #include <mlir/Support/LogicalResult.h>
 
 #include "onnx2mlir/common/onnx.hpp"
-#include "onnx2mlir/dialect/onnx/Onnx.hpp"
+#include "onnx2mlir/support/support.hpp"
 
 namespace onnx2mlir::dialect {
 
@@ -49,13 +49,15 @@ mlir::LogicalResult OnnxToLinalg_SplitOp(mlir::Operation *op,
   auto inputType = mlir::dyn_cast<mlir::RankedTensorType>(input.getType());
 
   if (!inputType) {
-    return mlir::emitError(
-        loc, opName + " input operand must be ranked tensor type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName +
+                               " input operand must be ranked tensor type");
   }
 
   int64_t inputRank = inputType.getRank();
   if (inputRank == 0) {
-    return mlir::emitError(loc, opName + " input rank must be greater than 0");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " input rank must be greater than 0");
   }
 
   // Get 'axis' attribute (defaults to 0 if absent)
@@ -70,13 +72,15 @@ mlir::LogicalResult OnnxToLinalg_SplitOp(mlir::Operation *op,
   }
 
   if (axisValue < 0 || axisValue >= inputRank) {
-    return mlir::emitError(loc, opName + " axis attribute is out of range");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " axis attribute is out of range");
   }
 
   unsigned numResults = op->getNumResults();
   if (numResults == 0) {
-    return mlir::emitError(
-        loc, opName + " operation must produce at least 1 result");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName +
+                               " operation must produce at least 1 result");
   }
 
   llvm::SmallVector<int64_t, 4> splitSizes;
@@ -92,7 +96,7 @@ mlir::LogicalResult OnnxToLinalg_SplitOp(mlir::Operation *op,
   } else if (op->getNumOperands() > 1) {
     mlir::Value splitOperand = op->getOperand(1);
     if (splitOperand && !mlir::isa<mlir::NoneType>(splitOperand.getType())) {
-      if (auto constOp = splitOperand.getDefiningOp()) {
+      if (auto *constOp = splitOperand.getDefiningOp()) {
         if (auto denseAttr =
                 constOp->getAttrOfType<mlir::DenseElementsAttr>("value")) {
           for (auto val : denseAttr.getValues<mlir::APInt>()) {
@@ -122,13 +126,14 @@ mlir::LogicalResult OnnxToLinalg_SplitOp(mlir::Operation *op,
     auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
     if (!resType) {
-      return mlir::emitError(loc,
+      return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                              opName + " result must be ranked tensor type");
     }
 
     if (resType.getRank() != inputRank) {
-      return mlir::emitError(
-          loc, opName + " result rank must match input tensor rank");
+      return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                             opName +
+                                 " result rank must match input tensor rank");
     }
 
     // Determine target dimension size along the split axis

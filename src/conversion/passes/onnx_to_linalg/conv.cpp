@@ -36,7 +36,7 @@
 #include <mlir/Support/LogicalResult.h>
 
 #include "onnx2mlir/common/onnx.hpp"
-#include "onnx2mlir/dialect/onnx/Onnx.hpp"
+#include "onnx2mlir/support/support.hpp"
 
 namespace onnx2mlir::dialect {
 
@@ -57,11 +57,13 @@ mlir::LogicalResult OnnxToLinalg_ConvOp(mlir::Operation *op,
       mlir::dyn_cast<mlir::RankedTensorType>(op->getResult(0).getType());
 
   if (!inputType || !weightType || !resType)
-    return mlir::emitError(loc, opName + " operand must be ranked tensor");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " operand must be ranked tensor");
 
   auto groupAttr = op->getAttrOfType<mlir::IntegerAttr>("group");
   if (groupAttr && groupAttr.getInt() != 1)
-    return mlir::emitError(loc, opName + " currently only supports group=1");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " currently only supports group=1");
 
   // Extract Attributes
   auto getI64Array = [&](llvm::StringRef name, llvm::ArrayRef<int64_t> def) {

@@ -35,7 +35,7 @@
 #include <mlir/Support/LogicalResult.h>
 
 #include "onnx2mlir/common/onnx.hpp"
-#include "onnx2mlir/dialect/onnx/Onnx.hpp"
+#include "onnx2mlir/support/support.hpp"
 
 namespace onnx2mlir::dialect {
 
@@ -45,7 +45,8 @@ mlir::LogicalResult OnnxToLinalg_WhereOp(mlir::Operation *op,
   auto opName = op->getName().getStringRef();
 
   if (op->getNumOperands() != 3) {
-    return mlir::emitError(loc, opName + " expected 3 operands");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " expected 3 operands");
   }
 
   mlir::Value cond = op->getOperand(0);
@@ -59,7 +60,8 @@ mlir::LogicalResult OnnxToLinalg_WhereOp(mlir::Operation *op,
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
   if (!condType || !xType || !yType || !resType) {
-    return mlir::emitError(loc, opName + " operand must be ranked tensor type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " operand must be ranked tensor type");
   }
 
   int64_t resRank = resType.getRank();

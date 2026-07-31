@@ -36,6 +36,7 @@
 
 #include "onnx2mlir/common/onnx.hpp"
 #include "onnx2mlir/conversion/onnx_passes.hpp"
+#include "onnx2mlir/support/support.hpp"
 
 namespace onnx2mlir::dialect {
 
@@ -54,33 +55,35 @@ OnnxToLinalg_BitwiseBinaryOps(mlir::Operation *op,
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
   if ((!lhsType) || (!rhsType)) {
-    return mlir::emitError(loc,
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " operands must be ranked tensor type");
   }
 
   if (lhsType.getElementType() != rhsType.getElementType()) {
-    return mlir::emitError(loc,
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " operands element type are different");
   }
 
   if (!resType) {
-    return mlir::emitError(loc,
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " result must be a ranked tensor type");
   }
 
   auto elemType = mlir::dyn_cast<mlir::IntegerType>(resType.getElementType());
   if (!elemType) {
-    return mlir::emitError(loc, opName + " requires integer element types");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " requires integer element types");
   }
 
   auto outBrdType = getBroadcastShape(lhsType, rhsType);
 
   if (!outBrdType) {
-    return mlir::emitError(loc, opName + " operands are not broadcastable");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " operands are not broadcastable");
   }
 
   if ((outBrdType) && (resType != outBrdType)) {
-    return mlir::emitError(loc,
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " result not match operands broadcast");
   }
 
@@ -201,21 +204,24 @@ OnnxToLinalg_BitwiseUnaryOps(mlir::Operation *op,
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
   if (!inputType) {
-    return mlir::emitError(loc, opName + " operand must be ranked tensor type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " operand must be ranked tensor type");
   }
 
   if (!resType) {
-    return mlir::emitError(loc,
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " result must be a ranked tensor type");
   }
 
   auto elemType = mlir::dyn_cast<mlir::IntegerType>(resType.getElementType());
   if (!elemType) {
-    return mlir::emitError(loc, opName + " requires integer element types");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " requires integer element types");
   }
 
   if (inputType != resType) {
-    return mlir::emitError(loc, opName + " operand and result types mismatch");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " operand and result types mismatch");
   }
 
   // Create an empty tensor for the output buffer

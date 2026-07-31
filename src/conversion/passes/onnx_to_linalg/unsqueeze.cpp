@@ -35,7 +35,7 @@
 #include <mlir/Support/LogicalResult.h>
 
 #include "onnx2mlir/common/onnx.hpp"
-#include "onnx2mlir/dialect/onnx/Onnx.hpp"
+#include "onnx2mlir/support/support.hpp"
 
 namespace onnx2mlir::dialect {
 
@@ -51,15 +51,17 @@ mlir::LogicalResult OnnxToLinalg_UnsqueezeOp(mlir::Operation *op,
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
   if (!dataType || !resType) {
-    return mlir::emitError(loc, opName + " operand must be ranked tensor type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " operand must be ranked tensor type");
   }
 
   int64_t dataRank = dataType.getRank();
   int64_t resRank = resType.getRank();
 
   if (resRank <= dataRank) {
-    return mlir::emitError(
-        loc, opName + " result rank must be greater than input rank");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName +
+                               " result rank must be greater than input rank");
   }
 
   // Create output buffer
@@ -86,7 +88,7 @@ mlir::LogicalResult OnnxToLinalg_UnsqueezeOp(mlir::Operation *op,
 
   // All input dimensions must be mapped
   if (currDataDim != dataRank) {
-    return mlir::emitError(loc,
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " failed to map input to output shape");
   }
 

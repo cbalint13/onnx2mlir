@@ -39,6 +39,7 @@
 
 #include "onnx2mlir/common/onnx.hpp"
 #include "onnx2mlir/conversion/onnx_passes.hpp"
+#include "onnx2mlir/support/support.hpp"
 
 namespace onnx2mlir::dialect {
 
@@ -55,11 +56,12 @@ OnnxToLinalg_ArithUnaryOps(mlir::Operation *op,
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
   if (!inpType) {
-    return mlir::emitError(loc, opName + " operand must be ranked tensor type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " operand must be ranked tensor type");
   }
 
   if (!resType) {
-    return mlir::emitError(loc,
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " result must be a ranked tensor type");
   }
 
@@ -368,34 +370,39 @@ mlir::LogicalResult OnnxToLinalg_SoftmaxOp(mlir::Operation *op,
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
   if (!inpType) {
-    return mlir::emitError(loc, opName + " operand must be ranked tensor type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " operand must be ranked tensor type");
   }
 
   if (!resType) {
-    return mlir::emitError(loc,
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " result must be a ranked tensor type");
   }
 
   auto inpElmType = inpType.getElementType();
   if (!mlir::isa<mlir::FloatType>(inpElmType)) {
-    return mlir::emitError(loc, opName + " requires float element type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " requires float element type");
   }
 
   auto axisAttr = op->getAttr("axis");
   if (!axisAttr) {
-    return mlir::emitError(loc, opName + " is missing 'axis' attribute");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " is missing 'axis' attribute");
   }
 
   auto axisInt = mlir::dyn_cast_or_null<mlir::IntegerAttr>(axisAttr);
   if (!axisInt) {
-    return mlir::emitError(loc, opName + " has invalid 'axis' attribute type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " has invalid 'axis' attribute type");
   }
 
   auto axis = axisInt.getInt();
   auto rank = inpType.getRank();
 
   if (axis < -rank || axis >= rank) {
-    return mlir::emitError(loc, opName + " invalid axis");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " invalid axis");
   }
 
   if (axis < 0) {
@@ -520,34 +527,39 @@ mlir::LogicalResult OnnxToLinalg_LogSoftmaxOp(mlir::Operation *op,
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
   if (!inpType) {
-    return mlir::emitError(loc, opName + " operand must be ranked tensor type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " operand must be ranked tensor type");
   }
 
   if (!resType) {
-    return mlir::emitError(loc,
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " result must be a ranked tensor type");
   }
 
   auto inpElmType = inpType.getElementType();
   if (!mlir::isa<mlir::FloatType>(inpElmType)) {
-    return mlir::emitError(loc, opName + " requires float element type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " requires float element type");
   }
 
   auto axisAttr = op->getAttr("axis");
   if (!axisAttr) {
-    return mlir::emitError(loc, opName + " is missing 'axis' attribute");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " is missing 'axis' attribute");
   }
 
   auto axisInt = mlir::dyn_cast_or_null<mlir::IntegerAttr>(axisAttr);
   if (!axisInt) {
-    return mlir::emitError(loc, opName + " has invalid 'axis' attribute type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " has invalid 'axis' attribute type");
   }
 
   auto axis = axisInt.getInt();
   auto rank = inpType.getRank();
 
   if (axis < -rank || axis >= rank) {
-    return mlir::emitError(loc, opName + " invalid axis");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " invalid axis");
   }
 
   if (axis < 0) {
@@ -677,34 +689,39 @@ mlir::LogicalResult OnnxToLinalg_HardmaxOp(mlir::Operation *op,
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
   if (!inpType) {
-    return mlir::emitError(loc, opName + " operand must be ranked tensor type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " operand must be ranked tensor type");
   }
 
   if (!resType) {
-    return mlir::emitError(loc,
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " result must be a ranked tensor type");
   }
 
   auto inpElmType = inpType.getElementType();
   if (!mlir::isa<mlir::FloatType>(inpElmType)) {
-    return mlir::emitError(loc, opName + " requires float element type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " requires float element type");
   }
 
   auto axisAttr = op->getAttr("axis");
   if (!axisAttr) {
-    return mlir::emitError(loc, opName + " is missing 'axis' attribute");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " is missing 'axis' attribute");
   }
 
   auto axisInt = mlir::dyn_cast_or_null<mlir::IntegerAttr>(axisAttr);
   if (!axisInt) {
-    return mlir::emitError(loc, opName + " has invalid 'axis' attribute type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " has invalid 'axis' attribute type");
   }
 
   auto axis = axisInt.getInt();
   auto rank = inpType.getRank();
 
   if (axis < -rank || axis >= rank) {
-    return mlir::emitError(loc, opName + " invalid axis");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " invalid axis");
   }
 
   if (axis < 0) {
