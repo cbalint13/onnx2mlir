@@ -72,7 +72,7 @@ def runner(module, func_entry, inputs, outputs):
             f"{LLVM_LIBRARY_PATH}/libmlir_c_runner_utils.so",
         ]
         engine = ExecutionEngine(module, opt_level=3, shared_libs=shared_libs)
-    except:  # pylint: disable=bare-except
+    except Exception:  # pylint: disable=broad-except
         warnings.warn("MLIR executor running without utility libraries", RuntimeWarning)
         engine = ExecutionEngine(module, opt_level=3)
 
@@ -80,12 +80,38 @@ def runner(module, func_entry, inputs, outputs):
 
     inp_descs = [get_ranked_memref_descriptor(inp) for inp in inputs]
     out_descs = [get_ranked_memref_descriptor(out) for out in outputs]
-    inp_cargs = [ctypes.pointer(ctypes.pointer(inp)) for inp in inp_descs]
-    out_cargs = [ctypes.pointer(ctypes.pointer(out)) for out in out_descs]
 
-    all_cargs = out_cargs + inp_cargs
+    inp_cargs = [ctypes.pointer(ctypes.pointer(inp)) for inp in inp_descs]
+
+    if not outputs:
+        engine.invoke(func_entry, *inp_cargs)
+        return []
+
+    if len(outputs) == 1:
+        out_cargs = [ctypes.pointer(ctypes.pointer(out)) for out in out_descs]
+        all_cargs = out_cargs + inp_cargs
+        engine.invoke(func_entry, *all_cargs)
+        return [ranked_memref_to_numpy(out_cargs[0][0])]
+
+    # For multiple outputs MLIR C-interface packs all output memref
+    # descriptors into a single struct passed as a pointer at argument 0.
+    class ResultStruct(ctypes.Structure):
+        """Create a ctypes structure to hold multiple output descriptors."""
+
+        # pylint: disable=too-few-public-methods
+        _fields_ = [(f"res_{i}", type(out_descs[i])) for i in range(len(outputs))]
+
+    res_struct = ResultStruct(*out_descs)
+    # Double pointer is required because ExecutionEngine.invoke takes the address
+    # of each argument in all_cargs when passing pointers to _mlir_ciface_main.
+    res_carg = ctypes.pointer(ctypes.pointer(res_struct))
+
+    all_cargs = [res_carg] + inp_cargs
     engine.invoke(func_entry, *all_cargs)
 
-    outputs = [ranked_memref_to_numpy(carg[idx]) for idx, carg in enumerate(out_cargs)]
+    outputs = [
+        ranked_memref_to_numpy(ctypes.pointer(getattr(res_struct, f"res_{i}")))
+        for i in range(len(outputs))
+    ]
 
     return outputs
