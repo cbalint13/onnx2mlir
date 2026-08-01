@@ -330,10 +330,10 @@
   <rect x='137' y='919' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
   <text x='204' y='944' text-anchor='middle' font-weight='bold' class='op-text'>LpPool</text>
   <text x='204' y='959' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>2 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>18 </tspan>]</text>
-  <rect x='273' y='919' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <rect x='273' y='919' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='340' y='944' text-anchor='middle' font-weight='bold' class='op-text'>MatMul</text>
   <text x='340' y='959' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
-  <rect x='409' y='919' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <rect x='409' y='919' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='476' y='944' text-anchor='middle' font-weight='bold' class='op-text'>MatMulInteger</text>
   <text x='476' y='959' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>10 </tspan>]</text>
   <rect x='545' y='919' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>

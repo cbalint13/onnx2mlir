@@ -1898,8 +1898,139 @@ def test_onnx_reshape_lower(ONNX_OPSET_VERSION, dtype, input_shape, target_shape
         llvm_module = llvm_lower_pipeline(mlir_module)
         llvm_module.operation.verify()
 
-        # Execute
         res_arr = np.zeros(target_shape, dtype=np_dtype)
         outputs = runner(llvm_module, "main", runner_inputs, [res_arr])
 
         np.testing.assert_allclose(outputs[0], onnx_results[0], atol=1e-5)
+
+
+@pytest.mark.parametrize(
+    "opname, ONNX_OPSET_VERSION, dtype_proto, shape_a, shape_b",
+    [
+        (schema.name, schema.since_version, dtype_proto, shape_a, shape_b)
+        for schema in get_all_schemas_with_history()
+        if schema.name in ["MatMul", "MatMulInteger"]
+        for dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.FLOAT16,
+            TensorProto.UINT32,
+            TensorProto.INT64,
+            TensorProto.INT8,
+        ]
+        for shape_a, shape_b in [
+            ((2, 3), (3, 4)),  # 2D Standard GEMM
+            ((1, 4), (4, 2)),  # 2D Vector-Matrix
+            ((3, 2, 4), (3, 4, 2)),  # 3D Batch MatMul
+            ((1, 2, 3), (4, 3, 2)),  # 3D Broadcast MatMul
+            ((2, 1, 3, 4), (2, 5, 4, 2)),  # 4D N-D Broadcast MatMul
+            ((4,), (4, 3)),  # 1D x 2D MatMul
+            ((3, 4), (4,)),  # 2D x 1D MatMul
+            ((5,), (5,)),  # 1D x 1D Dot Product
+        ]
+    ],
+)
+# pylint: disable=too-many-branches,too-many-statements
+def test_onnx_matmul_lower(opname, ONNX_OPSET_VERSION, dtype_proto, shape_a, shape_b):
+    """
+    Test ONNX MatMul operator lowering.
+    """
+
+    if (
+        opname == "MatMul"
+        and ONNX_OPSET_VERSION <= 1
+        and dtype_proto
+        in [
+            TensorProto.UINT32,
+            TensorProto.INT64,
+        ]
+        or dtype_proto == TensorProto.INT8
+    ):
+        pytest.skip(f"MatMul V{ONNX_OPSET_VERSION} only supports Float")
+
+    if opname == "MatMulInteger" and dtype_proto in [
+        TensorProto.FLOAT,
+        TensorProto.FLOAT16,
+        TensorProto.UINT32,
+        TensorProto.INT64,
+    ]:
+        pytest.skip(f"MatMulInteger V{ONNX_OPSET_VERSION} only supports 8bit Integer")
+
+    np_dtype = None
+    if dtype_proto == TensorProto.FLOAT:
+        np_dtype = np.float32
+    elif dtype_proto == TensorProto.FLOAT16:
+        np_dtype = np.float16
+    elif dtype_proto == TensorProto.UINT8:
+        np_dtype = np.uint8
+    elif dtype_proto == TensorProto.UINT16:
+        np_dtype = np.uint16
+    elif dtype_proto == TensorProto.UINT32:
+        np_dtype = np.uint32
+    elif dtype_proto == TensorProto.UINT64:
+        np_dtype = np.uint64
+    elif dtype_proto == TensorProto.INT8:
+        np_dtype = np.int8
+    elif dtype_proto == TensorProto.INT16:
+        np_dtype = np.int16
+    elif dtype_proto == TensorProto.INT32:
+        np_dtype = np.int32
+    elif dtype_proto == TensorProto.INT64:
+        np_dtype = np.int64
+    else:
+        pytest.skip(f"DataType {dtype_proto} not implemented in test")
+
+    data_a = (np.random.rand(*shape_a) * 5).astype(np_dtype)
+    data_b = (np.random.rand(*shape_b) * 5).astype(np_dtype)
+
+    expected_out = np.matmul(data_a, data_b)
+    target_shape = expected_out.shape
+
+    # enforce minimum rank 1 results
+    if len(expected_out.shape) == 0:
+        target_shape = (1,)
+
+    def create_onnx_model():
+        input_a = make_tensor_value_info("A", dtype_proto, shape_a)
+        input_b = make_tensor_value_info("B", dtype_proto, shape_b)
+        if opname == "MatMulInteger":
+            output_y = make_tensor_value_info("Y", TensorProto.INT32, target_shape)
+        else:
+            output_y = make_tensor_value_info("Y", dtype_proto, target_shape)
+
+        matmul_node = make_node(
+            opname,
+            ["A", "B"],
+            ["Y"],
+        )
+
+        graph = make_graph(
+            nodes=[matmul_node],
+            name="matmul_test",
+            inputs=[input_a, input_b],
+            outputs=[output_y],
+        )
+
+        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        model = make_model(graph, opset_imports=opset_imports)
+        check_model(model)
+        return model
+
+    onnx_model = create_onnx_model()
+
+    ref = ReferenceEvaluator(onnx_model)
+    onnx_results = ref.run(None, {"A": data_a, "B": data_b})
+
+    with Context() as ctx, Location.unknown():
+        mlir_module = import_from_onnx(onnx_model, ctx)
+        mlir_module.operation.verify()
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        res_arr = np.zeros(target_shape, dtype=np_dtype)
+        outputs = runner(llvm_module, "main", [data_a, data_b], [res_arr])
+
+        # Assert numeric precision within standard tolerances
+        atol = 1e-2 if np_dtype == np.float16 else 1e-5
+        rtol = 1e-2 if np_dtype == np.float16 else 1e-5
+        np.testing.assert_allclose(outputs[0], onnx_results[0], rtol=rtol, atol=atol)
