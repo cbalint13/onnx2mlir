@@ -2034,3 +2034,181 @@ def test_onnx_matmul_lower(opname, ONNX_OPSET_VERSION, dtype_proto, shape_a, sha
         atol = 1e-2 if np_dtype == np.float16 else 1e-5
         rtol = 1e-2 if np_dtype == np.float16 else 1e-5
         np.testing.assert_allclose(outputs[0], onnx_results[0], rtol=rtol, atol=atol)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OPSET_VERSION, dtype, mode, coord_trans_mode, nearest_mode, resize_type, input_shape, scale_or_size",
+    [
+        (opset, dtype, mode, coord_trans, nearest, r_type, in_shape, param)
+        for opset in [
+            schema.since_version
+            for schema in get_all_schemas_with_history()
+            if "Resize" == schema.name
+        ]
+        if not (opset in [10, 11])  # buggy refeval
+        for dtype in [
+            TensorProto.FLOAT,
+            TensorProto.UINT8,
+        ]
+        for mode in ["nearest"]
+        for coord_trans in [
+            "half_pixel",
+            "asymmetric",
+            "align_corners",
+            # "tf_half_pixel_for_nn", # missing refeval
+            "pytorch_half_pixel",
+        ]
+        for nearest in [
+            "round_prefer_floor",
+            "round_prefer_ceil",
+            "floor",
+            "ceil",
+        ]
+        for r_type, in_shape, param in [
+            ("scales", (1, 1, 4, 4), (1.0, 1.0, 2.0, 2.0)),  # Upsampling via scales
+            ("scales", (2, 6), (1.0, 0.5)),  # Downsampling via scales
+            ("sizes", (1, 1, 4, 4), (1, 1, 8, 8)),  # Upsampling via sizes
+            ("sizes", (2, 6), (2, 3)),  # Downsampling via sizes
+        ]
+        if not (opset == 10 and r_type == "sizes")  # Opset 10 only supports scales
+        if not (
+            opset == 10 and coord_trans != "half_pixel" and coord_trans != "asymmetric"
+        )
+    ],
+)
+# pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-statements
+def test_onnx_resize_lower(
+    ONNX_OPSET_VERSION,
+    dtype,
+    mode,
+    coord_trans_mode,
+    nearest_mode,
+    resize_type,
+    input_shape,
+    scale_or_size,
+):
+    """
+    Test ONNX Resize operator lowering to Linalg dialect across all opsets and modes.
+    """
+    np_dtype = None
+    if dtype == TensorProto.FLOAT:
+        np_dtype = np.float32
+    elif dtype == TensorProto.UINT8:
+        np_dtype = np.uint8
+    elif dtype == TensorProto.INT8:
+        np_dtype = np.int8
+    else:
+        pytest.skip(f"DataType {dtype} not implemented in test")
+
+    if resize_type == "scales":
+        scales_arr = np.array(scale_or_size, dtype=np.float32)
+        target_shape = tuple(
+            int(np.round(input_shape[i] * scales_arr[i]))
+            for i in range(len(input_shape))
+        )
+        sizes_arr = np.array(target_shape, dtype=np.int64)
+    else:
+        sizes_arr = np.array(scale_or_size, dtype=np.int64)
+        target_shape = tuple(int(x) for x in sizes_arr)
+        scales_arr = np.array(
+            [target_shape[i] / input_shape[i] for i in range(len(input_shape))],
+            dtype=np.float32,
+        )
+
+    def create_onnx_model():
+        input_tensor = make_tensor_value_info("X", dtype, input_shape)
+        output_tensor = make_tensor_value_info("output", dtype, target_shape)
+
+        inputs = [input_tensor]
+        node_inputs = ["X"]
+        kwargs = {
+            "mode": mode,
+        }
+
+        if ONNX_OPSET_VERSION >= 11:
+            kwargs["coordinate_transformation_mode"] = coord_trans_mode
+            kwargs["nearest_mode"] = nearest_mode
+
+        if ONNX_OPSET_VERSION == 10:
+            scales_info = make_tensor_value_info(
+                "scales", TensorProto.FLOAT, [len(input_shape)]
+            )
+            inputs.append(scales_info)
+            node_inputs.append("scales")
+        else:
+            roi_info = make_tensor_value_info("roi", TensorProto.FLOAT, [0])
+            inputs.append(roi_info)
+
+            if resize_type == "scales":
+                scales_info = make_tensor_value_info(
+                    "scales", TensorProto.FLOAT, [len(input_shape)]
+                )
+                sizes_info = make_tensor_value_info("sizes", TensorProto.INT64, [0])
+                inputs.extend([scales_info, sizes_info])
+                node_inputs.extend(["roi", "scales", ""])
+            else:
+                scales_info = make_tensor_value_info("scales", TensorProto.FLOAT, [0])
+                sizes_info = make_tensor_value_info(
+                    "sizes", TensorProto.INT64, [len(input_shape)]
+                )
+                inputs.extend([scales_info, sizes_info])
+                node_inputs.extend(["roi", "", "sizes"])
+
+        resize_node = make_node(
+            "Resize",
+            node_inputs,
+            ["output"],
+            **kwargs,
+        )
+
+        graph = make_graph(
+            nodes=[resize_node],
+            name="resize_test",
+            inputs=inputs,
+            outputs=[output_tensor],
+        )
+
+        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        model = make_model(graph, opset_imports=opset_imports)
+        check_model(model)
+        return model
+
+    np.random.seed(42)
+    data_arr = (np.random.rand(*input_shape) * 10.0).astype(np_dtype)
+    onnx_model = create_onnx_model()
+
+    feed_dict = {"X": data_arr}
+    runner_inputs = [data_arr]
+
+    if ONNX_OPSET_VERSION == 10:
+        feed_dict["scales"] = scales_arr
+        runner_inputs.append(scales_arr)
+    else:
+        empty_roi = np.array([], dtype=np.float32)
+        feed_dict["roi"] = empty_roi
+        runner_inputs.append(empty_roi)
+
+        if resize_type == "scales":
+            feed_dict["scales"] = scales_arr
+            feed_dict["sizes"] = np.array([], dtype=np.int64)
+            runner_inputs.extend([scales_arr, np.array([], dtype=np.int64)])
+        else:
+            feed_dict["scales"] = np.array([], dtype=np.float32)
+            feed_dict["sizes"] = sizes_arr
+            runner_inputs.extend([np.array([], dtype=np.float32), sizes_arr])
+
+    ref = ReferenceEvaluator(onnx_model)
+
+    onnx_results = ref.run(None, feed_dict)
+
+    with Context() as ctx, Location.unknown():
+        mlir_module = import_from_onnx(onnx_model, ctx)
+        mlir_module.operation.verify()
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        res_arr = np.zeros(target_shape, dtype=np_dtype)
+        outputs = runner(llvm_module, "main", runner_inputs, [res_arr])
+
+        np.testing.assert_allclose(outputs[0], onnx_results[0], atol=1e-5, rtol=1e-5)
