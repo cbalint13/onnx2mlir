@@ -54,6 +54,7 @@
 #include "onnx2mlir/dialect/onnx/OnnxInterfaces.hpp"
 #include "onnx2mlir/dialect/onnx/OnnxOps.hpp"
 #include "onnx2mlir/frontend/onnx.hpp"
+#include "onnx2mlir/support/support.hpp"
 
 template <typename shp_T, typename typ_T>
 static mlir::DenseElementsAttr
@@ -96,8 +97,8 @@ getMlirTensor(const Container &data, shp_T shape, typ_T dType,
       std::vector<uint8_t> buffer(data.begin(), data.end());
       return mlir::DenseElementsAttr::get(shapedType, llvm::ArrayRef(buffer));
     } else {
-      llvm::errs() << "ERROR: unimplemented datatype width: " << targetBitWidth
-                   << "\n";
+      onnx2mlir::error() << "Unimplemented datatype width: " << targetBitWidth
+                         << "\n";
       exit(-1);
     }
   }
@@ -121,7 +122,7 @@ static mlir::ArrayAttr getMlirArray(mlir::MLIRContext *ctx,
     } else if constexpr (std::is_same_v<dat_T, std::string>) {
       attrVec.push_back(mlir::StringAttr::get(ctx, value));
     } else {
-      llvm::errs() << "ERROR: unimplemented array type requested.\n";
+      onnx2mlir::error() << "Unimplemented array type requested.\n";
       exit(-1);
     }
   }
@@ -169,7 +170,7 @@ static mlir::ElementsAttr OnnxToMlir_Tensor(const onnx::TensorProto &tensor,
     case onnx::TensorProto::COMPLEX128:
       return getMlirTensor(tensor.raw_data(), tensor.dims(), dType, eAttr);
     default:
-      llvm::errs() << "ERROR: Raw data read not supported for this type.\n";
+      onnx2mlir::error() << "Raw data read not supported for this type.\n";
       exit(-1);
     }
   } else {
@@ -214,7 +215,7 @@ static mlir::ElementsAttr OnnxToMlir_Tensor(const onnx::TensorProto &tensor,
     // TODO(cbalint13): STRING
     case onnx::TensorProto::UNDEFINED:
     default:
-      llvm::errs() << "ERROR: Data read not supported for this type.\n";
+      onnx2mlir::error() << "Data read not supported for this type.\n";
       exit(-1);
     }
   }
@@ -262,24 +263,24 @@ OnnxToMlir_SparseTensor(const onnx::SparseTensorProto &tensor,
   int64_t rank = indType.getShape()[1];
 
   if (!valType || valType.getRank() != 1) {
-    llvm::errs() << "ERROR: sparse values must be a 1D tensor.\n";
+    onnx2mlir::error() << "Sparse values must be a 1D tensor.\n";
     exit(-1);
   }
 
   if (!indType || indType.getRank() != 2) {
-    llvm::errs() << "ERROR: sparse indices must be a 2D tensor.\n";
+    onnx2mlir::error() << "Sparse indices must be a 2D tensor.\n";
     exit(-1);
   }
 
   if (!valType || valType.getRank() != 1) {
-    llvm::errs() << "ERROR: sparse values must be a 1D tensor.\n";
+    onnx2mlir::error() << "Sparse values must be a 1D tensor.\n";
     exit(-1);
   }
 
   if (nnz != indType.getShape()[0]) {
-    llvm::errs() << "ERROR: Number of sparse values (" << nnz
-                 << ") does not match number of sparse index rows ("
-                 << indType.getShape()[0] << ").\n";
+    onnx2mlir::error() << "Number of sparse values (" << nnz
+                       << ") does not match number of sparse index rows ("
+                       << indType.getShape()[0] << ").\n";
     exit(-1);
   }
 
@@ -320,12 +321,12 @@ static std::vector<int64_t> OnnxToMlir_Shape(const dat_T &tensor_type) {
       } else if (dim.has_dim_param()) {
         dataShape.push_back(mlir::ShapedType::kDynamic);
       } else {
-        llvm::errs() << "ERROR: Tensor has invalid dimension.\n";
+        onnx2mlir::error() << "Tensor has invalid dimension.\n";
         exit(-1);
       }
     }
   } else {
-    llvm::errs() << "ERROR: Tensor has no shape.\n";
+    onnx2mlir::error() << "Tensor has no shape.\n";
     exit(-1);
   }
 
@@ -355,7 +356,7 @@ static mlir::Type OnnxToMlir_Type(const onnx::ValueInfoProto &value_proto,
   case onnx::TypeProto::kOptionalType:
   case onnx::TypeProto::VALUE_NOT_SET:
   default:
-    llvm::errs() << "ERROR: TypeProto is unsupported.\n";
+    onnx2mlir::error() << "TypeProto is unsupported.\n";
     exit(-1);
   }
 
@@ -387,7 +388,7 @@ OnnxToMlir_Attr(const onnx::AttributeProto &attribute, mlir::MLIRContext *ctx,
     return mlir::NamedAttribute(attribute.name(),
                                 OnnxToMlir_Tensor(attribute.t(), ctx, eAttr));
   case onnx::AttributeProto::GRAPH:
-    llvm::errs() << "ERROR: Parsing GRAPH attribute type is not implemented.\n";
+    onnx2mlir::error() << "Parsing GRAPH attribute type is not implemented.\n";
     exit(-1);
   case onnx::AttributeProto::FLOATS:
     return mlir::NamedAttribute(attribute.name(),
@@ -399,8 +400,8 @@ OnnxToMlir_Attr(const onnx::AttributeProto &attribute, mlir::MLIRContext *ctx,
     return mlir::NamedAttribute(attribute.name(),
                                 getMlirArray(ctx, attribute.strings()));
   case onnx::AttributeProto::SPARSE_TENSORS:
-    llvm::errs()
-        << "ERROR: Parsing SPARSE_TENSORS attribute type is not implemented.\n";
+    onnx2mlir::error()
+        << "Parsing SPARSE_TENSORS attribute type is not implemented.\n";
     exit(-1);
   case onnx::AttributeProto::TENSORS: {
     llvm::SmallVector<mlir::Attribute> attrVec;
@@ -410,23 +411,22 @@ OnnxToMlir_Attr(const onnx::AttributeProto &attribute, mlir::MLIRContext *ctx,
                                 mlir::ArrayAttr::get(ctx, attrVec));
   }
   case onnx::AttributeProto::GRAPHS:
-    llvm::errs()
-        << "ERROR: Parsing GRAPHS attribute type is not implemented.\n";
+    onnx2mlir::error() << "Parsing GRAPHS attribute type is not implemented.\n";
     exit(-1);
   case onnx::AttributeProto::TYPE_PROTO:
-    llvm::errs()
-        << "ERROR: Parsing TYPE_PROTO attribute type is not implemented.\n";
+    onnx2mlir::error()
+        << "Parsing TYPE_PROTO attribute type is not implemented.\n";
     exit(-1);
   case onnx::AttributeProto::TYPE_PROTOS:
-    llvm::errs()
-        << "ERROR: Parsing TYPE_PROTOS attribute type is not implemented.\n";
+    onnx2mlir::error()
+        << "Parsing TYPE_PROTOS attribute type is not implemented.\n";
     exit(-1);
   case onnx::AttributeProto::UNDEFINED:
-    llvm::errs()
-        << "ERROR: Parsing UNDEFINED attribute type is not implemented.\n";
+    onnx2mlir::error()
+        << "Parsing UNDEFINED attribute type is not implemented.\n";
     exit(-1);
   default:
-    llvm::errs() << "ERROR: Parsing unknown attribute type.\n";
+    onnx2mlir::error() << "Parsing unknown attribute type.\n";
     exit(-1);
   }
 
@@ -564,8 +564,8 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
     // check operator
     const auto opFullName = get_versioned_name(node.op_type());
     if (!checkOnnxOpExists(mlirCtx, opFullName)) {
-      llvm::errs() << "ERROR: operation [" << opFullName
-                   << "] not registered.\n";
+      onnx2mlir::error() << "Operator [" << opFullName
+                         << "] is not registered.\n";
       exit(-1);
     }
 
@@ -759,7 +759,7 @@ void ONNXImporter::parse_graph_io(const onnx::GraphProto &graph_proto) {
     if (input.has_type()) {
       inputs.push_back(OnnxToMlir_Type(input, mlirCtx));
     } else {
-      llvm::errs() << "ERROR: Type Not Specified.\n";
+      onnx2mlir::error() << "Type Not Specified.\n";
       exit(-1);
     }
   }
@@ -770,7 +770,7 @@ void ONNXImporter::parse_graph_io(const onnx::GraphProto &graph_proto) {
     if (output.has_type()) {
       outputs.push_back(OnnxToMlir_Type(output, mlirCtx));
     } else {
-      llvm::errs() << "ERROR: Type Not Specified.\n";
+      onnx2mlir::error() << "Type Not Specified.\n";
       exit(-1);
     }
   }
@@ -837,7 +837,7 @@ void ONNXImporter::import(const std::string &file_or_string,
   onnx::ModelProto model_import;
   if (opt_args.count("--import-serialized") > 0) {
     if (!model_import.ParseFromString(file_or_string)) {
-      llvm::errs() << "ERROR: ONNX model string parsing error." << "\n";
+      onnx2mlir::error() << "ONNX model string parsing error." << "\n";
       exit(-1);
     }
     if (verbose)
@@ -848,11 +848,11 @@ void ONNXImporter::import(const std::string &file_or_string,
       llvm::outs() << "Model path: " << file_or_string << "\n";
     std::ifstream model_file(file_or_string, std::ios::binary);
     if (!model_file.is_open()) {
-      llvm::errs() << "Error opening file: " << file_or_string << "\n";
+      onnx2mlir::error() << "Error opening file: " << file_or_string << "\n";
       exit(-1);
     }
     if (!model_import.ParseFromIstream(&model_file)) {
-      llvm::errs() << "ERROR: ONNX model file parsing error.\n";
+      onnx2mlir::error() << "ONNX model file parsing error.\n";
       exit(-1);
     }
   }
@@ -877,7 +877,7 @@ void ONNXImporter::import(const std::string &file_or_string,
     if (opt_args["--onnx-convert-ops"].size() > 0)
       convert_version = std::stoi(opt_args["--onnx-convert-ops"]);
     if (convert_version <= model_opset_version) {
-      llvm::errs() << "ERROR: Model cannot be downgraded.\n";
+      onnx2mlir::error() << "Model cannot be downgraded.\n";
       exit(-1);
     }
     if (verbose)
@@ -920,7 +920,7 @@ void ONNXImporter::import(const std::string &file_or_string,
 
   // verify module
   if (llvm::failed(mlir::verify(module))) {
-    llvm::errs() << "MLIR module verification failed.\n";
+    onnx2mlir::error() << "MLIR module verification failed.\n";
     exit(-1);
   }
 }

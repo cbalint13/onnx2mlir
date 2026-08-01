@@ -30,6 +30,7 @@
 #ifndef INCLUDE_ONNX2MLIR_SUPPORT_SUPPORT_HPP_
 #define INCLUDE_ONNX2MLIR_SUPPORT_SUPPORT_HPP_
 
+#include <llvm/Support/WithColor.h>
 #include <mlir/IR/Builders.h>
 
 #include <source_location>
@@ -40,5 +41,16 @@ inline mlir::Location Onnx2Mlir_SrcLoc(
   return mlir::FileLineColLoc::get(builder.getStringAttr(loc.file_name()),
                                    loc.line(), loc.column());
 }
+
+namespace onnx2mlir {
+
+inline llvm::raw_ostream &
+error(const std::source_location loc = std::source_location::current()) {
+  llvm::errs() << loc.file_name() << ":" << loc.line() << ":" << loc.column()
+               << " ";
+  return llvm::WithColor::error(llvm::errs());
+}
+
+} // namespace onnx2mlir
 
 #endif // INCLUDE_ONNX2MLIR_SUPPORT_SUPPORT_HPP_

@@ -33,6 +33,7 @@
 
 #include "onnx2mlir/conversion/onnx_passes.hpp"
 #include "onnx2mlir/frontend/onnx.hpp"
+#include "onnx2mlir/support/support.hpp"
 
 namespace onnx2mlir::frontend {
 
@@ -62,7 +63,7 @@ void ONNXConverter::convert(mlir::ModuleOp *module) {
 
   // run all passes
   if (mlir::failed(pm.run(*module))) {
-    llvm::errs() << "ERROR: pass pipeline failed.\n";
+    onnx2mlir::error() << "Pass pipeline failed.\n";
     exit(-1);
   }
 }
