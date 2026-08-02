@@ -67,15 +67,6 @@ OnnxToLinalg_MaxPoolOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
                                " only 2D (NCHW) spatial pooling is supported");
   }
 
-  // Signless integer for arith/linalg
-  if (elementType != inpType.getElementType()) {
-    auto signlessTType =
-        mlir::RankedTensorType::get(inpType.getShape(), elementType);
-    input = mlir::UnrealizedConversionCastOp::create(rewriter, loc,
-                                                     signlessTType, input)
-                .getResult(0);
-  }
-
   // Extract attributes
   auto getI64Array = [&](llvm::StringRef attrName, int64_t defaultValue) {
     llvm::SmallVector<int64_t> values;
@@ -142,18 +133,34 @@ OnnxToLinalg_MaxPoolOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
       block->addArgument(rewriter.getIndexType(), loc);
 
     rewriter.setInsertionPointToStart(block);
-    mlir::tensor::YieldOp::create(rewriter, loc, initValue);
+
+    // Cast initValue to input element type if needed for the yield
+    mlir::Value initYield = initValue;
+    if (elementType != inpType.getElementType()) {
+      initYield = mlir::UnrealizedConversionCastOp::create(
+                      rewriter, loc, inpType.getElementType(), initValue)
+                      .getResult(0);
+    }
+
+    mlir::tensor::YieldOp::create(rewriter, loc, initYield);
     rewriter.setInsertionPointAfter(padOp);
 
     paddedInput = padOp.getResult();
   }
 
   // Output buffer
-  auto signlessResType =
-      mlir::RankedTensorType::get(resType.getShape(), elementType);
+  // Cast initValue to result element type for the fill op
+  mlir::Value fillInit = initValue;
+  if (elementType != resType.getElementType()) {
+    fillInit = mlir::UnrealizedConversionCastOp::create(
+                   rewriter, loc, resType.getElementType(), initValue)
+                   .getResult(0);
+  }
+
   auto emptyTensor = mlir::tensor::EmptyOp::create(
-      rewriter, loc, resType.getShape(), elementType);
-  auto fillOp = mlir::linalg::FillOp::create(rewriter, loc, initValue,
+      rewriter, loc, resType.getShape(), resType.getElementType());
+
+  auto fillOp = mlir::linalg::FillOp::create(rewriter, loc, fillInit,
                                              emptyTensor.getResult());
   mlir::Value outBuff = fillOp.getResult(0);
 
@@ -186,18 +193,33 @@ OnnxToLinalg_MaxPoolOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
 
   // We need a tensor that represents the kernel shape for the reduction loops
   auto kernelTensor = mlir::tensor::EmptyOp::create(
-      rewriter, loc, llvm::ArrayRef<int64_t>(kernelShape), elementType);
+      rewriter, loc, llvm::ArrayRef<int64_t>(kernelShape),
+      inpType.getElementType());
 
   mlir::SmallVector<mlir::AffineMap> indexingMaps = {inputMap, kernelMap,
                                                      outputMap};
 
+  // Generic Op using original types
   auto genericOp = mlir::linalg::GenericOp::create(
-      rewriter, loc, signlessResType,
+      rewriter, loc, mlir::TypeRange{resType},
       mlir::ValueRange{paddedInput, kernelTensor.getResult()},
       mlir::ValueRange{outBuff}, indexingMaps, iterators,
       [&](mlir::OpBuilder &nest, mlir::Location l, mlir::ValueRange args) {
         mlir::Value inputVal = args[0];
         mlir::Value outVal = args[2];
+
+        // Element-wise casts: input/output to compute (signless) type
+        if (elementType != inpType.getElementType()) {
+          inputVal = mlir::UnrealizedConversionCastOp::create(
+                         nest, l, elementType, inputVal)
+                         .getResult(0);
+        }
+        if (elementType != resType.getElementType()) {
+          outVal = mlir::UnrealizedConversionCastOp::create(nest, l,
+                                                            elementType, outVal)
+                       .getResult(0);
+        }
+
         mlir::Value maxVal;
         if (mlir::isa<mlir::FloatType>(elementType)) {
           maxVal = mlir::arith::MaximumFOp::create(nest, l, inputVal, outVal);
@@ -210,21 +232,20 @@ OnnxToLinalg_MaxPoolOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
             maxVal = mlir::arith::MaxSIOp::create(nest, l, inputVal, outVal);
           }
         }
+
+        // Cast result back to original type
+        if (elementType != resType.getElementType()) {
+          maxVal = mlir::UnrealizedConversionCastOp::create(
+                       nest, l, resType.getElementType(), maxVal)
+                       .getResult(0);
+        }
+
         mlir::linalg::YieldOp::create(nest, l, maxVal);
       });
 
   genericOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
 
-  mlir::Value output = genericOp.getResult(0);
-
-  // Cast back to signedness
-  if (output.getType() != resType) {
-    output =
-        mlir::UnrealizedConversionCastOp::create(rewriter, loc, resType, output)
-            .getResult(0);
-  }
-
-  rewriter.replaceOp(op, output);
+  rewriter.replaceOp(op, genericOp.getResults());
 
   return mlir::success();
 }

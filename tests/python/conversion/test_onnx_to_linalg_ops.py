@@ -794,7 +794,12 @@ def test_onnx_squeeze_lower(ONNX_OPSET_VERSION, dtype, shape, axes):
             for schema in get_all_schemas_with_history()
             if "MaxPool" == schema.name
         ]
-        for dtype in [TensorProto.FLOAT, TensorProto.INT8]
+        for dtype in [
+            TensorProto.FLOAT,
+            TensorProto.FLOAT16,
+            TensorProto.INT8,
+            TensorProto.UINT8,
+        ]
         for shape, kernel, stride, pad in [
             ((1, 3, 32, 32), [2, 2], [2, 2], [0, 0, 0, 0]),  # Standard NCHW
             ((1, 1, 10, 10), [3, 2], [1, 2], [0, 0, 0, 0]),  # Non-square
@@ -810,10 +815,20 @@ def test_onnx_maxpool_lower(
     Test ONNX MaxPool operator lowering.
     """
 
-    if ONNX_OPSET_VERSION < 12 and dtype == TensorProto.INT8:
+    if ONNX_OPSET_VERSION < 12 and dtype in [TensorProto.INT8, TensorProto.UINT8]:
         pytest.skip(f"MaxPool V{ONNX_OPSET_VERSION} only supports Float")
 
-    np_dtype = np.float32 if dtype == TensorProto.FLOAT else np.int8
+    np_dtype = None
+    if dtype == TensorProto.FLOAT:
+        np_dtype = np.float32
+    elif dtype == TensorProto.FLOAT16:
+        np_dtype = np.float16
+    elif dtype == TensorProto.INT8:
+        np_dtype = np.int8
+    elif dtype == TensorProto.UINT8:
+        np_dtype = np.uint8
+    else:
+        pytest.skip(f"DataType {np_dtype} not implemented in test")
 
     h_in, w_in = input_shape[2], input_shape[3]
     h_out = (h_in + pads[0] + pads[2] - kernel[0]) // strides[0] + 1
@@ -868,7 +883,9 @@ def test_onnx_maxpool_lower(
         res_arr = np.zeros(output_shape, dtype=np_dtype)
         outputs = runner(llvm_module, "main", [x_arr], [res_arr])
 
-        np.testing.assert_allclose(outputs[0], onnx_result, rtol=1e-5, atol=1e-5)
+        atol = 1e-2 if np_dtype == np.float16 else 1e-5
+        rtol = 1e-2 if np_dtype == np.float16 else 1e-5
+        np.testing.assert_allclose(outputs[0], onnx_result, rtol=rtol, atol=atol)
 
 
 @pytest.mark.parametrize(
