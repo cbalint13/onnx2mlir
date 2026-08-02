@@ -107,6 +107,7 @@ static const std::unordered_map<std::string, LoweringFunc> &getLoweringMap() {
     registerOps({"Constant"}, map, OnnxToLinalg_ConstantOp);
     registerOps({"Conv"}, map, OnnxToLinalg_ConvOp);
     registerOps({"Flatten"}, map, OnnxToLinalg_FlattenOp);
+    registerOps({"Gather"}, map, OnnxToLinalg_GatherOp);
     registerOps({"Gemm"}, map, OnnxToLinalg_GemmOp);
     registerOps({"GlobalAveragePool"}, map, OnnxToLinalg_GlobalAveragePoolOp);
     registerOps({"GlobalLpPool"}, map, OnnxToLinalg_GlobalLpPoolOp);

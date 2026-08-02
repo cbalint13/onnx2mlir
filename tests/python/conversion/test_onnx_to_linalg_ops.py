@@ -2331,3 +2331,130 @@ def test_onnx_shape_lower(
 
         # ONNX Shape results demand exact array equality
         np.testing.assert_array_equal(outputs[0], onnx_result)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, indices_dtype_proto, data_shape, indices_shape, axis",
+    [
+        (
+            schema.name,
+            schema.since_version,
+            dtype_proto,
+            indices_dtype_proto,
+            data_shape,
+            indices_shape,
+            axis,
+        )
+        for schema in get_all_schemas_with_history()
+        if schema.name in ["Gather"]
+        for dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.DOUBLE,
+            TensorProto.INT32,
+            TensorProto.INT64,
+            TensorProto.FLOAT16,
+        ]
+        for indices_dtype_proto in [
+            TensorProto.INT32,
+            TensorProto.INT64,
+        ]
+        for data_shape, indices_shape, axis in [
+            ((10,), (2,), 0),  # 1D data, 1D indices, axis 0
+            ((4, 5), (3,), 0),  # 2D data, 1D indices, outer axis
+            ((4, 5), (2, 3), 1),  # 2D data, 2D indices, inner axis
+            ((3, 4, 5), (2, 2), 1),  # 3D data, 2D indices, middle axis
+            ((3, 4, 5), (2,), -1),  # 3D data, 1D indices, negative axis
+            ((3, 4, 5), (1, 2), -2),  # 3D data, 2D indices, negative inner axis
+        ]
+    ],
+)
+# pylint: disable=too-many-arguments,too-many-positional-arguments
+def test_onnx_gather_lower(
+    ONNX_OP_NAME,
+    ONNX_OPSET_VERSION,
+    dtype_proto,
+    indices_dtype_proto,
+    data_shape,
+    indices_shape,
+    axis,
+):
+    """
+    Test ONNX Gather operation lowering.
+    """
+    np_dtype = None
+    if dtype_proto == TensorProto.FLOAT:
+        np_dtype = np.float32
+    elif dtype_proto == TensorProto.DOUBLE:
+        np_dtype = np.float64
+    elif dtype_proto == TensorProto.FLOAT16:
+        np_dtype = np.float16
+    elif dtype_proto == TensorProto.INT32:
+        np_dtype = np.int32
+    elif dtype_proto == TensorProto.INT64:
+        np_dtype = np.int64
+    else:
+        pytest.skip(f"DataType {dtype_proto} not implemented in test")
+
+    np_idx_dtype = np.int32 if indices_dtype_proto == TensorProto.INT32 else np.int64
+
+    data_input = np.random.uniform(-5.0, 5.0, size=data_shape).astype(np_dtype)
+
+    # Normalize axis position
+    norm_axis = axis if axis >= 0 else axis + len(data_shape)
+    axis_dim = data_shape[norm_axis]
+
+    # Pick valid indices in range [-axis_dim, axis_dim - 1] to test negative wrapping
+    indices_input = np.random.randint(-axis_dim, axis_dim, size=indices_shape).astype(
+        np_idx_dtype
+    )
+
+    # Output shape rule: data_shape[:axis] + indices_shape + data_shape[axis+1:]
+    expected_out_shape = (
+        data_shape[:norm_axis] + indices_shape + data_shape[norm_axis + 1 :]
+    )
+
+    input_data_info = make_tensor_value_info("data", dtype_proto, data_input.shape)
+    input_indices_info = make_tensor_value_info(
+        "indices", indices_dtype_proto, indices_input.shape
+    )
+    output_tensor_info = make_tensor_value_info(
+        "output", dtype_proto, expected_out_shape
+    )
+
+    gather_node = make_node(
+        ONNX_OP_NAME,
+        inputs=["data", "indices"],
+        outputs=["output"],
+        axis=axis,
+    )
+
+    graph = make_graph(
+        nodes=[gather_node],
+        name="gather_graph",
+        inputs=[input_data_info, input_indices_info],
+        outputs=[output_tensor_info],
+        initializer=[],
+    )
+    opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+    onnx_model = make_model(graph, opset_imports=opset_imports)
+    check_model(onnx_model)
+
+    ref = ReferenceEvaluator(onnx_model)
+    onnx_result = ref.run(None, {"data": data_input, "indices": indices_input})[0]
+
+    with Context() as ctx, Location.unknown():
+        mlir_module = import_from_onnx(onnx_model, ctx)
+        mlir_module.operation.verify()
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        res_array = np.zeros_like(onnx_result)
+        outputs = runner(llvm_module, "main", [data_input, indices_input], [res_array])
+
+        if np.issubdtype(np_dtype, np.integer):
+            np.testing.assert_array_equal(outputs[0], onnx_result)
+        else:
+            atol = 1e-2 if np_dtype == np.float16 else 1e-5
+            rtol = 1e-2 if np_dtype == np.float16 else 1e-5
+            np.testing.assert_allclose(outputs[0], onnx_result, rtol=rtol, atol=atol)

@@ -91,6 +91,10 @@ mlir::LogicalResult OnnxToLinalg_ConvOp(mlir::Operation *op,
 mlir::LogicalResult OnnxToLinalg_FlattenOp(mlir::Operation *op,
                                            mlir::PatternRewriter &rewriter);
 
+// onnx.Gather
+mlir::LogicalResult OnnxToLinalg_GatherOp(mlir::Operation *op,
+                                          mlir::PatternRewriter &rewriter);
+
 // onnx.Gemm
 mlir::LogicalResult OnnxToLinalg_GemmOp(mlir::Operation *op,
                                         mlir::PatternRewriter &rewriter);

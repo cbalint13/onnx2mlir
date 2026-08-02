@@ -210,7 +210,7 @@
   <rect x='409' y='562' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
   <text x='476' y='587' text-anchor='middle' font-weight='bold' class='op-text'>GRU</text>
   <text x='476' y='602' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>3 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>14 </tspan>]</text>
-  <rect x='545' y='562' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <rect x='545' y='562' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='612' y='587' text-anchor='middle' font-weight='bold' class='op-text'>Gather</text>
   <text x='612' y='602' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
   <rect x='681' y='562' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
