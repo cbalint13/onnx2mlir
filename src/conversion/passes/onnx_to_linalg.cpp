@@ -77,8 +77,8 @@ static const std::unordered_map<std::string, LoweringFunc> &getLoweringMap() {
   static const auto loweringMap = [] {
     std::unordered_map<std::string, LoweringFunc> map;
     registerOps( // clang-format off
-                {"Add",        "Sub",          "Mul",         "Div",
-                 "Pow"}, map,
+                {"Add",        "Div",          "Mod",         "Mul",
+                 "Pow",        "Sub"}, map,
         OnnxToLinalg_ArithBinaryOps);   // clang-format on
     registerOps( // clang-format off
                 {"Abs",        "Acos",         "Acosh",       "Asin",

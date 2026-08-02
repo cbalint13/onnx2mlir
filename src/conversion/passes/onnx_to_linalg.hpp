@@ -39,7 +39,7 @@ namespace onnx2mlir::dialect {
  *
  */
 
-// onnx.{Add, Sub, Mul, Div, Pow}
+// onnx.{Add, Div, Mod, Mul, Pow, Sub}
 mlir::LogicalResult
 OnnxToLinalg_ArithBinaryOps(mlir::Operation *op,
                             mlir::PatternRewriter &rewriter);

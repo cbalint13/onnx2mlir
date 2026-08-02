@@ -171,26 +171,33 @@ OnnxToLinalg_ArithBinaryOps(mlir::Operation *op,
             res = mlir::arith::AddIOp::create(nstBld, nstLoc, valLhs, valRhs);
           else
             res = mlir::arith::AddFOp::create(nstBld, nstLoc, valLhs, valRhs);
-        } else if (opNameBeginsWith(opName, "Sub")) {
-          if (isInteger)
-            res = mlir::arith::SubIOp::create(nstBld, nstLoc, valLhs, valRhs);
-          else
-            res = mlir::arith::SubFOp::create(nstBld, nstLoc, valLhs, valRhs);
-        } else if (opNameBeginsWith(opName, "Mul")) {
-          if (isInteger)
-            res = mlir::arith::MulIOp::create(nstBld, nstLoc, valLhs, valRhs);
-          else
-            res = mlir::arith::MulFOp::create(nstBld, nstLoc, valLhs, valRhs);
         } else if (opNameBeginsWith(opName, "Div")) {
           if (isInteger)
             res = mlir::arith::DivSIOp::create(nstBld, nstLoc, valLhs, valRhs);
           else
             res = mlir::arith::DivFOp::create(nstBld, nstLoc, valLhs, valRhs);
+        } else if (opNameBeginsWith(opName, "Mod")) {
+          if (isInteger && elemType.isUnsignedInteger())
+            res = mlir::arith::RemUIOp::create(nstBld, nstLoc, valLhs, valRhs);
+          else if (isInteger)
+            res = mlir::arith::RemSIOp::create(nstBld, nstLoc, valLhs, valRhs);
+          else
+            res = mlir::arith::RemFOp::create(nstBld, nstLoc, valLhs, valRhs);
+        } else if (opNameBeginsWith(opName, "Mul")) {
+          if (isInteger)
+            res = mlir::arith::MulIOp::create(nstBld, nstLoc, valLhs, valRhs);
+          else
+            res = mlir::arith::MulFOp::create(nstBld, nstLoc, valLhs, valRhs);
         } else if (opNameBeginsWith(opName, "Pow")) {
           if (isInteger)
             res = mlir::math::IPowIOp::create(nstBld, nstLoc, valLhs, valRhs);
           else
             res = mlir::math::PowFOp::create(nstBld, nstLoc, valLhs, valRhs);
+        } else if (opNameBeginsWith(opName, "Sub")) {
+          if (isInteger)
+            res = mlir::arith::SubIOp::create(nstBld, nstLoc, valLhs, valRhs);
+          else
+            res = mlir::arith::SubFOp::create(nstBld, nstLoc, valLhs, valRhs);
         }
 
         // Convert signless results back

@@ -173,7 +173,7 @@ def test_onnx_Cast_lower(ONNX_OPSET_VERSION):
     [
         (schema.name, schema.since_version, dtype_proto, shapes)
         for schema in get_all_schemas_with_history()
-        if schema.name in ["Add", "Sub", "Mul", "Div", "Pow"]
+        if schema.name in ["Add", "Div", "Mod", "Mul", "Pow", "Sub"]
         for dtype_proto in [
             TensorProto.FLOAT,
             TensorProto.FLOAT16,
@@ -187,8 +187,8 @@ def test_onnx_Cast_lower(ONNX_OPSET_VERSION):
             TensorProto.INT64,
         ]
         for shapes in [
-            [(1, 3, 3), (1, 3, 3)], # Non-broadcasting
-            [(1, 3, 1), (4, 1, 5)], # Broadcasting
+            [(1, 3, 3), (1, 3, 3)],  # Non-broadcasting
+            [(1, 3, 1), (4, 1, 5)],  # Broadcasting
         ]
     ],
 )
