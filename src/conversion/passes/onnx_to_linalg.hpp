@@ -70,6 +70,11 @@ OnnxToLinalg_BooleanBinaryOps(mlir::Operation *op,
 mlir::LogicalResult OnnxToLinalg_CastOp(mlir::Operation *op,
                                         mlir::PatternRewriter &rewriter);
 
+// onnx.Clip
+mlir::LogicalResult
+OnnxToLinalg_ClipOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                    const mlir::TypeConverter *typeConverter);
+
 // onnx.{Equal, Greater, GreatherOrEqual, Less, LessOrEqual}
 mlir::LogicalResult OnnxToLinalg_CompBinaryOps(mlir::Operation *op,
                                                mlir::PatternRewriter &rewriter);

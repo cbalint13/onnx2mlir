@@ -105,7 +105,7 @@
   <rect x='545' y='256' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
   <text x='612' y='281' text-anchor='middle' font-weight='bold' class='op-text'>CenterCropPad</text>
   <text x='612' y='296' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>]</text>
-  <rect x='681' y='256' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <rect x='681' y='256' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='748' y='281' text-anchor='middle' font-weight='bold' class='op-text'>Clip</text>
   <text x='748' y='296' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>12 </tspan>]</text>
   <rect x='1' y='307' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>

@@ -99,6 +99,7 @@ static const std::unordered_map<std::string, LoweringFunc> &getLoweringMap() {
                 {"And",        "Or",           "Xor"}, map,
         OnnxToLinalg_BooleanBinaryOps); // clang-format on
     registerOps({"Cast"}, map, OnnxToLinalg_CastOp);
+    registerOps({"Clip"}, map, OnnxToLinalg_ClipOp);
     registerOps( // clang-format off
                 {"Equal",      "Greater",      "GreatherOrEqual",
                  "Less",       "LessOrEqual"}, map,

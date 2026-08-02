@@ -2622,3 +2622,176 @@ def test_onnx_slice_lower(
             atol = 1e-2 if np_dtype == np.float16 else 1e-5
             rtol = 1e-2 if np_dtype == np.float16 else 1e-5
             np.testing.assert_allclose(outputs[0], onnx_result, rtol=rtol, atol=atol)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape, bounds",
+    [
+        (schema.name, schema.since_version, dtype_proto, shape, bounds)
+        for schema in get_all_schemas_with_history()
+        if schema.name in ["Clip"]
+        for dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.DOUBLE,
+            TensorProto.INT32,
+            TensorProto.INT64,
+            TensorProto.UINT8,
+            TensorProto.INT8,
+            TensorProto.FLOAT16,
+        ]
+        for shape in [
+            (10,),
+            (4, 5),
+            (2, 3, 4),
+            (2, 2, 3, 4),
+        ]
+        for bounds in [
+            (-2.0, 3.0),
+            (-1.0, None),
+            (None, 4.0),
+            (None, None),
+        ]
+    ],
+)
+# pylint: disable=too-many-branches,too-many-statements
+def test_onnx_clip_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape, bounds):
+    """
+    Test ONNX Clip operation lowering to Linalg dialect in MLIR.
+    Handles attribute-based bounds (opset < 11) and operand-based bounds (opset >= 11).
+    """
+
+    class Clip(OpRun):
+        """
+        Reference implementation for ONNX Clip operator.
+        """
+
+        # pylint: disable=redefined-builtin,arguments-differ
+        def _run(self, x, min=None, max=None):
+            res = x.copy()
+            if min is not None:
+                min_val = (
+                    np.array(min, dtype=x.dtype)
+                    if not isinstance(min, np.ndarray)
+                    else min.astype(x.dtype)
+                )
+                res = np.maximum(res, min_val)
+            if max is not None:
+                max_val = (
+                    np.array(max, dtype=x.dtype)
+                    if not isinstance(max, np.ndarray)
+                    else max.astype(x.dtype)
+                )
+                res = np.minimum(res, max_val)
+            return (res,)
+
+    np_dtype = None
+    if dtype_proto == TensorProto.FLOAT:
+        np_dtype = np.float32
+    elif dtype_proto == TensorProto.DOUBLE:
+        np_dtype = np.float64
+    elif dtype_proto == TensorProto.FLOAT16:
+        np_dtype = np.float16
+    elif dtype_proto == TensorProto.INT32:
+        np_dtype = np.int32
+    elif dtype_proto == TensorProto.INT64:
+        np_dtype = np.int64
+    elif dtype_proto == TensorProto.UINT8:
+        np_dtype = np.uint8
+    elif dtype_proto == TensorProto.INT8:
+        np_dtype = np.int8
+    else:
+        pytest.skip(f"DataType {dtype_proto} not implemented in test")
+
+    # Integer types before Opset 12 are not supported by ONNX spec
+    if ONNX_OPSET_VERSION < 12 and np.issubdtype(np_dtype, np.integer):
+        pytest.skip("Integer data types are supported only in ONNX Clip opset 12+")
+
+    min_val, max_val = bounds
+    data_input = np.random.uniform(-10.0, 10.0, size=shape).astype(np_dtype)
+
+    input_data_info = make_tensor_value_info("input", dtype_proto, data_input.shape)
+    output_tensor_info = make_tensor_value_info("output", dtype_proto, shape)
+
+    initializers = []
+    inputs = [input_data_info]
+    node_inputs = ["input"]
+    node_kwargs = {}
+
+    if ONNX_OPSET_VERSION < 11:
+        # Opset 1 & 6 use attributes for min and max
+        if min_val is not None:
+            node_kwargs["min"] = float(min_val)
+        if max_val is not None:
+            node_kwargs["max"] = float(max_val)
+        clip_node = make_node(
+            ONNX_OP_NAME, inputs=["input"], outputs=["output"], **node_kwargs
+        )
+    else:
+        if min_val is not None:
+            node_inputs.append("min")
+            if np.issubdtype(np_dtype, np.integer):
+                iinfo = np.iinfo(np_dtype)
+                c_min = int(np.clip(min_val, iinfo.min, iinfo.max))
+                min_array = np.array(c_min, dtype=np_dtype)
+            else:
+                min_array = np.array(min_val, dtype=np_dtype)
+            min_tensor = make_tensor("min", dtype_proto, [], [min_array.item()])
+            initializers.append(min_tensor)
+        else:
+            node_inputs.append("")
+
+        if max_val is not None:
+            if len(node_inputs) == 2 and node_inputs[1] == "":
+                pass  # Empty placeholder for min
+            node_inputs.append("max")
+            if np.issubdtype(np_dtype, np.integer):
+                iinfo = np.iinfo(np_dtype)
+                c_max = int(np.clip(max_val, iinfo.min, iinfo.max))
+                max_array = np.array(c_max, dtype=np_dtype)
+            else:
+                max_array = np.array(max_val, dtype=np_dtype)
+            max_tensor = make_tensor("max", dtype_proto, [], [max_array.item()])
+            initializers.append(max_tensor)
+
+        # Trim trailing empty optional operand inputs
+        while node_inputs and node_inputs[-1] == "":
+            node_inputs.pop()
+
+        clip_node = make_node(ONNX_OP_NAME, inputs=node_inputs, outputs=["output"])
+
+    graph = make_graph(
+        nodes=[clip_node],
+        name="clip_graph",
+        inputs=inputs,
+        outputs=[output_tensor_info],
+        initializer=initializers,
+    )
+    opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+    onnx_model = make_model(graph, opset_imports=opset_imports)
+    check_model(onnx_model)
+
+    ref_inputs = {"input": data_input}
+
+    try:
+        ref = ReferenceEvaluator(onnx_model)
+        onnx_result = ref.run(None, ref_inputs)[0]
+    except (RuntimeError, NotImplementedError, ValueError):
+        ref = ReferenceEvaluator(onnx_model, new_ops=[Clip])
+        onnx_result = ref.run(None, ref_inputs)[0]
+
+    with Context() as ctx, Location.unknown():
+        mlir_module = import_from_onnx(onnx_model, ctx)
+        mlir_module.operation.verify()
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        res_array = np.zeros_like(onnx_result)
+        outputs = runner(llvm_module, "main", [data_input], [res_array])
+
+        if np.issubdtype(np_dtype, np.integer):
+            np.testing.assert_array_equal(outputs[0], onnx_result)
+        else:
+            atol = 1e-2 if np_dtype == np.float16 else 1e-5
+            rtol = 1e-2 if np_dtype == np.float16 else 1e-5
+            np.testing.assert_allclose(outputs[0], onnx_result, rtol=rtol, atol=atol)

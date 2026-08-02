@@ -8,6 +8,7 @@ add_mlir_conversion_library(onnx2mlir_onnx_linalg_pass
     onnx_to_linalg/bitwise.cpp
     onnx_to_linalg/boolean.cpp
     onnx_to_linalg/cast.cpp
+    onnx_to_linalg/clip.cpp
     onnx_to_linalg/compare_binary.cpp
     onnx_to_linalg/concat.cpp
     onnx_to_linalg/constant.cpp
