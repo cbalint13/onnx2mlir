@@ -70,9 +70,11 @@ OnnxToLinalg_ArithBinaryOps(mlir::Operation *op,
   }
 
   if (opNameBeginsWith(opName, "Pow") &&
-      mlir::isa<mlir::IntegerType>(resType.getElementType())) {
+      mlir::isa<mlir::IntegerType>(resType.getElementType()) &&
+      mlir::cast<mlir::IntegerType>(resType.getElementType()).getWidth() !=
+          32) {
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " not supported with integer types");
+                           opName + " only 32-bit integer types are supported");
   }
 
   // Infer broadcasted shape output
@@ -93,7 +95,7 @@ OnnxToLinalg_ArithBinaryOps(mlir::Operation *op,
       rewriter, loc, resType.getShape(), resType.getElementType());
 
   // Create indexing maps for the elementwise op
-  llvm::SmallVector<mlir::AffineMap, 4> idxMaps;
+  llvm::SmallVector<mlir::AffineMap, 3> idxMaps;
   mlir::AffineMap lhsMap, rhsMap, resMap;
 
   // Create identity map for the result
@@ -134,40 +136,77 @@ OnnxToLinalg_ArithBinaryOps(mlir::Operation *op,
   idxMaps.push_back(rhsMap);
   idxMaps.push_back(resMap);
 
-  auto idxMapsAttr = rewriter.getAffineMapArrayAttr(idxMaps);
+  // Loop iterator types for generic operation (all dims are parallel)
+  llvm::SmallVector<mlir::utils::IteratorType, 4> iteratorTypes(
+      resType.getRank(), mlir::utils::IteratorType::parallel);
 
-  mlir::linalg::ElementwiseKind kindEnum;
-  if (opNameBeginsWith(opName, "Add")) {
-    kindEnum = mlir::linalg::ElementwiseKind::add;
-  } else if (opNameBeginsWith(opName, "Sub")) {
-    kindEnum = mlir::linalg::ElementwiseKind::sub;
-  } else if (opNameBeginsWith(opName, "Mul")) {
-    kindEnum = mlir::linalg::ElementwiseKind::mul;
-  } else if (opNameBeginsWith(opName, "Div")) {
-    kindEnum = mlir::linalg::ElementwiseKind::div;
-  } else if (opNameBeginsWith(opName, "Pow")) {
-    if (mlir::isa<mlir::FloatType>(resType.getElementType()))
-      kindEnum = mlir::linalg::ElementwiseKind::powf;
-    else
-      return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                             opName + " supports only float element types");
-  } else {
-    return mlir::emitError(
-        Onnx2Mlir_SrcLoc(rewriter),
-        opName + " is unsupported for linalg.elementwise operation");
-  }
+  auto elemType = mlir::dyn_cast<mlir::IntegerType>(resType.getElementType());
+  bool isInteger = (elemType != nullptr);
+  auto signlessIntType =
+      isInteger ? mlir::IntegerType::get(op->getContext(), elemType.getWidth())
+                : nullptr;
 
-  auto kindAttr =
-      mlir::linalg::ElementwiseKindAttr::get(op->getContext(), kindEnum);
+  auto genericOp = mlir::linalg::GenericOp::create(
+      rewriter, loc, mlir::TypeRange{resType}, mlir::ValueRange{lhs, rhs},
+      mlir::ValueRange{outBuff}, idxMaps, iteratorTypes,
+      [&](mlir::OpBuilder &nstBld, mlir::Location nstLoc,
+          mlir::ValueRange args) {
+        mlir::Value valLhs = args[0];
+        mlir::Value valRhs = args[1];
 
-  auto elmwiseOp = mlir::linalg::ElementwiseOp::create(
-      rewriter, loc, mlir::ValueRange{lhs, rhs}, mlir::ValueRange{outBuff},
-      kindAttr, idxMapsAttr);
+        // Convert signed (si*)/(ui*) integer types to signless (i*)
+        if (isInteger && !elemType.isSignless()) {
+          valLhs = mlir::UnrealizedConversionCastOp::create(
+                       nstBld, nstLoc, signlessIntType, valLhs)
+                       .getResult(0);
+          valRhs = mlir::UnrealizedConversionCastOp::create(
+                       nstBld, nstLoc, signlessIntType, valRhs)
+                       .getResult(0);
+        }
+
+        mlir::Value res;
+        // Perform arithmetic operation based on op name
+        if (opNameBeginsWith(opName, "Add")) {
+          if (isInteger)
+            res = mlir::arith::AddIOp::create(nstBld, nstLoc, valLhs, valRhs);
+          else
+            res = mlir::arith::AddFOp::create(nstBld, nstLoc, valLhs, valRhs);
+        } else if (opNameBeginsWith(opName, "Sub")) {
+          if (isInteger)
+            res = mlir::arith::SubIOp::create(nstBld, nstLoc, valLhs, valRhs);
+          else
+            res = mlir::arith::SubFOp::create(nstBld, nstLoc, valLhs, valRhs);
+        } else if (opNameBeginsWith(opName, "Mul")) {
+          if (isInteger)
+            res = mlir::arith::MulIOp::create(nstBld, nstLoc, valLhs, valRhs);
+          else
+            res = mlir::arith::MulFOp::create(nstBld, nstLoc, valLhs, valRhs);
+        } else if (opNameBeginsWith(opName, "Div")) {
+          if (isInteger)
+            res = mlir::arith::DivSIOp::create(nstBld, nstLoc, valLhs, valRhs);
+          else
+            res = mlir::arith::DivFOp::create(nstBld, nstLoc, valLhs, valRhs);
+        } else if (opNameBeginsWith(opName, "Pow")) {
+          if (isInteger)
+            res = mlir::math::IPowIOp::create(nstBld, nstLoc, valLhs, valRhs);
+          else
+            res = mlir::math::PowFOp::create(nstBld, nstLoc, valLhs, valRhs);
+        }
+
+        // Convert signless results back
+        if (isInteger && !elemType.isSignless()) {
+          res = mlir::UnrealizedConversionCastOp::create(nstBld, nstLoc,
+                                                         elemType, res)
+                    .getResult(0);
+        }
+
+        mlir::linalg::YieldOp::create(nstBld, nstLoc, res);
+      });
 
   // Tag for transform optimization
-  elmwiseOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
+  genericOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
 
-  rewriter.replaceOp(op, elmwiseOp);
+  rewriter.replaceOp(op, genericOp.getResults());
 
   return mlir::success();
 }

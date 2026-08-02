@@ -169,31 +169,81 @@ def test_onnx_Cast_lower(ONNX_OPSET_VERSION):
 
 
 @pytest.mark.parametrize(
-    "ONNX_OP_NAME, ONNX_OPSET_VERSION",
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shapes",
     [
-        (schema.name, schema.since_version)
+        (schema.name, schema.since_version, dtype_proto, shapes)
         for schema in get_all_schemas_with_history()
         if schema.name in ["Add", "Sub", "Mul", "Div", "Pow"]
+        for dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.FLOAT16,
+            TensorProto.UINT8,
+            TensorProto.UINT16,
+            TensorProto.UINT32,
+            TensorProto.UINT64,
+            TensorProto.INT8,
+            TensorProto.INT16,
+            TensorProto.INT32,
+            TensorProto.INT64,
+        ]
+        for shapes in [
+            [(1, 3, 3), (1, 3, 3)], # Non-broadcasting
+            [(1, 3, 1), (4, 1, 5)], # Broadcasting
+        ]
     ],
 )
-def test_onnx_arith_binary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION):
+# pylint: disable=too-many-branches,too-many-statements
+def test_onnx_arith_binary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shapes):
     """
     Test ONNX arith binary operators lowering.
     """
 
-    def create_onnx_model(inp_array0, inp_array1):
-        input_tensor_0 = make_tensor_value_info(
-            "input0", TensorProto.FLOAT, inp_array0.shape
+    if ONNX_OP_NAME == "Pow" and dtype_proto not in [
+        TensorProto.FLOAT,
+        TensorProto.FLOAT16,
+    ]:
+        pytest.skip(
+            f"{ONNX_OP_NAME} V{ONNX_OPSET_VERSION} only supports Float or 32bit Integer"
         )
-        input_tensor_1 = make_tensor_value_info(
-            "input1", TensorProto.FLOAT, inp_array1.shape
-        )
+
+    if ONNX_OPSET_VERSION <= 13 and dtype_proto not in [
+        TensorProto.FLOAT,
+        TensorProto.FLOAT16,
+    ]:
+        pytest.skip(f"{ONNX_OP_NAME} V{ONNX_OPSET_VERSION} only supports Float")
+
+    np_dtype = None
+    if dtype_proto == TensorProto.FLOAT:
+        np_dtype = np.float32
+    elif dtype_proto == TensorProto.FLOAT16:
+        np_dtype = np.float16
+    elif dtype_proto == TensorProto.UINT8:
+        np_dtype = np.uint8
+    elif dtype_proto == TensorProto.UINT16:
+        np_dtype = np.uint16
+    elif dtype_proto == TensorProto.UINT32:
+        np_dtype = np.uint32
+    elif dtype_proto == TensorProto.UINT64:
+        np_dtype = np.uint64
+    elif dtype_proto == TensorProto.INT8:
+        np_dtype = np.int8
+    elif dtype_proto == TensorProto.INT16:
+        np_dtype = np.int16
+    elif dtype_proto == TensorProto.INT32:
+        np_dtype = np.int32
+    elif dtype_proto == TensorProto.INT64:
+        np_dtype = np.int64
+    else:
+        pytest.skip(f"DataType {dtype_proto} not implemented in test")
+
+    def create_onnx_model(inp_array0, inp_array1, dtype_proto):
+        input_tensor_0 = make_tensor_value_info("input0", dtype_proto, inp_array0.shape)
+        input_tensor_1 = make_tensor_value_info("input1", dtype_proto, inp_array1.shape)
         output_tensor = make_tensor_value_info(
-            "output", TensorProto.FLOAT, (inp_array0 + inp_array1).shape
+            "output", dtype_proto, (inp_array0 + inp_array1).shape
         )
         arith_node = make_node(
             ONNX_OP_NAME,
-            # binary arg
             ["input0", "input1"],
             ["output"],
         )
@@ -209,10 +259,14 @@ def test_onnx_arith_binary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION):
         check_model(model)
         return model
 
-    inp_array0 = np.random.rand(1, 3, 1).astype(np.float32)
-    inp_array1 = np.random.rand(4, 1, 5).astype(np.float32)
+    if np.issubdtype(np.dtype(np_dtype), np.integer):
+        inp_array0 = np.random.randint(1, 15, size=shapes[0], dtype=np_dtype)
+        inp_array1 = np.random.randint(1, 15, size=shapes[1], dtype=np_dtype)
+    else:
+        inp_array0 = np.random.rand(*shapes[0]).astype(np_dtype)
+        inp_array1 = np.random.rand(*shapes[1]).astype(np_dtype)
 
-    onnx_model = create_onnx_model(inp_array0, inp_array1)
+    onnx_model = create_onnx_model(inp_array0, inp_array1, dtype_proto)
 
     ref = ReferenceEvaluator(onnx_model)
     onnx_result = ref.run(None, {"input0": inp_array0, "input1": inp_array1})[0]
