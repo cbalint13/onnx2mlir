@@ -872,25 +872,31 @@ def test_onnx_maxpool_lower(
 
 
 @pytest.mark.parametrize(
-    "ONNX_OPSET_VERSION, dtype, input_shape, weight_shape, strides, pads, has_bias",
+    "ONNX_OPSET_VERSION, dtype, input_shape, weight_shape, strides, pads, group, has_bias",
     [
-        (opset, dtype, in_shape, w_shape, stride, pad, bias)
+        (opset, dtype, in_shape, w_shape, stride, pad, group, bias)
         for opset in [
             schema.since_version
             for schema in get_all_schemas_with_history()
             if "Conv" == schema.name
         ]
         for dtype in [TensorProto.FLOAT, TensorProto.FLOAT16]
-        for in_shape, w_shape, stride, pad, bias in [
-            ((1, 3, 32, 32), (8, 3, 3, 3), [1, 1], [0, 0, 0, 0], False),
-            ((1, 3, 32, 32), (16, 3, 3, 3), [2, 2], [1, 1, 1, 1], True),
-            ((2, 1, 10, 10), (1, 1, 5, 5), [1, 1], [2, 2, 2, 2], False),
+        for in_shape, w_shape, stride, pad, group, bias in [
+            ((1, 3, 32, 32), (8, 3, 3, 3), [1, 1], [0, 0, 0, 0], 1, False),
+            ((1, 3, 32, 32), (16, 3, 3, 3), [2, 2], [1, 1, 1, 1], 1, True),
+            ((2, 1, 10, 10), (1, 1, 5, 5), [1, 1], [2, 2, 2, 2], 1, False),
+            # Grouped Convolution (group = 2)
+            ((1, 4, 16, 16), (8, 2, 3, 3), [1, 1], [1, 1, 1, 1], 2, False),
+            # Grouped Convolution with stride = 2 (group = 4)
+            ((2, 8, 20, 20), (16, 2, 3, 3), [2, 2], [1, 1, 1, 1], 4, True),
+            # Depthwise Convolution (group = 256)
+            ((1, 256, 20, 20), (256, 1, 3, 3), [1, 1], [1, 1, 1, 1], 256, True),
         ]
     ],
 )
 # pylint: disable=too-many-locals,too-many-arguments,too-many-positional-arguments
 def test_onnx_conv_lower(
-    ONNX_OPSET_VERSION, dtype, input_shape, weight_shape, strides, pads, has_bias
+    ONNX_OPSET_VERSION, dtype, input_shape, weight_shape, strides, pads, group, has_bias
 ):
     """
     Test ONNX Conv operator lowering.
@@ -929,7 +935,7 @@ def test_onnx_conv_lower(
             kernel_shape=[kh, kw],
             strides=strides,
             pads=pads,
-            group=1,
+            group=group,
         )
 
         graph = make_graph(
