@@ -2218,3 +2218,116 @@ def test_onnx_resize_lower(
         outputs = runner(llvm_module, "main", runner_inputs, [res_arr])
 
         np.testing.assert_allclose(outputs[0], onnx_results[0], atol=1e-5, rtol=1e-5)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape, start_end",
+    [
+        (schema.name, schema.since_version, dtype_proto, shape, start_end)
+        for schema in get_all_schemas_with_history()
+        if schema.name in ["Shape"]
+        for dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.DOUBLE,
+            TensorProto.INT32,
+            TensorProto.INT64,
+            TensorProto.FLOAT16,
+        ]
+        for shape in [
+            (10,),  # 1D
+            (2, 3),  # 2D
+            (2, 3, 10),  # 3D
+            (2, 3, 4, 5),  # 4D
+            (2, 3, 2, 4, 4),  # 5D
+        ]
+        for start_end in (
+            # Test different start/end slicing configurations
+            [(None, None), (0, None), (1, 3), (-2, None), (0, -1)]
+            if schema.since_version >= 15
+            else [(None, None)]  # Opset < 15 does not support start/end
+        )
+    ],
+)
+def test_onnx_shape_lower(
+    ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape, start_end
+):
+    """
+    Test ONNX Shape operation lowering.
+    """
+    start_attr, end_attr = start_end
+
+    np_dtype = None
+    # Map TensorProto enum to NumPy data type
+    if dtype_proto == TensorProto.FLOAT:
+        np_dtype = np.float32
+    elif dtype_proto == TensorProto.DOUBLE:
+        np_dtype = np.float64
+    elif dtype_proto == TensorProto.FLOAT16:
+        np_dtype = np.float16
+    elif dtype_proto == TensorProto.INT32:
+        np_dtype = np.int32
+    elif dtype_proto == TensorProto.INT64:
+        np_dtype = np.int64
+    else:
+        pytest.skip(f"DataType {dtype_proto} not implemented in test")
+
+    # Generate test input tensor with random data
+    inp0 = np.random.uniform(-5.0, 5.0, size=shape).astype(np_dtype)
+
+    node_kwargs = {}
+    if start_attr is not None:
+        node_kwargs["start"] = start_attr
+    if end_attr is not None:
+        node_kwargs["end"] = end_attr
+
+    # Compute expected output shape and values
+    rank = len(shape)
+    s = start_attr if start_attr is not None else 0
+    if s < 0:
+        s += rank
+    s = max(0, min(s, rank))
+
+    e = end_attr if end_attr is not None else rank
+    if e < 0:
+        e += rank
+    e = max(0, min(e, rank))
+
+    expected_output_dim = max(0, e - s)
+    out_shape = (expected_output_dim,)
+
+    input_tensor = make_tensor_value_info("input0", dtype_proto, inp0.shape)
+    output_tensor = make_tensor_value_info("output", TensorProto.INT64, out_shape)
+
+    shape_node = make_node(
+        ONNX_OP_NAME,
+        inputs=["input0"],
+        outputs=["output"],
+        **node_kwargs,
+    )
+
+    graph = make_graph(
+        nodes=[shape_node],
+        name="shape_graph",
+        inputs=[input_tensor],
+        outputs=[output_tensor],
+        initializer=[],
+    )
+    opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+    onnx_model = make_model(graph, opset_imports=opset_imports)
+    check_model(onnx_model)
+
+    ref = ReferenceEvaluator(onnx_model)
+    onnx_result = ref.run(None, {"input0": inp0})[0]
+
+    with Context() as ctx, Location.unknown():
+        mlir_module = import_from_onnx(onnx_model, ctx)
+        mlir_module.operation.verify()
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        res_array = np.zeros_like(onnx_result)
+        outputs = runner(llvm_module, "main", [inp0], [res_array])
+
+        # ONNX Shape results demand exact array equality
+        np.testing.assert_array_equal(outputs[0], onnx_result)

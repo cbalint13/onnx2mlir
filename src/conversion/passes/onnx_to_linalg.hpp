@@ -135,6 +135,10 @@ mlir::LogicalResult OnnxToLinalg_ReshapeOp(mlir::Operation *op,
 mlir::LogicalResult OnnxToLinalg_ResizeOp(mlir::Operation *op,
                                           mlir::PatternRewriter &rewriter);
 
+// onnx.Shape
+mlir::LogicalResult OnnxToLinalg_ShapeOp(mlir::Operation *op,
+                                         mlir::PatternRewriter &rewriter);
+
 // onnx.Softmax
 mlir::LogicalResult OnnxToLinalg_SoftmaxOp(mlir::Operation *op,
                                            mlir::PatternRewriter &rewriter);
