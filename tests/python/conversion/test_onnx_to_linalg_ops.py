@@ -2458,3 +2458,167 @@ def test_onnx_gather_lower(
             atol = 1e-2 if np_dtype == np.float16 else 1e-5
             rtol = 1e-2 if np_dtype == np.float16 else 1e-5
             np.testing.assert_allclose(outputs[0], onnx_result, rtol=rtol, atol=atol)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape, slice_config",
+    [
+        (schema.name, schema.since_version, dtype_proto, shape, slice_config)
+        for schema in get_all_schemas_with_history()
+        if schema.name in ["Slice"]
+        for dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.DOUBLE,
+            TensorProto.INT32,
+            TensorProto.INT64,
+            TensorProto.FLOAT16,
+        ]
+        for shape, slice_config in [
+            # YOLOv11 head slicing pattern
+            ((1, 4, 8400), {"starts": [0], "ends": [4], "axes": [1], "steps": [1]}),
+            # 1D basic slicing
+            ((10,), {"starts": [2], "ends": [7], "axes": [0], "steps": [1]}),
+            # 2D multi-axis slicing
+            (
+                (6, 8),
+                {"starts": [1, 2], "ends": [5, 7], "axes": [0, 1], "steps": [1, 1]},
+            ),
+            # Strided slicing
+            ((12,), {"starts": [1], "ends": [10], "axes": [0], "steps": [2]}),
+            # Negative index slicing
+            ((10,), {"starts": [-8], "ends": [-2], "axes": [0], "steps": [1]}),
+            # Partial axis slicing on 3D tensor
+            ((4, 5, 6), {"starts": [1], "ends": [4], "axes": [1], "steps": [1]}),
+        ]
+    ],
+)
+# pylint: disable=too-many-branches,too-many-statements
+def test_onnx_slice_lower(
+    ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape, slice_config
+):
+    """
+    Test ONNX Slice operation lowering.
+    """
+    np_dtype = None
+    if dtype_proto == TensorProto.FLOAT:
+        np_dtype = np.float32
+    elif dtype_proto == TensorProto.DOUBLE:
+        np_dtype = np.float64
+    elif dtype_proto == TensorProto.FLOAT16:
+        np_dtype = np.float16
+    elif dtype_proto == TensorProto.INT32:
+        np_dtype = np.int32
+    elif dtype_proto == TensorProto.INT64:
+        np_dtype = np.int64
+    else:
+        pytest.skip(f"DataType {dtype_proto} not implemented in test")
+
+    data_input = np.random.uniform(-5.0, 5.0, size=shape).astype(np_dtype)
+
+    starts = slice_config["starts"]
+    ends = slice_config["ends"]
+    axes = slice_config.get("axes", None)
+    steps = slice_config.get("steps", None)
+
+    # ONNX Slice Opset < 10 does not support non-unit steps (defaults to 1)
+    if ONNX_OPSET_VERSION < 10:
+        steps = None
+
+    # Compute exact expected output shape for ONNX shape validation
+    out_shape = list(shape)
+    eff_axes = axes if axes is not None else list(range(len(starts)))
+    eff_steps = steps if steps is not None else [1] * len(starts)
+
+    for s_val, e_val, ax, st_val in zip(starts, ends, eff_axes, eff_steps):
+        if ax < 0:
+            ax += len(shape)
+        dim_len = shape[ax]
+        if st_val > 0:
+            s_norm = s_val + dim_len if s_val < 0 else s_val
+            s_norm = max(0, min(s_norm, dim_len))
+            e_norm = e_val + dim_len if e_val < 0 else e_val
+            e_norm = max(0, min(e_norm, dim_len))
+            out_shape[ax] = max(0, (e_norm - s_norm + st_val - 1) // st_val)
+        else:
+            s_norm = s_val + dim_len if s_val < 0 else s_val
+            s_norm = max(-1, min(s_norm, dim_len - 1))
+            e_norm = e_val + dim_len if e_val < 0 else e_val
+            e_norm = max(-1, min(e_norm, dim_len - 1))
+            abs_st = -st_val
+            out_shape[ax] = max(0, (s_norm - e_norm + abs_st - 1) // abs_st)
+
+    input_data_info = make_tensor_value_info("data", dtype_proto, data_input.shape)
+    output_tensor_info = make_tensor_value_info("output", dtype_proto, tuple(out_shape))
+
+    initializers = []
+    inputs = [input_data_info]
+
+    if ONNX_OPSET_VERSION < 10:
+        node_kwargs = {"starts": starts, "ends": ends}
+        if axes is not None:
+            node_kwargs["axes"] = axes
+        slice_node = make_node(
+            ONNX_OP_NAME, inputs=["data"], outputs=["output"], **node_kwargs
+        )
+    else:
+        node_inputs = ["data", "starts", "ends"]
+
+        starts_tensor = make_tensor(
+            "starts", TensorProto.INT64, [len(starts)], np.array(starts, dtype=np.int64)
+        )
+        ends_tensor = make_tensor(
+            "ends", TensorProto.INT64, [len(ends)], np.array(ends, dtype=np.int64)
+        )
+        initializers.extend([starts_tensor, ends_tensor])
+
+        if axes is not None:
+            node_inputs.append("axes")
+            axes_tensor = make_tensor(
+                "axes", TensorProto.INT64, [len(axes)], np.array(axes, dtype=np.int64)
+            )
+            initializers.append(axes_tensor)
+        elif steps is not None:
+            node_inputs.append("")
+
+        if steps is not None:
+            node_inputs.append("steps")
+            steps_tensor = make_tensor(
+                "steps",
+                TensorProto.INT64,
+                [len(steps)],
+                np.array(steps, dtype=np.int64),
+            )
+            initializers.append(steps_tensor)
+
+        slice_node = make_node(ONNX_OP_NAME, inputs=node_inputs, outputs=["output"])
+
+    graph = make_graph(
+        nodes=[slice_node],
+        name="slice_graph",
+        inputs=inputs,
+        outputs=[output_tensor_info],
+        initializer=initializers,
+    )
+    opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+    onnx_model = make_model(graph, opset_imports=opset_imports)
+    check_model(onnx_model)
+
+    ref = ReferenceEvaluator(onnx_model)
+    onnx_result = ref.run(None, {"data": data_input})[0]
+
+    with Context() as ctx, Location.unknown():
+        mlir_module = import_from_onnx(onnx_model, ctx)
+        mlir_module.operation.verify()
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        res_array = np.zeros_like(onnx_result)
+        outputs = runner(llvm_module, "main", [data_input], [res_array])
+
+        if np.issubdtype(np_dtype, np.integer):
+            np.testing.assert_array_equal(outputs[0], onnx_result)
+        else:
+            atol = 1e-2 if np_dtype == np.float16 else 1e-5
+            rtol = 1e-2 if np_dtype == np.float16 else 1e-5
+            np.testing.assert_allclose(outputs[0], onnx_result, rtol=rtol, atol=atol)

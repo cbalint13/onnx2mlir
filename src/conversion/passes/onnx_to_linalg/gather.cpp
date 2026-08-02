@@ -24,7 +24,7 @@
 
 /*!
  * \file src/conversion/passes/onnx_to_linalg/gather.cpp
- * \brief ONNX Gather operation to Linalg dynamic indexing lowering pass
+ * \brief ONNX Gather operation to Linalg lowering pass
  */
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
