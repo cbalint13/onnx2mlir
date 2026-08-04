@@ -151,6 +151,7 @@ def llvm_lower_pipeline(module, signatures=False, affine_loops=True):
     # 9. Final conversions
     pm.add("convert-shape-to-std")
     pm.add("convert-scf-to-cf")
+    pm.add("convert-math-to-funcs")
     pm.add("convert-cf-to-llvm")
     pm.add("convert-math-to-llvm")
     pm.add("convert-arith-to-llvm")
