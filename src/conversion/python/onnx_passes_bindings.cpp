@@ -36,7 +36,7 @@ NB_MODULE(_onnx2mlirOnnxPasses, m) {
   m.doc() = "Python bindings for ONNX passes";
 
   m.def(
-      "register_onnx_to_linag_pass",
+      "register_onnx_to_linalg_pass",
       []() -> nanobind::set {
         auto ops = onnx2mlir::dialect::registerLowerONNXToLINALGPass();
         nanobind::set s;

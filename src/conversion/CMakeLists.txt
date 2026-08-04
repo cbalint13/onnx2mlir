@@ -30,7 +30,7 @@ if(BUILD_PYTHON_BINDINGS)
     COMMAND
       echo "from ._onnx2mlirOnnxPasses import *" > __init__.py
     COMMAND
-      echo "__all__ = ['register_onnx_to_linag_pass']" >> __init__.py
+      echo "__all__ = ['register_onnx_to_linalg_pass']" >> __init__.py
     WORKING_DIRECTORY ${PY_OUTPUT_PATH}
   )
 endif()

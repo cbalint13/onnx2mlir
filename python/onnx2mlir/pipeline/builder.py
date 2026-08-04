@@ -31,7 +31,7 @@ from mlir.dialects import func, llvm
 from mlir.ir import Type, StringAttr
 from mlir.passmanager import PassManager
 
-from onnx2mlir.passes import register_onnx_to_linag_pass
+from onnx2mlir.passes import register_onnx_to_linalg_pass
 
 
 def get_module_signatures(module):
@@ -102,7 +102,7 @@ def llvm_lower_pipeline(module, signatures=False, affine_loops=True):
     if signatures:
         module = set_module_signatures(module)
 
-    register_onnx_to_linag_pass()
+    register_onnx_to_linalg_pass()
 
     pm = PassManager()
 
@@ -150,8 +150,8 @@ def llvm_lower_pipeline(module, signatures=False, affine_loops=True):
 
     # 9. Final conversions
     pm.add("convert-shape-to-std")
-    pm.add("convert-scf-to-cf")
     pm.add("convert-math-to-funcs")
+    pm.add("convert-scf-to-cf")
     pm.add("convert-cf-to-llvm")
     pm.add("convert-math-to-llvm")
     pm.add("convert-arith-to-llvm")
