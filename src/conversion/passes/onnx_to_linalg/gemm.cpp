@@ -40,20 +40,25 @@
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_GemmOp(mlir::Operation *op,
-                                        mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_GemmOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                    const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
+
   // Parse Operands
-  mlir::Value A = op->getOperand(0);
-  mlir::Value B = op->getOperand(1);
-  mlir::Value C = op->getNumOperands() > 2 ? op->getOperand(2) : mlir::Value();
+  mlir::Value A = convRewriter.getRemappedValue(op->getOperand(0));
+  mlir::Value B = convRewriter.getRemappedValue(op->getOperand(1));
+  mlir::Value C = op->getNumOperands() > 2
+                      ? convRewriter.getRemappedValue(op->getOperand(2))
+                      : mlir::Value();
+  mlir::Value res = convRewriter.getRemappedValue(op->getResult(0));
 
   auto aType = mlir::dyn_cast<mlir::RankedTensorType>(A.getType());
   auto bType = mlir::dyn_cast<mlir::RankedTensorType>(B.getType());
-  auto resType =
-      mlir::dyn_cast<mlir::RankedTensorType>(op->getResult(0).getType());
+  auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
   if (!aType || !bType || !resType) {
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
@@ -90,7 +95,20 @@ mlir::LogicalResult OnnxToLinalg_GemmOp(mlir::Operation *op,
     bool betaIsOne = std::abs(beta - 1.0f) < 1e-6;
     // Use bias term
     if (sameShape && betaIsOne) {
-      outBuff = C;
+      auto outTBuff = mlir::tensor::EmptyOp::create(
+          rewriter, loc, resType.getShape(), elementType);
+      mlir::SmallVector<mlir::AffineMap> cMaps = {
+          rewriter.getMultiDimIdentityMap(resType.getRank()),
+          rewriter.getMultiDimIdentityMap(resType.getRank())};
+      mlir::SmallVector<mlir::utils::IteratorType> cIters(
+          resType.getRank(), mlir::utils::IteratorType::parallel);
+      auto copyOp = mlir::linalg::GenericOp::create(
+          rewriter, loc, resType, mlir::ValueRange{C},
+          mlir::ValueRange{outTBuff}, cMaps, cIters,
+          [&](mlir::OpBuilder &nest, mlir::Location l, mlir::ValueRange args) {
+            mlir::linalg::YieldOp::create(nest, l, args[0]);
+          });
+      outBuff = copyOp->getResult(0);
     } else {
       // Use bias and beta terms
       auto outTBuff = mlir::tensor::EmptyOp::create(

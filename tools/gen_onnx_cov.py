@@ -37,7 +37,7 @@ from datetime import datetime
 import onnx
 from onnx import defs
 
-from onnx2mlir.passes import register_onnx_to_linag_pass
+from onnx2mlir.passes import register_onnx_to_linalg_pass
 
 
 def main():
@@ -63,7 +63,7 @@ def main():
     ##
 
     onnx_ops = {}
-    onnx_lowerable = register_onnx_to_linag_pass()
+    onnx_lowerable = register_onnx_to_linalg_pass()
 
     for schema in defs.get_all_schemas_with_history():
 

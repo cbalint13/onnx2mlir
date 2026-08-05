@@ -24,7 +24,7 @@
 
 /*!
  * \file src/conversion/passes/onnx_to_linalg/matmul.cpp
- * \brief ONNX MatMul operation to Linalg lowering
+ * \brief ONNX MatMul and MatMulInteger operation to Linalg lowering
  */
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
@@ -42,38 +42,57 @@
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_MatMulOp(mlir::Operation *op,
-                                          mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_MatMulOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                      const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  mlir::Value valA = op->getOperand(0);
-  mlir::Value valB = op->getOperand(1);
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
+
+  mlir::Value valA = convRewriter.getRemappedValue(op->getOperand(0));
+  mlir::Value valB = convRewriter.getRemappedValue(op->getOperand(1));
+  mlir::Value res = op->getResult(0);
 
   auto aType = mlir::dyn_cast<mlir::RankedTensorType>(valA.getType());
   auto bType = mlir::dyn_cast<mlir::RankedTensorType>(valB.getType());
-  auto origResType =
-      mlir::dyn_cast<mlir::RankedTensorType>(op->getResult(0).getType());
+  auto resType = mlir::dyn_cast<mlir::RankedTensorType>(
+      typeConverter->convertType(res.getType()));
 
-  if (!aType || !bType || !origResType) {
-    return mlir::emitError(
-        Onnx2Mlir_SrcLoc(rewriter),
-        opName + " operands and result must be ranked tensor types");
+  auto orgResType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
+
+  if (!aType || !bType || !resType) {
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " inputs and result must be tensor types");
   }
 
-  mlir::Type elmType = origResType.getElementType();
-  bool isFloat = mlir::isa<mlir::FloatType>(elmType);
+  mlir::Type resElmType = resType.getElementType();
+  mlir::Type orgElmType = orgResType.getElementType();
+  bool isFloat = mlir::isa<mlir::FloatType>(orgElmType);
 
-  // Determine compute type (signless for integers)
-  mlir::Type cptType = elmType;
-  if (auto intType = mlir::dyn_cast<mlir::IntegerType>(elmType)) {
-    cptType = mlir::IntegerType::get(op->getContext(), intType.getWidth());
+  // Check for optional zero-point operands (used by MatMulInteger)
+  mlir::Value valAZp;
+  mlir::Value valBZp;
+  bool hasAZp = false;
+  bool hasBZp = false;
+
+  if (op->getNumOperands() > 2) {
+    valAZp = convRewriter.getRemappedValue(op->getOperand(2));
+    if (valAZp && !mlir::isa<mlir::NoneType>(valAZp.getType())) {
+      hasAZp = true;
+    }
+  }
+
+  if (op->getNumOperands() > 3) {
+    valBZp = convRewriter.getRemappedValue(op->getOperand(3));
+    if (valBZp && !mlir::isa<mlir::NoneType>(valBZp.getType())) {
+      hasBZp = true;
+    }
   }
 
   // Promote rank 0 tensor to minimum rank 1
-  auto resType = origResType;
   if (resType.getRank() == 0) {
-    resType = mlir::RankedTensorType::get({1}, elmType);
+    resType = mlir::RankedTensorType::get({1}, resElmType);
   }
 
   bool aIs1D = (aType.getRank() == 1);
@@ -81,8 +100,8 @@ mlir::LogicalResult OnnxToLinalg_MatMulOp(mlir::Operation *op,
 
   if (aIs1D) {
     llvm::SmallVector<mlir::ReassociationIndices, 1> reassoc = {{0, 1}};
-    auto tgtType =
-        mlir::RankedTensorType::get({1, aType.getDimSize(0)}, elmType);
+    auto tgtType = mlir::RankedTensorType::get({1, aType.getDimSize(0)},
+                                               aType.getElementType());
     valA = mlir::tensor::ExpandShapeOp::create(rewriter, loc, tgtType, valA,
                                                reassoc);
     aType = mlir::cast<mlir::RankedTensorType>(valA.getType());
@@ -90,8 +109,8 @@ mlir::LogicalResult OnnxToLinalg_MatMulOp(mlir::Operation *op,
 
   if (bIs1D) {
     llvm::SmallVector<mlir::ReassociationIndices, 1> reassoc = {{0, 1}};
-    auto tgtType =
-        mlir::RankedTensorType::get({bType.getDimSize(0), 1}, elmType);
+    auto tgtType = mlir::RankedTensorType::get({bType.getDimSize(0), 1},
+                                               bType.getElementType());
     valB = mlir::tensor::ExpandShapeOp::create(rewriter, loc, tgtType, valB,
                                                reassoc);
     bType = mlir::cast<mlir::RankedTensorType>(valB.getType());
@@ -139,16 +158,10 @@ mlir::LogicalResult OnnxToLinalg_MatMulOp(mlir::Operation *op,
   auto outTBuff =
       mlir::tensor::EmptyOp::create(rewriter, loc, resType, dynamicSizes);
 
-  // Initialize out buffer, match elmType (signless)
-  auto zeroAttr = rewriter.getZeroAttr(cptType);
-  mlir::Value constZero =
-      mlir::arith::ConstantOp::create(rewriter, loc, cptType, zeroAttr);
-
-  if (cptType != elmType) {
-    constZero = mlir::UnrealizedConversionCastOp::create(rewriter, loc, elmType,
-                                                         constZero)
-                    .getResult(0);
-  }
+  // Initialize output buffer with zero
+  auto zeroAttr = rewriter.getZeroAttr(resType.getElementType());
+  mlir::Value constZero = mlir::arith::ConstantOp::create(
+      rewriter, loc, resType.getElementType(), zeroAttr);
 
   mlir::Value outBuff =
       mlir::linalg::FillOp::create(rewriter, loc, mlir::ValueRange{constZero},
@@ -212,45 +225,80 @@ mlir::LogicalResult OnnxToLinalg_MatMulOp(mlir::Operation *op,
   mlir::AffineMap mapOut =
       mlir::AffineMap::get(numBatchDims + 3, 0, exprsOut, op->getContext());
 
-  mlir::SmallVector<mlir::AffineMap> gemmMaps = {mapA, mapB, mapOut};
+  mlir::SmallVector<mlir::Value, 4> inputOperands = {valA, valB};
+  mlir::SmallVector<mlir::AffineMap, 4> gemmMaps = {mapA, mapB};
+
+  if (hasAZp) {
+    inputOperands.push_back(valAZp);
+    auto zpType = mlir::dyn_cast<mlir::RankedTensorType>(valAZp.getType());
+    if (zpType && zpType.getRank() == 0) {
+      gemmMaps.push_back(
+          mlir::AffineMap::get(numBatchDims + 3, 0, {}, op->getContext()));
+    } else {
+      gemmMaps.push_back(mapA);
+    }
+  }
+
+  if (hasBZp) {
+    inputOperands.push_back(valBZp);
+    auto zpType = mlir::dyn_cast<mlir::RankedTensorType>(valBZp.getType());
+    if (zpType && zpType.getRank() == 0) {
+      gemmMaps.push_back(
+          mlir::AffineMap::get(numBatchDims + 3, 0, {}, op->getContext()));
+    } else {
+      gemmMaps.push_back(mapB);
+    }
+  }
+
+  gemmMaps.push_back(mapOut);
 
   auto matmulLinalgOp = mlir::linalg::GenericOp::create(
-      rewriter, loc, resType, mlir::ValueRange{valA, valB},
-      mlir::ValueRange{outBuff}, gemmMaps, gemmIters,
+      rewriter, loc, resType, inputOperands, mlir::ValueRange{outBuff},
+      gemmMaps, gemmIters,
       [&](mlir::OpBuilder &nest, mlir::Location l, mlir::ValueRange args) {
-        mlir::Value aVal = args[0];
-        mlir::Value bVal = args[1];
-        mlir::Value yVal = args[2];
-
-        // Convert to compute type for arithmetic
-        if (cptType != elmType) {
-          aVal =
-              mlir::UnrealizedConversionCastOp::create(nest, l, cptType, aVal)
-                  .getResult(0);
-          bVal =
-              mlir::UnrealizedConversionCastOp::create(nest, l, cptType, bVal)
-                  .getResult(0);
-          yVal =
-              mlir::UnrealizedConversionCastOp::create(nest, l, cptType, yVal)
-                  .getResult(0);
-        }
+        size_t argIdx = 0;
+        mlir::Value aVal = args[argIdx++];
+        mlir::Value bVal = args[argIdx++];
+        mlir::Value aZpVal = hasAZp ? args[argIdx++] : nullptr;
+        mlir::Value bZpVal = hasBZp ? args[argIdx++] : nullptr;
+        mlir::Value yVal = args[argIdx++];
 
         mlir::Value product;
         if (isFloat) {
           product = mlir::arith::MulFOp::create(nest, l, aVal, bVal);
           yVal = mlir::arith::AddFOp::create(nest, l, yVal, product);
         } else {
-          product = mlir::arith::MulIOp::create(nest, l, aVal, bVal);
+          // Extend i8 -> i32
+          auto extendType = [&](mlir::Value val) -> mlir::Value {
+            if (val.getType() == resElmType)
+              return val;
+            if (auto intType =
+                    mlir::dyn_cast<mlir::IntegerType>(val.getType())) {
+              if (intType.isUnsigned()) {
+                return mlir::arith::ExtUIOp::create(nest, l, resElmType, val);
+              } else {
+                return mlir::arith::ExtSIOp::create(nest, l, resElmType, val);
+              }
+            }
+            return val;
+          };
+
+          mlir::Value aValExt = extendType(aVal);
+          mlir::Value bValExt = extendType(bVal);
+
+          // Zero-point subtraction if zero points are present
+          if (hasAZp && aZpVal) {
+            mlir::Value aZpExt = extendType(aZpVal);
+            aValExt = mlir::arith::SubIOp::create(nest, l, aValExt, aZpExt);
+          }
+          if (hasBZp && bZpVal) {
+            mlir::Value bZpExt = extendType(bZpVal);
+            bValExt = mlir::arith::SubIOp::create(nest, l, bValExt, bZpExt);
+          }
+
+          product = mlir::arith::MulIOp::create(nest, l, aValExt, bValExt);
           yVal = mlir::arith::AddIOp::create(nest, l, yVal, product);
         }
-
-        // Convert back to original element type
-        if (cptType != elmType) {
-          yVal =
-              mlir::UnrealizedConversionCastOp::create(nest, l, elmType, yVal)
-                  .getResult(0);
-        }
-
         mlir::linalg::YieldOp::create(nest, l, yVal);
       });
 

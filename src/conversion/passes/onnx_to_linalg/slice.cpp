@@ -108,7 +108,7 @@ static bool extractIntArrayFromValue(mlir::Value val,
       return true;
   }
 
-  if (auto op = val.getDefiningOp()) {
+  if (auto *op = val.getDefiningOp()) {
     if (auto attr = op->getAttr("value")) {
       if (processAttr(attr))
         return true;
@@ -168,27 +168,31 @@ static bool extractIntArrayFromAttr(mlir::Operation *op,
   return false;
 }
 
-mlir::LogicalResult OnnxToLinalg_SliceOp(mlir::Operation *op,
-                                         mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_SliceOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                     const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  mlir::Value data = op->getOperand(0);
-  auto dataType = mlir::dyn_cast<mlir::RankedTensorType>(data.getType());
-  if (!dataType) {
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
+
+  mlir::Value inp = convRewriter.getRemappedValue(op->getOperand(0));
+  mlir::Value res = convRewriter.getRemappedValue(op->getResult(0));
+
+  auto inpType = mlir::dyn_cast_or_null<mlir::RankedTensorType>(inp.getType());
+  if (!inpType) {
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " requires ranked tensor input");
   }
 
-  int64_t rank = dataType.getRank();
+  int64_t rank = inpType.getRank();
   if (rank < 1) {
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " data operand rank must be >= 1");
+                           opName + " input operand rank must be >= 1");
   }
 
-  mlir::Value result = op->getResult(0);
-  auto resultType = mlir::dyn_cast<mlir::RankedTensorType>(result.getType());
-  if (!resultType) {
+  auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
+  if (!resType) {
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " result must be a ranked tensor");
   }
@@ -271,7 +275,7 @@ mlir::LogicalResult OnnxToLinalg_SliceOp(mlir::Operation *op,
 
     for (int64_t i = 0; i < rank; ++i) {
       mlir::Value dimVal = mlir::tensor::DimOp::create(
-          rewriter, loc, data,
+          rewriter, loc, inp,
           mlir::arith::ConstantIndexOp::create(rewriter, loc, i));
 
       if (!axisSliced[i]) {
@@ -284,7 +288,7 @@ mlir::LogicalResult OnnxToLinalg_SliceOp(mlir::Operation *op,
       int64_t st = staticSteps[i];
       int64_t s = staticStarts[i];
       int64_t e = staticEnds[i];
-      int64_t staticDim = dataType.getDimSize(i);
+      int64_t staticDim = inpType.getDimSize(i);
 
       if (staticDim >= 0) {
         // Fully static dimension calculations
@@ -363,7 +367,7 @@ mlir::LogicalResult OnnxToLinalg_SliceOp(mlir::Operation *op,
     // Dynamic slicing using SSA values
     for (int64_t i = 0; i < rank; ++i) {
       mlir::Value dimVal = mlir::tensor::DimOp::create(
-          rewriter, loc, data,
+          rewriter, loc, inp,
           mlir::arith::ConstantIndexOp::create(rewriter, loc, i));
 
       mlir::Value idxI = mlir::arith::ConstantIndexOp::create(rewriter, loc, i);
@@ -424,15 +428,15 @@ mlir::LogicalResult OnnxToLinalg_SliceOp(mlir::Operation *op,
     }
   }
 
-  llvm::SmallVector<mlir::Value> dynamicSizes;
+  llvm::SmallVector<mlir::Value> dynSizes;
   for (int64_t i = 0; i < rank; ++i) {
-    if (resultType.isDynamicDim(i)) {
-      dynamicSizes.push_back(outDimVals[i]);
+    if (resType.isDynamicDim(i)) {
+      dynSizes.push_back(outDimVals[i]);
     }
   }
 
-  auto initTensor =
-      mlir::tensor::EmptyOp::create(rewriter, loc, resultType, dynamicSizes);
+  auto outBuff =
+      mlir::tensor::EmptyOp::create(rewriter, loc, resType, dynSizes);
 
   auto outMap = rewriter.getMultiDimIdentityMap(rank);
   llvm::SmallVector<mlir::AffineMap> indexingMaps = {outMap};
@@ -442,31 +446,31 @@ mlir::LogicalResult OnnxToLinalg_SliceOp(mlir::Operation *op,
 
   auto genericOp = mlir::linalg::GenericOp::create(
       rewriter, loc,
-      /*resultTypes=*/mlir::TypeRange{resultType},
+      /*resultTypes=*/mlir::TypeRange{resType},
       /*inputs=*/mlir::ValueRange{},
-      /*outputs=*/mlir::ValueRange{initTensor},
+      /*outputs=*/mlir::ValueRange{outBuff},
       /*indexingMaps=*/indexingMaps,
       /*iteratorTypes=*/iteratorTypes,
       /*bodyBuilder=*/
-      [&](mlir::OpBuilder &b, mlir::Location nestedLoc,
+      [&](mlir::OpBuilder &b, mlir::Location nstLoc,
           mlir::ValueRange blockArgs) {
-        llvm::SmallVector<mlir::Value> dataCoords;
-        dataCoords.reserve(rank);
+        llvm::SmallVector<mlir::Value> inpCoords;
+        inpCoords.reserve(rank);
 
         for (int64_t d = 0; d < rank; ++d) {
           mlir::Value loopIdx = mlir::linalg::IndexOp::create(
-              b, nestedLoc, static_cast<uint64_t>(d));
+              b, nstLoc, static_cast<uint64_t>(d));
 
           mlir::Value mulVal =
-              mlir::arith::MulIOp::create(b, nestedLoc, loopIdx, stepVals[d]);
+              mlir::arith::MulIOp::create(b, nstLoc, loopIdx, stepVals[d]);
           mlir::Value coord =
-              mlir::arith::AddIOp::create(b, nestedLoc, startVals[d], mulVal);
-          dataCoords.push_back(coord);
+              mlir::arith::AddIOp::create(b, nstLoc, startVals[d], mulVal);
+          inpCoords.push_back(coord);
         }
 
         mlir::Value extracted =
-            mlir::tensor::ExtractOp::create(b, nestedLoc, data, dataCoords);
-        mlir::linalg::YieldOp::create(b, nestedLoc, extracted);
+            mlir::tensor::ExtractOp::create(b, nstLoc, inp, inpCoords);
+        mlir::linalg::YieldOp::create(b, nstLoc, extracted);
       });
 
   genericOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));

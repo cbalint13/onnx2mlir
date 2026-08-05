@@ -190,23 +190,26 @@ static mlir::Value computeNearestIndex(mlir::OpBuilder &b, mlir::Location loc,
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_ResizeOp(mlir::Operation *op,
-                                          mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_ResizeOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                      const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  mlir::Value data = op->getOperand(0);
-  mlir::Value result = op->getResult(0);
-  auto resultType = mlir::dyn_cast<mlir::RankedTensorType>(result.getType());
-  auto dataType = mlir::dyn_cast<mlir::RankedTensorType>(data.getType());
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 
-  if (!resultType || !dataType) {
+  mlir::Value inp = convRewriter.getRemappedValue(op->getOperand(0));
+  mlir::Value res = convRewriter.getRemappedValue(op->getResult(0));
+
+  auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(inp.getType());
+  auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
+
+  if (!resType || !inpType) {
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName +
-                               " inputs and outputs must be ranked tensors");
+                           opName + " inputs and outputs must be tensors");
   }
 
-  int64_t rank = dataType.getRank();
+  int64_t rank = inpType.getRank();
 
   llvm::StringRef mode = "nearest";
   llvm::StringRef coordTransMode = "half_pixel";
@@ -243,9 +246,9 @@ mlir::LogicalResult OnnxToLinalg_ResizeOp(mlir::Operation *op,
   llvm::SmallVector<mlir::Value> axisScales(rank);
 
   for (int64_t i = 0; i < rank; ++i) {
-    inDims[i] = mlir::tensor::DimOp::create(rewriter, loc, data, i);
+    inDims[i] = mlir::tensor::DimOp::create(rewriter, loc, inp, i);
 
-    if (resultType.isDynamicDim(i)) {
+    if (resType.isDynamicDim(i)) {
       mlir::Value outDimIdx;
       if (hasSizes) {
         mlir::Value idxVal =
@@ -254,17 +257,17 @@ mlir::LogicalResult OnnxToLinalg_ResizeOp(mlir::Operation *op,
             rewriter, loc, sizesOperand, mlir::ValueRange{idxVal});
         outDimIdx = mlir::arith::IndexCastOp::create(
             rewriter, loc, rewriter.getIndexType(), extractedSize);
-      } else if (resultType.hasStaticShape()) {
-        outDimIdx = mlir::arith::ConstantIndexOp::create(
-            rewriter, loc, resultType.getDimSize(i));
+      } else if (resType.hasStaticShape()) {
+        outDimIdx = mlir::arith::ConstantIndexOp::create(rewriter, loc,
+                                                         resType.getDimSize(i));
       } else {
         outDimIdx = mlir::arith::ConstantIndexOp::create(rewriter, loc, 1);
       }
       outDims[i] = outDimIdx;
       outputDynDims.push_back(outDimIdx);
     } else {
-      outDims[i] = mlir::arith::ConstantIndexOp::create(
-          rewriter, loc, resultType.getDimSize(i));
+      outDims[i] = mlir::arith::ConstantIndexOp::create(rewriter, loc,
+                                                        resType.getDimSize(i));
     }
 
     // Extract dynamic scales if provided or calculate from dimension ratio
@@ -292,9 +295,9 @@ mlir::LogicalResult OnnxToLinalg_ResizeOp(mlir::Operation *op,
     }
   }
 
-  mlir::Value initTensor =
-      mlir::tensor::EmptyOp::create(rewriter, loc, resultType.getShape(),
-                                    resultType.getElementType(), outputDynDims);
+  mlir::Value outBuff =
+      mlir::tensor::EmptyOp::create(rewriter, loc, resType.getShape(),
+                                    resType.getElementType(), outputDynDims);
 
   mlir::AffineMap outputMap = rewriter.getMultiDimIdentityMap(rank);
   llvm::SmallVector<mlir::AffineMap, 2> indexingMaps = {outputMap};
@@ -303,33 +306,33 @@ mlir::LogicalResult OnnxToLinalg_ResizeOp(mlir::Operation *op,
 
   auto genericOp = mlir::linalg::GenericOp::create(
       rewriter, loc,
-      /*resultTypes=*/mlir::TypeRange{resultType},
+      /*resultTypes=*/mlir::TypeRange{resType},
       /*inputs=*/mlir::ValueRange{},
-      /*outputs=*/mlir::ValueRange{initTensor}, indexingMaps, iteratorTypes,
-      [&](mlir::OpBuilder &b, mlir::Location nestedLoc, mlir::ValueRange args) {
-        llvm::SmallVector<mlir::Value> inputIndices;
+      /*outputs=*/mlir::ValueRange{outBuff}, indexingMaps, iteratorTypes,
+      [&](mlir::OpBuilder &b, mlir::Location nstLoc, mlir::ValueRange args) {
+        llvm::SmallVector<mlir::Value> inpIndices;
 
         for (int64_t d = 0; d < rank; ++d) {
-          mlir::Value outIdx = mlir::linalg::IndexOp::create(b, nestedLoc, d);
-          mlir::Value srcCoord = computeSourceCoordinate(
-              b, nestedLoc, outIdx, inDims[d], outDims[d], axisScales[d],
-              coordTransMode);
+          mlir::Value outIdx = mlir::linalg::IndexOp::create(b, nstLoc, d);
+          mlir::Value srcCoord =
+              computeSourceCoordinate(b, nstLoc, outIdx, inDims[d], outDims[d],
+                                      axisScales[d], coordTransMode);
 
           if (mode == "nearest") {
             mlir::Value nearestIdx = computeNearestIndex(
-                b, nestedLoc, srcCoord, inDims[d], nearestMode);
-            inputIndices.push_back(nearestIdx);
+                b, nstLoc, srcCoord, inDims[d], nearestMode);
+            inpIndices.push_back(nearestIdx);
           } else {
             // Fallback indexing for nearest modes
             mlir::Value nearestIdx =
-                computeNearestIndex(b, nestedLoc, srcCoord, inDims[d], "floor");
-            inputIndices.push_back(nearestIdx);
+                computeNearestIndex(b, nstLoc, srcCoord, inDims[d], "floor");
+            inpIndices.push_back(nearestIdx);
           }
         }
 
         mlir::Value sampledVal =
-            mlir::tensor::ExtractOp::create(b, nestedLoc, data, inputIndices);
-        mlir::linalg::YieldOp::create(b, nestedLoc, sampledVal);
+            mlir::tensor::ExtractOp::create(b, nstLoc, inp, inpIndices);
+        mlir::linalg::YieldOp::create(b, nstLoc, sampledVal);
       });
 
   genericOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));

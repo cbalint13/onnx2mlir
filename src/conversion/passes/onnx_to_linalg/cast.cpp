@@ -39,92 +39,112 @@
 
 namespace onnx2mlir::dialect {
 
-mlir::Value createArithCastOp(mlir::OpBuilder *builder,
-                              const mlir::Location &loc,
-                              const mlir::Value &inpElem,
-                              const mlir::Type &tgtElemType) {
-  mlir::Type inpElemType = inpElem.getType();
+static mlir::Value createArithCastOp(mlir::OpBuilder *builder,
+                                     const mlir::Location &loc,
+                                     const mlir::Value &inp,
+                                     const mlir::Type &srcElemType,
+                                     const mlir::Type &tgtElemType) {
+  unsigned srcWidth = srcElemType.getIntOrFloatBitWidth();
+  unsigned tgtWidth = tgtElemType.getIntOrFloatBitWidth();
 
-  // Same elements
-  if (inpElemType == tgtElemType) {
-    return inpElem;
+  if (srcElemType == tgtElemType)
+    return inp;
+
+  if (tgtElemType.isInteger(1)) {
+    // Floating -> Bool
+    if (srcElemType.isFloat()) {
+      auto zero = mlir::arith::ConstantOp::create(
+          *builder, loc, builder->getFloatAttr(srcElemType, 0.0));
+      return mlir::arith::CmpFOp::create(
+          *builder, loc, mlir::arith::CmpFPredicate::UNE, inp, zero);
+      // Bool -> Floating
+    } else if (srcElemType.isInteger()) {
+      mlir::Type nosgnSrcType = builder->getIntegerType(srcWidth);
+      auto zero = mlir::arith::ConstantOp::create(
+          *builder, loc, builder->getIntegerAttr(nosgnSrcType, 0));
+      return mlir::arith::CmpIOp::create(
+          *builder, loc, mlir::arith::CmpIPredicate::ne, inp, zero);
+    }
   }
 
   // Float -> Float
-  if (inpElemType.isFloat() && tgtElemType.isFloat()) {
-    unsigned inpWidth = inpElemType.getIntOrFloatBitWidth();
-    unsigned outWidth = tgtElemType.getIntOrFloatBitWidth();
-    if (inpWidth < outWidth) {
-      return mlir::arith::ExtFOp::create(*builder, loc, tgtElemType, inpElem);
-    } else {
-      return mlir::arith::TruncFOp::create(*builder, loc, tgtElemType, inpElem);
+  if (srcElemType.isFloat() && tgtElemType.isFloat()) {
+    if (srcWidth < tgtWidth) {
+      return mlir::arith::ExtFOp::create(*builder, loc, tgtElemType, inp);
+    } else if (srcWidth > tgtWidth) {
+      return mlir::arith::TruncFOp::create(*builder, loc, tgtElemType, inp);
     }
     // Integer -> Integer
-  } else if (inpElemType.isInteger() && tgtElemType.isInteger()) {
-    unsigned inpWidth = inpElemType.getIntOrFloatBitWidth();
-    unsigned outWidth = tgtElemType.getIntOrFloatBitWidth();
-    // extend
-    if (inpWidth < outWidth) {
-      if (inpElemType.isSignedInteger()) {
-        return mlir::arith::ExtSIOp::create(*builder, loc, tgtElemType,
-                                            inpElem);
+  } else if (srcElemType.isInteger() && tgtElemType.isInteger()) {
+    mlir::Type nosgnTgtType = builder->getIntegerType(tgtWidth);
+    if (srcWidth < tgtWidth) {
+      if (srcElemType.isSignedInteger()) {
+        return mlir::arith::ExtSIOp::create(*builder, loc, nosgnTgtType, inp);
       } else {
-        return mlir::arith::ExtUIOp::create(*builder, loc, tgtElemType,
-                                            inpElem);
+        return mlir::arith::ExtUIOp::create(*builder, loc, nosgnTgtType, inp);
       }
-      // truncate
-    } else if (inpWidth > outWidth) {
-      return mlir::arith::TruncIOp::create(*builder, loc, tgtElemType, inpElem);
+    } else if (srcWidth > tgtWidth) {
+      return mlir::arith::TruncIOp::create(*builder, loc, nosgnTgtType, inp);
     } else {
-      // reinterpret (same bitwidth, different signedness)
-      return mlir::arith::BitcastOp::create(*builder, loc, tgtElemType,
-                                            inpElem);
+      // Same bitwidth, different signedness
+      return mlir::arith::BitcastOp::create(*builder, loc, nosgnTgtType, inp);
     }
     // Floating -> Integer
-  } else if (inpElemType.isFloat() && tgtElemType.isInteger()) {
+  } else if (srcElemType.isFloat() && tgtElemType.isInteger()) {
+    mlir::Type nosgnTgtType = builder->getIntegerType(tgtWidth);
     if (tgtElemType.isSignedInteger()) {
-      return mlir::arith::FPToSIOp::create(*builder, loc, tgtElemType, inpElem);
+      return mlir::arith::FPToSIOp::create(*builder, loc, nosgnTgtType, inp);
     } else {
-      return mlir::arith::FPToUIOp::create(*builder, loc, tgtElemType, inpElem);
+      return mlir::arith::FPToUIOp::create(*builder, loc, nosgnTgtType, inp);
     }
     // Integer -> Floating
-  } else if (inpElemType.isInteger() && tgtElemType.isFloat()) {
-    if (inpElemType.isSignedInteger()) {
-      return mlir::arith::SIToFPOp::create(*builder, loc, tgtElemType, inpElem);
+  } else if (srcElemType.isInteger() && tgtElemType.isFloat()) {
+    if (srcElemType.isSignedInteger()) {
+      return mlir::arith::SIToFPOp::create(*builder, loc, tgtElemType, inp);
     } else {
-      auto signlessIntType = mlir::IntegerType::get(
-          builder->getContext(), inpElemType.getIntOrFloatBitWidth());
-      auto signlessVal = mlir::UnrealizedConversionCastOp::create(
-          *builder, loc, signlessIntType, inpElem);
-      return mlir::arith::UIToFPOp::create(*builder, loc, tgtElemType,
-                                           signlessVal.getResult(0));
+      return mlir::arith::UIToFPOp::create(*builder, loc, tgtElemType, inp);
     }
   }
 
   return nullptr;
 }
 
-mlir::LogicalResult OnnxToLinalg_CastOp(mlir::Operation *op,
-                                        mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_CastOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                    const mlir::TypeConverter *typeConverter) {
   auto opName = op->getName().getStringRef();
 
-  mlir::Value inp = op->getOperand(0);
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
+
+  mlir::Value inp = convRewriter.getRemappedValue(op->getOperand(0));
   mlir::Value res = op->getResult(0);
 
   auto inpType = mlir::dyn_cast_or_null<mlir::RankedTensorType>(inp.getType());
-  auto resType = mlir::dyn_cast_or_null<mlir::RankedTensorType>(res.getType());
+  auto resType = mlir::dyn_cast<mlir::RankedTensorType>(
+      typeConverter->convertType(res.getType()));
+
+  auto srcType =
+      mlir::dyn_cast<mlir::RankedTensorType>(op->getOperand(0).getType());
+  auto outType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
+
+  // Input and Output are identical
+  if (srcType == outType) {
+    rewriter.replaceOp(op, inp);
+    return mlir::success();
+  }
 
   if (!inpType) {
-    return rewriter.notifyMatchFailure(op,
-                                       opName + " input is not a tensor type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " input is not a tensor type");
   }
 
   auto toAttr = op->getAttr("to");
   if (!toAttr) {
-    return rewriter.notifyMatchFailure(op,
-                                       opName + " is missing 'to' attribute");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + "  is missing 'to' attribute");
   }
 
+  mlir::Type srcElemType = srcType.getElementType();
   mlir::Type tgtElemType = {};
   if (auto intAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(toAttr)) {
     tgtElemType = OnnxToMlir_dType(intAttr.getInt(), rewriter.getContext());
@@ -132,37 +152,33 @@ mlir::LogicalResult OnnxToLinalg_CastOp(mlir::Operation *op,
     tgtElemType =
         OnnxToMlir_dType(strAttr.getValue().str(), rewriter.getContext());
   } else {
-    return rewriter.notifyMatchFailure(
-        op, opName + " has invalid 'to' attribute type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " has invalid 'to' attribute type");
   }
 
   if (!tgtElemType || mlir::dyn_cast_or_null<mlir::NoneType>(tgtElemType)) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " unsupported `to` attribute value");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " unsupported `to` attribute value");
   }
 
   // Set output type using 'to' attribute
-  auto outType = inpType.clone(tgtElemType);
+  auto tgtType = inpType.clone(tgtElemType);
 
-  if (outType != resType) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " 'to' data type not match the result type");
+  if (tgtType != outType) {
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName +
+                               " 'to' data type not match the result type");
   }
 
   mlir::Location loc = op->getLoc();
 
-  // Input and Output are identical
-  if (inpType == outType) {
-    rewriter.replaceOp(op, inp);
-    return mlir::success();
-  }
-
   // Input is a scalar
   if (inpType.getRank() == 0) {
-    auto castResult = createArithCastOp(&rewriter, loc, inp, tgtElemType);
+    auto castResult =
+        createArithCastOp(&rewriter, loc, inp, srcElemType, tgtElemType);
     if (!castResult) {
-      return rewriter.notifyMatchFailure(
-          op, opName + " unsupported scalar conversion");
+      return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                             opName + " unsupported scalar conversion");
     }
     rewriter.replaceOp(op, castResult);
     return mlir::success();
@@ -170,7 +186,7 @@ mlir::LogicalResult OnnxToLinalg_CastOp(mlir::Operation *op,
 
   // 1. Create an empty tensor for the output
   mlir::Value outBuff = mlir::tensor::EmptyOp::create(
-      rewriter, loc, inpType.getShape(), tgtElemType);
+      rewriter, loc, inpType.getShape(), resType.getElementType());
 
   // 2. Create the linalg.generic operation
   mlir::SmallVector<mlir::utils::IteratorType> iterators;
@@ -184,10 +200,11 @@ mlir::LogicalResult OnnxToLinalg_CastOp(mlir::Operation *op,
 
   bool bodyBuildFailed = false;
   auto genericOp = mlir::linalg::GenericOp::create(
-      rewriter, loc, outType, mlir::ValueRange{inp}, mlir::ValueRange{outBuff},
+      rewriter, loc, resType, mlir::ValueRange{inp}, mlir::ValueRange{outBuff},
       idxMaps, iterators,
       [&](mlir::OpBuilder nest, mlir::Location loc, mlir::ValueRange args) {
-        mlir::Value outOp = createArithCastOp(&nest, loc, args[0], tgtElemType);
+        mlir::Value outOp =
+            createArithCastOp(&nest, loc, args[0], srcElemType, tgtElemType);
         if (!outOp) {
           bodyBuildFailed = true;
           return;
@@ -198,8 +215,9 @@ mlir::LogicalResult OnnxToLinalg_CastOp(mlir::Operation *op,
   if (bodyBuildFailed) {
     if (genericOp)
       genericOp.erase();
-    return rewriter.notifyMatchFailure(
-        op, opName + " unsupported element type within linalg.generic body");
+    return mlir::emitError(
+        Onnx2Mlir_SrcLoc(rewriter),
+        opName + " unsupported element type within linalg.generic body");
   }
 
   // Tag for transform optimization

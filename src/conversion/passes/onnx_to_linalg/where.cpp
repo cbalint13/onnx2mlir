@@ -39,20 +39,23 @@
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_WhereOp(mlir::Operation *op,
-                                         mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_WhereOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                     const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
+
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 
   if (op->getNumOperands() != 3) {
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " expected 3 operands");
   }
 
-  mlir::Value cond = op->getOperand(0);
-  mlir::Value x = op->getOperand(1);
-  mlir::Value y = op->getOperand(2);
-  mlir::Value res = op->getResult(0);
+  mlir::Value cond = convRewriter.getRemappedValue(op->getOperand(0));
+  mlir::Value x = convRewriter.getRemappedValue(op->getOperand(1));
+  mlir::Value y = convRewriter.getRemappedValue(op->getOperand(2));
+  mlir::Value res = convRewriter.getRemappedValue(op->getResult(0));
 
   auto condType = mlir::dyn_cast<mlir::RankedTensorType>(cond.getType());
   auto xType = mlir::dyn_cast<mlir::RankedTensorType>(x.getType());

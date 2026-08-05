@@ -40,38 +40,41 @@
 namespace onnx2mlir::dialect {
 
 mlir::LogicalResult
-OnnxToLinalg_CompBinaryOps(mlir::Operation *op,
-                           mlir::PatternRewriter &rewriter) {
+OnnxToLinalg_CompBinaryOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                           const mlir::TypeConverter *typeConverter) {
   auto opName = op->getName().getStringRef();
 
-  mlir::Value lhs = op->getOperand(0);
-  mlir::Value rhs = op->getOperand(1);
-  mlir::Value res = op->getResult(0);
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
+
+  mlir::Value lhs = convRewriter.getRemappedValue(op->getOperand(0));
+  mlir::Value rhs = convRewriter.getRemappedValue(op->getOperand(1));
+  mlir::Value res = convRewriter.getRemappedValue(op->getResult(0));
 
   auto lhsType = mlir::dyn_cast<mlir::RankedTensorType>(lhs.getType());
   auto rhsType = mlir::dyn_cast<mlir::RankedTensorType>(rhs.getType());
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
   if ((!lhsType) || (!rhsType)) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " operands must be ranked tensor type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " operands must be tensor type");
   }
 
   if (lhsType.getElementType() != rhsType.getElementType()) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " operands element type are different");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " operands element type are different");
   }
 
   if (!resType) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " result must be a ranked tensor type");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " result must be a ranked tensor type");
   }
 
   if (auto intType =
           mlir::dyn_cast<mlir::IntegerType>(resType.getElementType())) {
     if (intType.getWidth() != 1) {
-      return rewriter.notifyMatchFailure(
-          op, opName + " result must have boolean (i1) element type");
+      return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                             opName +
+                                 " result must have boolean (i1) element type");
     }
   }
 
@@ -79,13 +82,14 @@ OnnxToLinalg_CompBinaryOps(mlir::Operation *op,
   auto outBrdType = getBroadcastShape(lhsType, rhsType);
 
   if (!outBrdType) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " operands are not broadcastable");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " operands are not broadcastable");
   }
 
   if (resType.getShape() != outBrdType.getShape()) {
-    return rewriter.notifyMatchFailure(
-        op, opName + " result not match operands broadcast shape");
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName +
+                               " result not match operands broadcast shape");
   }
 
   // Create an empty tensor for the output

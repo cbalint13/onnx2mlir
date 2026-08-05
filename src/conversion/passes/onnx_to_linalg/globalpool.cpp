@@ -43,12 +43,15 @@ namespace onnx2mlir::dialect {
 
 mlir::LogicalResult
 OnnxToLinalg_GlobalAveragePoolOp(mlir::Operation *op,
-                                 mlir::PatternRewriter &rewriter) {
+                                 mlir::PatternRewriter &rewriter,
+                                 const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  mlir::Value input = op->getOperand(0);
-  mlir::Value result = op->getResult(0);
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
+
+  mlir::Value input = convRewriter.getRemappedValue(op->getOperand(0));
+  mlir::Value result = convRewriter.getRemappedValue(op->getResult(0));
 
   auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(input.getType());
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(result.getType());
@@ -177,12 +180,15 @@ OnnxToLinalg_GlobalAveragePoolOp(mlir::Operation *op,
 
 mlir::LogicalResult
 OnnxToLinalg_GlobalLpPoolOp(mlir::Operation *op,
-                            mlir::PatternRewriter &rewriter) {
+                            mlir::PatternRewriter &rewriter,
+                            const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  mlir::Value input = op->getOperand(0);
-  mlir::Value result = op->getResult(0);
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
+
+  mlir::Value input = convRewriter.getRemappedValue(op->getOperand(0));
+  mlir::Value result = convRewriter.getRemappedValue(op->getResult(0));
 
   auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(input.getType());
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(result.getType());
@@ -342,12 +348,15 @@ OnnxToLinalg_GlobalLpPoolOp(mlir::Operation *op,
 
 mlir::LogicalResult
 OnnxToLinalg_GlobalMaxPoolOp(mlir::Operation *op,
-                             mlir::PatternRewriter &rewriter) {
+                             mlir::PatternRewriter &rewriter,
+                             const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  mlir::Value input = op->getOperand(0);
-  mlir::Value result = op->getResult(0);
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
+
+  mlir::Value input = convRewriter.getRemappedValue(op->getOperand(0));
+  mlir::Value result = convRewriter.getRemappedValue(op->getResult(0));
 
   auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(input.getType());
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(result.getType());

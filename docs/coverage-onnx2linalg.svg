@@ -123,7 +123,7 @@
   <rect x='545' y='307' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='612' y='332' text-anchor='middle' font-weight='bold' class='op-text'>Constant</text>
   <text x='612' y='347' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>9 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>12 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
-  <rect x='681' y='307' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <rect x='681' y='307' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='748' y='332' text-anchor='middle' font-weight='bold' class='op-text'>ConstantOfShape</text>
   <text x='748' y='347' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>9 </tspan>, <tspan fill='gray'>20 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
   <rect x='1' y='358' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>

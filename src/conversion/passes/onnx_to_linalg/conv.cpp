@@ -30,6 +30,7 @@
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
+#include <mlir/Dialect/Transform/IR/TransformOps.h>
 #include <mlir/IR/AffineExpr.h>
 #include <mlir/IR/AffineMap.h>
 #include <mlir/IR/PatternMatch.h>
@@ -40,25 +41,30 @@
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_ConvOp(mlir::Operation *op,
-                                        mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_ConvOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                    const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto *ctx = op->getContext();
   auto opName = op->getName().getStringRef();
 
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
+
   // Get operands
-  mlir::Value input = op->getOperand(0);
-  mlir::Value weight = op->getOperand(1);
-  mlir::Value bias = op->getNumOperands() > 2 ? op->getOperand(2) : nullptr;
+  mlir::Value input = convRewriter.getRemappedValue(op->getOperand(0));
+  mlir::Value weight = convRewriter.getRemappedValue(op->getOperand(1));
+  mlir::Value bias = op->getNumOperands() > 2
+                         ? convRewriter.getRemappedValue(op->getOperand(2))
+                         : nullptr;
+  mlir::Value result = convRewriter.getRemappedValue(op->getResult(0));
 
   auto inputType = mlir::dyn_cast<mlir::RankedTensorType>(input.getType());
   auto weightType = mlir::dyn_cast<mlir::RankedTensorType>(weight.getType());
-  auto resType =
-      mlir::dyn_cast<mlir::RankedTensorType>(op->getResult(0).getType());
+  auto resType = mlir::dyn_cast<mlir::RankedTensorType>(result.getType());
 
   if (!inputType || !weightType || !resType)
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " operand must be ranked tensor");
+                           opName + " inputs must be ranked tensor");
 
   int64_t group = 1;
   if (auto groupAttr = op->getAttrOfType<mlir::IntegerAttr>("group"))

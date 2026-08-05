@@ -39,19 +39,22 @@
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_ReshapeOp(mlir::Operation *op,
-                                           mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_ReshapeOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                       const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  mlir::Value data = op->getOperand(0);
-  mlir::Value result = op->getResult(0);
-  mlir::Type resultType = result.getType();
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
+
+  mlir::Value inp = convRewriter.getRemappedValue(op->getOperand(0));
+  mlir::Value res = convRewriter.getRemappedValue(op->getResult(0));
+  auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
   mlir::Value shapeOperand;
 
   if (op->getNumOperands() > 1) {
-    shapeOperand = op->getOperand(1);
+    shapeOperand = convRewriter.getRemappedValue(op->getOperand(1));
   } else {
     // Opset 1-4: shape is an INTS attribute
     llvm::SmallVector<int64_t> shapeValues;
@@ -86,8 +89,8 @@ mlir::LogicalResult OnnxToLinalg_ReshapeOp(mlir::Operation *op,
                                      llvm::ArrayRef<int64_t>(shapeValues)));
   }
 
-  auto reshapeOp = mlir::tensor::ReshapeOp::create(rewriter, loc, resultType,
-                                                   data, shapeOperand);
+  auto reshapeOp = mlir::tensor::ReshapeOp::create(rewriter, loc, resType, inp,
+                                                   shapeOperand);
 
   // Tag for transform dialect
   reshapeOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));

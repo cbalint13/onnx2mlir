@@ -39,10 +39,13 @@
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_ConcatOp(mlir::Operation *op,
-                                          mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_ConcatOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                      const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
+
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 
   // Validate operands
   if (op->getNumOperands() == 0) {
@@ -57,20 +60,26 @@ mlir::LogicalResult OnnxToLinalg_ConcatOp(mlir::Operation *op,
   }
 
   // Normalize axis if needed
-  auto inputType =
-      mlir::dyn_cast<mlir::RankedTensorType>(op->getOperand(0).getType());
-  if (!inputType) {
+  mlir::Value inp = convRewriter.getRemappedValue(op->getOperand(0));
+  auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(inp.getType());
+  if (!inpType) {
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " input must be ranked tensor");
   }
 
-  int64_t rank = inputType.getRank();
+  int64_t rank = inpType.getRank();
   if (axisValue < 0) {
     axisValue += rank;
   }
 
+  llvm::SmallVector<mlir::Value> remappedOperands;
+  if (mlir::failed(convRewriter.getRemappedValues(op->getOperands(),
+                                                  remappedOperands))) {
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
+                           opName + " failed to remap operands");
+  }
   auto concatOp = mlir::tensor::ConcatOp::create(rewriter, loc, axisValue,
-                                                 op->getOperands());
+                                                 remappedOperands);
 
   // Tag for transform dialect
   concatOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));

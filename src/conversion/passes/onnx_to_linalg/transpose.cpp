@@ -40,13 +40,16 @@
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_TransposeOp(mlir::Operation *op,
-                                             mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_TransposeOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                         const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  mlir::Value inp = op->getOperand(0);
-  mlir::Value res = op->getResult(0);
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
+
+  mlir::Value inp = convRewriter.getRemappedValue(op->getOperand(0));
+  mlir::Value res = convRewriter.getRemappedValue(op->getResult(0));
 
   auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(inp.getType());
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());

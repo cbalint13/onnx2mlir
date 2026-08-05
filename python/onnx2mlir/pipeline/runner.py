@@ -34,6 +34,7 @@ from mlir.execution_engine import ExecutionEngine
 from mlir.runtime import get_ranked_memref_descriptor, ranked_memref_to_numpy
 
 
+# pylint: disable=too-many-locals
 def runner(module, func_entry, inputs, outputs):
     """Execute a lowered LLVM module
 
@@ -109,9 +110,12 @@ def runner(module, func_entry, inputs, outputs):
     all_cargs = [res_carg] + inp_cargs
     engine.invoke(func_entry, *all_cargs)
 
-    outputs = [
-        ranked_memref_to_numpy(ctypes.pointer(getattr(res_struct, f"res_{i}")))
-        for i in range(len(outputs))
-    ]
+    results = []
+    for i, output in enumerate(outputs):
+        arr = ranked_memref_to_numpy(ctypes.pointer(getattr(res_struct, f"res_{i}")))
+        # typecast to original func return
+        if output.dtype != arr.dtype:
+            arr = arr.view(output.dtype)
+        results.append(arr)
 
-    return outputs
+    return results

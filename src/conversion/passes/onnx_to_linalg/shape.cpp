@@ -41,22 +41,23 @@
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_ShapeOp(mlir::Operation *op,
-                                         mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_ShapeOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                     const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  // Extract the input data tensor
-  mlir::Value data = op->getOperand(0);
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 
-  // Retrieve data type and verify input is a ranked tensor
-  auto dataType = mlir::dyn_cast<mlir::RankedTensorType>(data.getType());
-  if (!dataType) {
+  mlir::Value inp = convRewriter.getRemappedValue(op->getOperand(0));
+
+  auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(inp.getType());
+  if (!inpType) {
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " requires ranked tensor input");
   }
 
-  int64_t rank = dataType.getRank();
+  int64_t rank = inpType.getRank();
 
   // Handle optional 'start' attribute (default = 0)
   int64_t start = 0;
@@ -82,33 +83,31 @@ mlir::LogicalResult OnnxToLinalg_ShapeOp(mlir::Operation *op,
   }
 
   // Collect dimensions in range [start, end)
-  llvm::SmallVector<mlir::Value> dimValues;
+  llvm::SmallVector<mlir::Value> dimVals;
   if (start < end) {
-    dimValues.reserve(end - start);
+    dimVals.reserve(end - start);
     for (int64_t i = start; i < end; ++i) {
       // Create index constant for dimension position
-      mlir::Value indexVal =
-          mlir::arith::ConstantIndexOp::create(rewriter, loc, i);
+      auto indexVal = mlir::arith::ConstantIndexOp::create(rewriter, loc, i);
 
       // Query dynamic dimension size from input tensor
-      mlir::Value dimVal =
-          mlir::tensor::DimOp::create(rewriter, loc, data, indexVal);
+      auto dimVal = mlir::tensor::DimOp::create(rewriter, loc, inp, indexVal);
 
       // Convert index type to i64 tensor element type
-      mlir::Value dimI64 = mlir::arith::IndexCastOp::create(
+      auto dimI64 = mlir::arith::IndexCastOp::create(
           rewriter, loc, rewriter.getI64Type(), dimVal);
 
-      dimValues.push_back(dimI64);
+      dimVals.push_back(dimI64);
     }
   }
 
   // Create target 1D int64 ranked tensor type
-  auto resultType = mlir::RankedTensorType::get(
-      {static_cast<int64_t>(dimValues.size())}, rewriter.getI64Type());
+  auto resType = mlir::RankedTensorType::get(
+      {static_cast<int64_t>(dimVals.size())}, rewriter.getI64Type());
 
   // Construct tensor from individual element dimension values
-  auto shapeOp = mlir::tensor::FromElementsOp::create(rewriter, loc, resultType,
-                                                      dimValues);
+  auto shapeOp =
+      mlir::tensor::FromElementsOp::create(rewriter, loc, resType, dimVals);
 
   // Attach transform dialect target tag
   shapeOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));

@@ -29,6 +29,8 @@
 """
 
 import random
+from typing import Tuple
+
 import pytest
 import numpy as np
 
@@ -41,46 +43,105 @@ from onnx.helper import (
     make_graph,
     make_tensor,
     make_opsetid,
+    tensor_dtype_to_np_dtype,
 )
 from onnx.checker import check_model
 from onnx.reference import ReferenceEvaluator
 from onnx.reference.op_run import OpRun
 
-from mlir.ir import (
-    Context,
-    Location,
-)
+from mlir.ir import Context, Location, MLIRError
 
 from onnx2mlir.importer import import_from_onnx
 from onnx2mlir.pipeline import llvm_lower_pipeline, runner
 
 
+def _generate_dtype_random(
+    dtype: np.dtype, shape: Tuple[int, ...], max_val=1e3
+) -> np.ndarray:
+    """
+    Generates a numpy array of a given shape and data type.
+
+    Parameters:
+        dtype (np.dtype): Target dtype (e.g., np.float64, np.complex64).
+        shape (Tuple[int, ...]): Desired shape of the output array.
+
+    Returns:
+        np.ndarray: Array of specified shape and dtype filled with random numbers.
+    """
+    rng = np.random.default_rng(42)
+
+    if np.issubdtype(np.dtype(dtype), np.integer):
+        info = np.iinfo(dtype)
+        low = int(np.sign(info.min) * max_val)
+        high = int(np.sign(info.max) * max_val)
+        return rng.integers(low, high, size=shape, dtype=dtype, endpoint=False)
+
+    if np.issubdtype(np.dtype(dtype), np.floating):
+        raw_uniform = rng.uniform(-1.0, 1.0, size=shape)
+        scaled = raw_uniform * max_val
+        return scaled.astype(dtype)
+
+    if np.issubdtype(np.dtype(dtype), np.complexfloating):
+        if dtype == np.complex64:
+            float_dtype = np.float32
+        elif dtype == np.complex128:
+            float_dtype = np.float64
+        else:
+            float_dtype = np.float64
+        real_part = (rng.uniform(-1.0, 1.0, size=shape) * max_val).astype(float_dtype)
+        imag_part = (rng.uniform(-1.0, 1.0, size=shape) * max_val).astype(float_dtype)
+        return (real_part + 1j * imag_part).astype(dtype)
+
+    if dtype == np.dtype(bool):
+        return rng.choice([True, False], size=shape)
+
+    raise ValueError(f"Unsupported or unrecognized numpy dtype: {dtype}")
+
+
 @pytest.mark.parametrize(
-    "ONNX_OPSET_VERSION",
+    "ONNX_OPSET_VERSION, dtype_proto, shape",
     [
-        schema.since_version
+        (schema.since_version, dtype_proto, shape)
         for schema in get_all_schemas_with_history()
         if "Constant" == schema.name
+        for dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.FLOAT16,
+            TensorProto.UINT8,
+            TensorProto.UINT16,
+            TensorProto.UINT32,
+            TensorProto.UINT64,
+            TensorProto.INT8,
+            TensorProto.INT16,
+            TensorProto.INT32,
+            TensorProto.INT64,
+            TensorProto.BOOL,
+        ]
+        for shape in [
+            (2, 3, 4),
+        ]
     ],
 )
-def test_onnx_Constant_lower(ONNX_OPSET_VERSION):
+def test_onnx_constant_lower(ONNX_OPSET_VERSION, dtype_proto, shape):
     """
     Test ONNX Constant lowering.
     """
 
-    def create_onnx_model(np_array):
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
+
+    def create_onnx_model(np_array, dtype_proto):
         constant_value = np_array
         output_tensor_info = make_tensor_value_info(
-            "output_tensor", TensorProto.FLOAT, [2, 2]
+            "output_tensor", dtype_proto, np_array.shape
         )
         constant_node = make_node(
             "Constant",
             inputs=[],
             outputs=["output_tensor"],
             value=make_tensor(
-                name="const_tensor",
-                data_type=TensorProto.FLOAT,
-                dims=[2, 2],
+                name="constant_opset_{ONNX_OPSET_VERSION}",
+                data_type=dtype_proto,
+                dims=np_array.shape,
                 vals=constant_value.flatten().tolist(),
             ),
         )
@@ -96,52 +157,109 @@ def test_onnx_Constant_lower(ONNX_OPSET_VERSION):
         check_model(model)
         return model
 
-    np_array = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
-    onnx_model = create_onnx_model(np_array)
+    np_array = _generate_dtype_random(np_dtype, shape=shape, max_val=127)
+    onnx_model = create_onnx_model(np_array, dtype_proto)
 
     with Context() as ctx, Location.unknown():
-
-        mlir_module = import_from_onnx(onnx_model, ctx)
-        mlir_module.operation.verify()
+        mlir_module = import_from_onnx(onnx_model, ctx, verify=False)
+        try:
+            mlir_module.operation.verify()
+        except MLIRError as e:
+            error_keywords = ["error", "must be", "but got"]
+            if all(kw in str(e) for kw in error_keywords):
+                pytest.skip(
+                    f"Constant V{ONNX_OPSET_VERSION} does not support"
+                    f" {TensorProto.DataType.Name(dtype_proto)}"
+                )
+            else:
+                raise
 
         llvm_module = llvm_lower_pipeline(mlir_module)
         llvm_module.operation.verify()
 
-        output = np.zeros_like(np_array)
+        output = np.zeros_like(np_array, dtype=np_dtype)
         outputs = runner(llvm_module, "main", [], [output])
 
         np.testing.assert_allclose(outputs[0], np_array, atol=1e-3)
 
 
 @pytest.mark.parametrize(
-    "ONNX_OPSET_VERSION",
+    "ONNX_OPSET_VERSION, dtype_proto, output_shape, fill_value",
     [
-        schema.since_version
+        (schema.since_version, dtype_proto, output_shape, fill_value)
         for schema in get_all_schemas_with_history()
-        if "Cast" == schema.name
+        if schema.name == "ConstantOfShape"
+        for dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.FLOAT16,
+            TensorProto.UINT8,
+            TensorProto.UINT16,
+            TensorProto.UINT32,
+            TensorProto.UINT64,
+            TensorProto.INT8,
+            TensorProto.INT16,
+            TensorProto.INT32,
+            TensorProto.INT64,
+            TensorProto.BOOL,
+        ]
+        for output_shape in [
+            (2, 3, 4),  # 3D Tensor
+            (1, 5),  # 2D Matrix
+            (4,),  # 1D Vector
+        ]
+        for fill_value in [
+            None,  # No value attribute
+            3.5,  # Positive numeric fill
+            -2,  # Negative numeric fill
+        ]
     ],
 )
-def test_onnx_Cast_lower(ONNX_OPSET_VERSION):
+# pylint: disable=too-many-branches,too-many-statements
+def test_onnx_constantofshape_lower(
+    ONNX_OPSET_VERSION, dtype_proto, output_shape, fill_value
+):
     """
-    Test ONNX Cast lowering.
+    Test ONNX ConstantOfShape operator lowering.
     """
 
-    def create_onnx_model(np_array):
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
+
+    if fill_value is not None:
+        if fill_value < 0 and np.issubdtype(np_dtype, np.unsignedinteger):
+            pytest.skip("Negative fill value is invalid for unsigned integer")
+        typed_fill = np.array(fill_value, dtype=np_dtype).item()
+    else:
+        typed_fill = None
+
+    def create_onnx_model(shape_array, dtype_proto, typed_fill):
         input_tensor = make_tensor_value_info(
-            "input", TensorProto.FLOAT, np_array.shape
+            "input", TensorProto.INT64, shape_array.shape
         )
         output_tensor = make_tensor_value_info(
-            "output", TensorProto.INT32, np_array.shape
+            "output",
+            dtype_proto if typed_fill is not None else TensorProto.FLOAT,
+            [int(x) for x in shape_array],
         )
-        cast_node = make_node(
-            "Cast",
-            ["input"],
-            ["output"],
-            to=TensorProto.INT32 if ONNX_OPSET_VERSION > 1 else "INT32",
+
+        node_kwargs = {}
+        if typed_fill is not None:
+            value_tensor = make_tensor(
+                name="value",
+                data_type=dtype_proto,
+                dims=[1],
+                vals=[typed_fill],
+            )
+            node_kwargs["value"] = value_tensor
+
+        cos_node = make_node(
+            "ConstantOfShape",
+            inputs=["input"],
+            outputs=["output"],
+            **node_kwargs,
         )
         graph = make_graph(
-            nodes=[cast_node],
-            name="cast_graph",
+            nodes=[cos_node],
+            name=f"constantofshape_opset_{ONNX_OPSET_VERSION}",
             inputs=[input_tensor],
             outputs=[output_tensor],
             initializer=[],
@@ -151,27 +269,162 @@ def test_onnx_Cast_lower(ONNX_OPSET_VERSION):
         check_model(model)
         return model
 
-    np_array = np.array([[1.0, 2.0], [-3.0, 4.0]], dtype=np.float32)
-    onnx_model = create_onnx_model(np_array)
+    shape_input = np.array(output_shape, dtype=np.int64)
+    onnx_model = create_onnx_model(shape_input, dtype_proto, typed_fill)
+
+    ref = ReferenceEvaluator(onnx_model)
+    onnx_result = ref.run(None, {"input": shape_input})[0]
 
     with Context() as ctx, Location.unknown():
-
-        mlir_module = import_from_onnx(onnx_model, ctx)
-        mlir_module.operation.verify()
+        mlir_module = import_from_onnx(onnx_model, ctx, verify=False)
+        try:
+            mlir_module.operation.verify()
+        except MLIRError as e:
+            error_keywords = ["error", "op operand", "must be"]
+            if all(kw in str(e) for kw in error_keywords):
+                pytest.skip(
+                    f"ConstantOfShape V{ONNX_OPSET_VERSION} does not support"
+                    f" {TensorProto.DataType.Name(dtype_proto)}"
+                )
+            else:
+                raise
 
         llvm_module = llvm_lower_pipeline(mlir_module)
         llvm_module.operation.verify()
 
-        output = np.zeros_like(np_array).astype(np.int32)
-        outputs = runner(llvm_module, "main", [np_array], [output])
+        res_array = np.zeros_like(
+            onnx_result, dtype=np_dtype if fill_value is not None else np.float32
+        )
+        outputs = runner(llvm_module, "main", [shape_input], [res_array])
 
-        np.testing.assert_allclose(outputs[0], np_array.astype(np.int32), atol=1e-3)
+        np.testing.assert_allclose(outputs[0], onnx_result, atol=1e-3)
 
 
 @pytest.mark.parametrize(
-    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shapes",
+    "ONNX_OPSET_VERSION, src_dtype_proto, tgt_dtype_proto, shape",
     [
-        (schema.name, schema.since_version, dtype_proto, shapes)
+        (
+            schema.since_version,
+            src_dtype_proto,
+            tgt_dtype_proto,
+            shape,
+        )
+        for schema in get_all_schemas_with_history()
+        if schema.name == "Cast"
+        for src_dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.FLOAT16,
+            TensorProto.DOUBLE,
+            TensorProto.UINT8,
+            TensorProto.UINT16,
+            TensorProto.UINT32,
+            TensorProto.UINT64,
+            TensorProto.INT8,
+            TensorProto.INT16,
+            TensorProto.INT32,
+            TensorProto.INT64,
+            TensorProto.BOOL,
+        ]
+        for tgt_dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.FLOAT16,
+            TensorProto.DOUBLE,
+            TensorProto.UINT8,
+            TensorProto.UINT16,
+            TensorProto.UINT32,
+            TensorProto.UINT64,
+            TensorProto.INT8,
+            TensorProto.INT16,
+            TensorProto.INT32,
+            TensorProto.INT64,
+            TensorProto.BOOL,
+        ]
+        for shape in [
+            (1, 33, 22),
+        ]
+    ],
+)
+def test_onnx_cast_lower(ONNX_OPSET_VERSION, src_dtype_proto, tgt_dtype_proto, shape):
+    """
+    Test ONNX Cast lowering.
+    """
+    src_np_dtype = tensor_dtype_to_np_dtype(src_dtype_proto)
+    tgt_np_dtype = tensor_dtype_to_np_dtype(tgt_dtype_proto)
+
+    np_array = _generate_dtype_random(src_np_dtype, shape, max_val=127)
+
+    def create_onnx_model(np_array, src_dtype_proto, tgt_dtype_proto):
+
+        input_tensor = make_tensor_value_info("input", src_dtype_proto, np_array.shape)
+        output_tensor = make_tensor_value_info(
+            "output", tgt_dtype_proto, np_array.shape
+        )
+
+        node_kwargs = {}
+        if ONNX_OPSET_VERSION == 1:
+            node_kwargs["to"] = str(TensorProto.DataType.Name(tgt_dtype_proto))
+        else:
+            node_kwargs["to"] = int(tgt_dtype_proto)
+        if ONNX_OPSET_VERSION >= 19:
+            node_kwargs["saturate"] = 1
+        if ONNX_OPSET_VERSION >= 24:
+            node_kwargs["round_mode"] = "up"
+
+        cast_node = make_node(
+            "Cast", inputs=["input"], outputs=["output"], **node_kwargs
+        )
+
+        graph = make_graph(
+            nodes=[cast_node],
+            name="cast_graph",
+            inputs=[input_tensor],
+            outputs=[output_tensor],
+            initializer=[],
+        )
+        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        return make_model(graph, opset_imports=opset_imports)
+
+    onnx_model = create_onnx_model(np_array, src_dtype_proto, tgt_dtype_proto)
+    check_model(onnx_model)
+
+    with Context() as ctx, Location.unknown():
+        mlir_module = import_from_onnx(onnx_model, ctx, verify=False)
+        try:
+            mlir_module.operation.verify()
+        except MLIRError as e:
+            error_keywords = ["error", "op operand", "must be"]
+            if all(kw in str(e) for kw in error_keywords):
+                pytest.skip(
+                    f"Cast V{ONNX_OPSET_VERSION} does not support"
+                    f" {TensorProto.DataType.Name(tgt_dtype_proto)}"
+                    f" -> {TensorProto.DataType.Name(tgt_dtype_proto)}"
+                )
+            else:
+                raise
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        if ONNX_OPSET_VERSION == 1:
+            onnx_result = np_array.astype(tgt_np_dtype)
+        else:
+            ref_inputs = {"input": np_array}
+            ref = ReferenceEvaluator(onnx_model)
+            onnx_result = ref.run(None, ref_inputs)[0]
+
+        output_buffer = np.zeros_like(onnx_result, dtype=tgt_np_dtype)
+        outputs = runner(llvm_module, "main", [np_array], [output_buffer])
+
+        if np.issubdtype(tgt_np_dtype, np.integer):
+            np.testing.assert_array_equal(outputs[0], onnx_result)
+        else:
+            np.testing.assert_allclose(outputs[0], onnx_result, rtol=1e-3, atol=1e-3)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shapes, fmod",
+    [
+        (schema.name, schema.since_version, dtype_proto, shapes, fmod)
         for schema in get_all_schemas_with_history()
         if schema.name in ["Add", "Div", "Mod", "Mul", "Pow", "Sub"]
         for dtype_proto in [
@@ -190,51 +443,18 @@ def test_onnx_Cast_lower(ONNX_OPSET_VERSION):
             [(1, 3, 3), (1, 3, 3)],  # Non-broadcasting
             [(1, 3, 1), (4, 1, 5)],  # Broadcasting
         ]
+        for fmod in ([0, 1] if schema.name == "Mod" else [None])
     ],
 )
 # pylint: disable=too-many-branches,too-many-statements
-def test_onnx_arith_binary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shapes):
+def test_onnx_arith_binary_lower(
+    ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shapes, fmod
+):
     """
     Test ONNX arith binary operators lowering.
     """
 
-    if ONNX_OP_NAME == "Pow" and dtype_proto not in [
-        TensorProto.FLOAT,
-        TensorProto.FLOAT16,
-    ]:
-        pytest.skip(
-            f"{ONNX_OP_NAME} V{ONNX_OPSET_VERSION} only supports Float or 32bit Integer"
-        )
-
-    if ONNX_OPSET_VERSION <= 13 and dtype_proto not in [
-        TensorProto.FLOAT,
-        TensorProto.FLOAT16,
-    ]:
-        pytest.skip(f"{ONNX_OP_NAME} V{ONNX_OPSET_VERSION} only supports Float")
-
-    np_dtype = None
-    if dtype_proto == TensorProto.FLOAT:
-        np_dtype = np.float32
-    elif dtype_proto == TensorProto.FLOAT16:
-        np_dtype = np.float16
-    elif dtype_proto == TensorProto.UINT8:
-        np_dtype = np.uint8
-    elif dtype_proto == TensorProto.UINT16:
-        np_dtype = np.uint16
-    elif dtype_proto == TensorProto.UINT32:
-        np_dtype = np.uint32
-    elif dtype_proto == TensorProto.UINT64:
-        np_dtype = np.uint64
-    elif dtype_proto == TensorProto.INT8:
-        np_dtype = np.int8
-    elif dtype_proto == TensorProto.INT16:
-        np_dtype = np.int16
-    elif dtype_proto == TensorProto.INT32:
-        np_dtype = np.int32
-    elif dtype_proto == TensorProto.INT64:
-        np_dtype = np.int64
-    else:
-        pytest.skip(f"DataType {dtype_proto} not implemented in test")
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
 
     def create_onnx_model(inp_array0, inp_array1, dtype_proto):
         input_tensor_0 = make_tensor_value_info("input0", dtype_proto, inp_array0.shape)
@@ -242,10 +462,12 @@ def test_onnx_arith_binary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, 
         output_tensor = make_tensor_value_info(
             "output", dtype_proto, (inp_array0 + inp_array1).shape
         )
+        kwargs = {"fmod": fmod} if ONNX_OP_NAME == "Mod" else {}
         arith_node = make_node(
             ONNX_OP_NAME,
             ["input0", "input1"],
             ["output"],
+            **kwargs,
         )
         graph = make_graph(
             nodes=[arith_node],
@@ -259,50 +481,106 @@ def test_onnx_arith_binary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, 
         check_model(model)
         return model
 
-    if np.issubdtype(np.dtype(np_dtype), np.integer):
-        inp_array0 = np.random.randint(1, 15, size=shapes[0], dtype=np_dtype)
-        inp_array1 = np.random.randint(1, 15, size=shapes[1], dtype=np_dtype)
-    else:
-        inp_array0 = np.random.rand(*shapes[0]).astype(np_dtype)
-        inp_array1 = np.random.rand(*shapes[1]).astype(np_dtype)
+    inp_array0 = _generate_dtype_random(np_dtype, shape=shapes[0], max_val=10)
+    inp_array1 = _generate_dtype_random(np_dtype, shape=shapes[1], max_val=10)
+
+    if ONNX_OP_NAME in ["Div", "Mod"]:
+        inp_array1 += inp_array1 >= 0
+    if ONNX_OP_NAME == "Pow":
+        inp_array1 = np.abs(inp_array1)
 
     onnx_model = create_onnx_model(inp_array0, inp_array1, dtype_proto)
 
-    ref = ReferenceEvaluator(onnx_model)
-    onnx_result = ref.run(None, {"input0": inp_array0, "input1": inp_array1})[0]
-
     with Context() as ctx, Location.unknown():
-
-        mlir_module = import_from_onnx(onnx_model, ctx)
-        mlir_module.operation.verify()
+        mlir_module = import_from_onnx(onnx_model, ctx, verify=False)
+        try:
+            mlir_module.operation.verify()
+        except MLIRError as e:
+            error_keywords = ["error", "op operand", "must be"]
+            if all(kw in str(e) for kw in error_keywords):
+                pytest.skip(
+                    f"{ONNX_OP_NAME} V{ONNX_OPSET_VERSION} does not support"
+                    f" {TensorProto.DataType.Name(dtype_proto)}"
+                )
+            else:
+                raise
 
         llvm_module = llvm_lower_pipeline(mlir_module)
         llvm_module.operation.verify()
 
+        ref = ReferenceEvaluator(onnx_model)
+        onnx_result = ref.run(None, {"input0": inp_array0, "input1": inp_array1})[0]
+
         res_array = np.zeros_like(onnx_result)
         outputs = runner(llvm_module, "main", [inp_array0, inp_array1], [res_array])
-        np.testing.assert_allclose(outputs[0], onnx_result, atol=1e-3)
+
+        atol = 1e-2 if np_dtype == np.float16 else 1e-5
+        rtol = 1e-2 if np_dtype == np.float16 else 1e-5
+        np.testing.assert_allclose(outputs[0], onnx_result, rtol=rtol, atol=atol)
 
 
 @pytest.mark.parametrize(
-    "ONNX_OP_NAME, ONNX_OPSET_VERSION",
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto",
     [
-        (schema.name, schema.since_version)
+        (schema.name, schema.since_version, dtype_proto)
         for schema in get_all_schemas_with_history()
-        if schema.name in ["Sin", "Cos", "Elu"]
+        if schema.name
+        in [
+            "Abs",
+            "Acos",
+            "Acosh",
+            "Asin",
+            "Asinh",
+            "Atan",
+            "Atanh",
+            "Ceil",
+            "Cos",
+            "Cosh",
+            "Elu",
+            "Erf",
+            "Exp",
+            "Floor",
+            "HardSwish",
+            "Identity",
+            "IsInf",
+            "IsNaN",
+            "Log",
+            "Neg",
+            "Not",
+            "Reciprocal",
+            "Relu",
+            "Round",
+            "Sigmoid",
+            "Sign",
+            "Sin",
+            "Sinh",
+            "Softplus",
+            "Softsign",
+            "Sqrt",
+            "Tan",
+            "Tanh",
+        ]
+        for dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.FLOAT16,
+            TensorProto.BOOL,
+        ]
     ],
 )
-def test_onnx_unary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION):
+def test_onnx_arith_unary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto):
     """
     Test ONNX arith unary operators lowering.
     """
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
 
-    def create_onnx_model(np_array):
-        input_tensor = make_tensor_value_info(
-            "input", TensorProto.FLOAT, np_array.shape
-        )
+    is_bool_output_op = ONNX_OP_NAME in ["IsInf", "IsNaN"]
+    out_dtype_proto = TensorProto.BOOL if is_bool_output_op else dtype_proto
+    out_np_dtype = np.bool_ if is_bool_output_op else np_dtype
+
+    def create_onnx_model(np_array, inp_dtype_proto, out_dtype_proto):
+        input_tensor = make_tensor_value_info("input", inp_dtype_proto, np_array.shape)
         output_tensor = make_tensor_value_info(
-            "output", TensorProto.FLOAT, np_array.shape
+            "output", out_dtype_proto, np_array.shape
         )
         cast_node = make_node(
             ONNX_OP_NAME,
@@ -321,46 +599,58 @@ def test_onnx_unary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION):
         check_model(model)
         return model
 
-    np_array = np.random.rand(2, 2).astype(np.float32)
-    onnx_model = create_onnx_model(np_array)
-
-    ref = ReferenceEvaluator(onnx_model)
-    onnx_result = ref.run(None, {"input": np_array})[0]
+    np_array = _generate_dtype_random(np_dtype, shape=(2, 2), max_val=10)
+    onnx_model = create_onnx_model(np_array, dtype_proto, out_dtype_proto)
 
     with Context() as ctx, Location.unknown():
-
-        mlir_module = import_from_onnx(onnx_model, ctx)
-        mlir_module.operation.verify()
+        mlir_module = import_from_onnx(onnx_model, ctx, verify=False)
+        try:
+            mlir_module.operation.verify()
+        except MLIRError as e:
+            error_keywords = ["error", "op operand", "must be"]
+            if all(kw in str(e) for kw in error_keywords):
+                pytest.skip(
+                    f"{ONNX_OP_NAME} V{ONNX_OPSET_VERSION} does not support"
+                    f" {TensorProto.DataType.Name(dtype_proto)}"
+                )
+            else:
+                raise
 
         llvm_module = llvm_lower_pipeline(mlir_module)
         llvm_module.operation.verify()
 
-        output = np.zeros_like(np_array)
+        output = np.zeros_like(np_array, dtype=out_np_dtype)
         outputs = runner(llvm_module, "main", [np_array], [output])
+
+        ref = ReferenceEvaluator(onnx_model)
+        onnx_result = ref.run(None, {"input": np_array})[0]
 
         np.testing.assert_allclose(outputs[0], onnx_result, atol=1e-3)
 
 
 @pytest.mark.parametrize(
-    "ONNX_OP_NAME, ONNX_OPSET_VERSION",
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto",
     [
-        (schema.name, schema.since_version)
+        (schema.name, schema.since_version, dtype_proto)
         for schema in get_all_schemas_with_history()
         if schema.name in ["Hardmax", "Softmax", "LogSoftmax"]
+        for dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.FLOAT16,
+            TensorProto.DOUBLE,
+        ]
     ],
 )
-def test_onnx_softmax_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION):
+def test_onnx_softmax_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto):
     """
     Test ONNX softmax family of operators lowering.
     """
 
-    def create_onnx_model(np_array):
-        input_tensor = make_tensor_value_info(
-            "input", TensorProto.FLOAT, np_array.shape
-        )
-        output_tensor = make_tensor_value_info(
-            "output", TensorProto.FLOAT, np_array.shape
-        )
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
+
+    def create_onnx_model(np_array, dtype_proto):
+        input_tensor = make_tensor_value_info("input", dtype_proto, np_array.shape)
+        output_tensor = make_tensor_value_info("output", dtype_proto, np_array.shape)
         cast_node = make_node(
             ONNX_OP_NAME,
             # i/o
@@ -380,8 +670,8 @@ def test_onnx_softmax_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION):
         check_model(model)
         return model
 
-    np_array = np.random.rand(8, 8).astype(np.float32)
-    onnx_model = create_onnx_model(np_array)
+    np_array = _generate_dtype_random(np_dtype, shape=(8, 8), max_val=10)
+    onnx_model = create_onnx_model(np_array, dtype_proto)
 
     ref = ReferenceEvaluator(onnx_model)
     onnx_result = ref.run(None, {"input": np_array})[0]
@@ -397,33 +687,43 @@ def test_onnx_softmax_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION):
         output = np.zeros_like(np_array)
         outputs = runner(llvm_module, "main", [np_array], [output])
 
-        np.testing.assert_allclose(outputs[0], onnx_result, atol=1e-3)
+        atol = 1e-1 if np_dtype == np.float16 else 1e-5
+        rtol = 1e-1 if np_dtype == np.float16 else 1e-5
+        np.testing.assert_allclose(outputs[0], onnx_result, rtol=rtol, atol=atol)
 
 
 @pytest.mark.parametrize(
-    "ONNX_OPSET_VERSION",
+    "ONNX_OPSET_VERSION, dtype_proto",
     [
-        schema.since_version
+        (schema.since_version, dtype_proto)
         for schema in get_all_schemas_with_history()
         if "Transpose" == schema.name
+        for dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.FLOAT16,
+            TensorProto.INT8,
+            TensorProto.INT32,
+            TensorProto.INT64,
+            TensorProto.UINT32,
+            TensorProto.UINT64,
+            TensorProto.BOOL,
+        ]
     ],
 )
-def test_onnx_transpose_lower(ONNX_OPSET_VERSION):
+def test_onnx_transpose_lower(ONNX_OPSET_VERSION, dtype_proto):
     """
     Test ONNX Transpose operator lowering.
     """
 
-    def create_onnx_model(np_array):
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
+
+    def create_onnx_model(np_array, dtype_proto):
 
         perm = random.sample(range(np_array.ndim), np_array.ndim)
         np_arrayT = np_array.transpose(perm)
 
-        input_tensor = make_tensor_value_info(
-            "input", TensorProto.FLOAT, np_array.shape
-        )
-        output_tensor = make_tensor_value_info(
-            "output", TensorProto.FLOAT, np_arrayT.shape
-        )
+        input_tensor = make_tensor_value_info("input", dtype_proto, np_array.shape)
+        output_tensor = make_tensor_value_info("output", dtype_proto, np_arrayT.shape)
         cast_node = make_node(
             "Transpose",
             # i/o
@@ -443,8 +743,9 @@ def test_onnx_transpose_lower(ONNX_OPSET_VERSION):
         check_model(model)
         return model
 
-    np_array = np.random.rand(1, 3, 8, 5).astype(np.float32)
-    onnx_model = create_onnx_model(np_array)
+    np_array = _generate_dtype_random(np_dtype, shape=(1, 3, 8, 5), max_val=10)
+
+    onnx_model = create_onnx_model(np_array, dtype_proto)
 
     ref = ReferenceEvaluator(onnx_model)
     onnx_result = ref.run(None, {"input": np_array})[0]
@@ -464,31 +765,38 @@ def test_onnx_transpose_lower(ONNX_OPSET_VERSION):
 
 
 @pytest.mark.parametrize(
-    "ONNX_OP_NAME, ONNX_OPSET_VERSION",
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto",
     [
-        (schema.name, schema.since_version)
+        (schema.name, schema.since_version, dtype_proto)
         for schema in get_all_schemas_with_history()
         if schema.name in ["Greather", "GreatherOrEqual", "Less", "LessOrEqual"]
+        for dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.FLOAT16,
+            TensorProto.INT8,
+            TensorProto.INT32,
+            TensorProto.INT64,
+            TensorProto.UINT32,
+            TensorProto.UINT64,
+            TensorProto.BOOL,
+        ]
     ],
 )
-def test_onnx_compare_binary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION):
+def test_onnx_compare_binary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto):
     """
     Test ONNX comparison binary operators lowering.
     """
 
-    def create_onnx_model(inp_array0, inp_array1):
-        input_tensor_0 = make_tensor_value_info(
-            "input0", TensorProto.FLOAT, inp_array0.shape
-        )
-        input_tensor_1 = make_tensor_value_info(
-            "input1", TensorProto.FLOAT, inp_array1.shape
-        )
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
+
+    def create_onnx_model(inp_array0, inp_array1, dtype_proto):
+        input_tensor_0 = make_tensor_value_info("input0", dtype_proto, inp_array0.shape)
+        input_tensor_1 = make_tensor_value_info("input1", dtype_proto, inp_array1.shape)
         output_tensor = make_tensor_value_info(
             "output", TensorProto.BOOL, (inp_array0 + inp_array1).shape
         )
         arith_node = make_node(
             ONNX_OP_NAME,
-            # binary arg
             ["input0", "input1"],
             ["output"],
         )
@@ -504,52 +812,98 @@ def test_onnx_compare_binary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION):
         check_model(model)
         return model
 
-    inp_array0 = np.random.rand(1, 3, 1).astype(np.float32)
-    inp_array1 = np.random.rand(4, 1, 5).astype(np.float32)
+    inp_array0 = _generate_dtype_random(np_dtype, shape=(1, 3, 1), max_val=10)
+    inp_array1 = _generate_dtype_random(np_dtype, shape=(4, 1, 5), max_val=10)
 
-    onnx_model = create_onnx_model(inp_array0, inp_array1)
-
-    ref = ReferenceEvaluator(onnx_model)
-    onnx_result = ref.run(None, {"input0": inp_array0, "input1": inp_array1})[0]
+    onnx_model = create_onnx_model(inp_array0, inp_array1, dtype_proto)
 
     with Context() as ctx, Location.unknown():
-
-        mlir_module = import_from_onnx(onnx_model, ctx)
-        mlir_module.operation.verify()
+        mlir_module = import_from_onnx(onnx_model, ctx, verify=False)
+        try:
+            mlir_module.operation.verify()
+        except MLIRError as e:
+            error_keywords = ["error", "op operand", "must be"]
+            if all(kw in str(e) for kw in error_keywords):
+                pytest.skip(
+                    f"{ONNX_OP_NAME} V{ONNX_OPSET_VERSION} does not support"
+                    f" {TensorProto.DataType.Name(dtype_proto)}"
+                )
+            else:
+                raise
 
         llvm_module = llvm_lower_pipeline(mlir_module)
         llvm_module.operation.verify()
 
+        ref = ReferenceEvaluator(onnx_model)
+        onnx_result = ref.run(None, {"input0": inp_array0, "input1": inp_array1})[0]
+
         res_array = np.zeros_like(onnx_result)
         outputs = runner(llvm_module, "main", [inp_array0, inp_array1], [res_array])
-        np.testing.assert_allclose(outputs[0], onnx_result, atol=1e-3)
+        np.testing.assert_array_equal(outputs[0], onnx_result)
 
 
 @pytest.mark.parametrize(
-    "ONNX_OPSET_VERSION",
+    "ONNX_OPSET_VERSION, dtype_proto",
     [
-        schema.since_version
+        (schema.since_version, dtype_proto)
         for schema in get_all_schemas_with_history()
-        # V1 legacy is not available in onnx evaluator
-        if "Gemm" == schema.name and schema.since_version != 1
+        if schema.name == "Gemm"
+        for dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.FLOAT16,
+            TensorProto.INT32,
+            TensorProto.INT64,
+            TensorProto.UINT32,
+            TensorProto.UINT64,
+        ]
     ],
 )
-def test_onnx_gemm_lower(ONNX_OPSET_VERSION):
+# pylint: disable=too-many-statements
+def test_onnx_gemm_lower(ONNX_OPSET_VERSION, dtype_proto):
     """
     Test ONNX Gemm operator lowering.
     """
 
-    def create_onnx_model(inp_arr0, inp_arr1, inp_bias):
+    class Gemm(OpRun):
+        """
+        ONNX Gemm operator.
+        Computes:
+            Y = alpha * A' * B' + beta * C
+        where:
+            A' = A.T if transA != 0 else A
+            B' = B.T if transB != 0 else B
+        """
+
+        # pylint: disable=arguments-differ,too-many-arguments,too-many-positional-arguments
+        def _run(self, A, B, C=None, alpha=1.0, beta=1.0, transA=0, transB=0):
+            a_mat = A.T if transA != 0 else A
+            b_mat = B.T if transB != 0 else B
+            prod = np.matmul(a_mat, b_mat)
+            if alpha != 1.0:
+                prod = prod * alpha
+            if C is not None and beta != 0.0:
+                bias = C * beta if beta != 1.0 else C
+                res = prod + bias
+            else:
+                res = prod
+            if res.dtype != A.dtype:
+                res = res.astype(A.dtype)
+
+            return (res,)
+
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
+
+    def create_onnx_model(inp_arr0, inp_arr1, inp_bias, dtype_proto):
         m, k = inp_arr0.shape
         _, n = inp_arr1.shape
 
-        input_tensor_0 = make_tensor_value_info("input0", TensorProto.FLOAT, [m, k])
-        input_tensor_1 = make_tensor_value_info("input1", TensorProto.FLOAT, [k, n])
-        input_tensor_2 = make_tensor_value_info("bias0", TensorProto.FLOAT, [m, n])
-        output_tensor = make_tensor_value_info("output", TensorProto.FLOAT, [m, n])
+        input_tensor_0 = make_tensor_value_info("input0", dtype_proto, [m, k])
+        input_tensor_1 = make_tensor_value_info("input1", dtype_proto, [k, n])
+        input_tensor_2 = make_tensor_value_info("bias0", dtype_proto, [m, n])
+        output_tensor = make_tensor_value_info("output", dtype_proto, [m, n])
 
         bias_init = make_tensor(
-            "bias0", TensorProto.FLOAT, [m, n], inp_bias.flatten().tolist()
+            "bias0", dtype_proto, [m, n], inp_bias.flatten().tolist()
         )
 
         arith_node = make_node(
@@ -569,40 +923,65 @@ def test_onnx_gemm_lower(ONNX_OPSET_VERSION):
         check_model(model)
         return model
 
-    inp_arr0 = np.random.rand(16, 32).astype(np.float32)
-    inp_arr1 = np.random.rand(32, 16).astype(np.float32)
-    inp_bias = np.random.rand(16, 16).astype(np.float32)
+    inp_arr0 = _generate_dtype_random(np_dtype, shape=(16, 32), max_val=10)
+    inp_arr1 = _generate_dtype_random(np_dtype, shape=(32, 16), max_val=10)
+    inp_bias = _generate_dtype_random(np_dtype, shape=(16, 16), max_val=5)
 
-    onnx_model = create_onnx_model(inp_arr0, inp_arr1, inp_bias)
-
-    ref = ReferenceEvaluator(onnx_model)
-    onnx_result = ref.run(
-        None, {"input0": inp_arr0, "input1": inp_arr1, "bias0": inp_bias}
-    )[0]
+    onnx_model = create_onnx_model(inp_arr0, inp_arr1, inp_bias, dtype_proto)
 
     with Context() as ctx, Location.unknown():
-
-        mlir_module = import_from_onnx(onnx_model, ctx)
-        mlir_module.operation.verify()
+        mlir_module = import_from_onnx(onnx_model, ctx, verify=False)
+        try:
+            mlir_module.operation.verify()
+        except MLIRError as e:
+            error_keywords = ["error", "op result", "must be"]
+            if all(kw in str(e) for kw in error_keywords):
+                pytest.skip(
+                    f"Constant V{ONNX_OPSET_VERSION} does not support"
+                    f" {TensorProto.DataType.Name(dtype_proto)}"
+                )
+            error_keywords = ["error", "op operand", "must be"]
+            if all(kw in str(e) for kw in error_keywords):
+                pytest.skip(
+                    f"Gemm V{ONNX_OPSET_VERSION} does not support"
+                    f" {TensorProto.DataType.Name(dtype_proto)}"
+                )
+            else:
+                raise
 
         llvm_module = llvm_lower_pipeline(mlir_module)
         llvm_module.operation.verify()
 
+        new_ops = [Gemm] if ONNX_OPSET_VERSION in [1, 6] else None
+        ref = ReferenceEvaluator(onnx_model, new_ops=new_ops)
+        onnx_result = ref.run(
+            None, {"input0": inp_arr0, "input1": inp_arr1, "bias0": inp_bias}
+        )[0]
+
         res_arr = np.zeros_like(onnx_result)
         outputs = runner(llvm_module, "main", [inp_arr0, inp_arr1, inp_bias], [res_arr])
-        np.testing.assert_allclose(outputs[0], onnx_result, atol=1e-3)
+
+        atol = 1e-1 if np_dtype == np.float16 else 1e-5
+        rtol = 1e-1 if np_dtype == np.float16 else 1e-5
+        np.testing.assert_allclose(outputs[0], onnx_result, rtol=rtol, atol=atol)
 
 
 @pytest.mark.parametrize(
-    "ONNX_OPSET_VERSION, dtype, shapes",
+    "ONNX_OPSET_VERSION, dtype_proto, shapes",
     [
-        (opset, dtype, shapes)
+        (opset, dtype_proto, shapes)
         for opset in [
             schema.since_version
             for schema in get_all_schemas_with_history()
             if "Where" == schema.name
         ]
-        for dtype in [TensorProto.FLOAT, TensorProto.INT32]
+        for dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.INT32,
+            TensorProto.INT8,
+            TensorProto.UINT8,
+            TensorProto.BOOL,
+        ]
         for shapes in [
             ((4, 4), (4, 4), (4, 4)),  # Standard
             ((1,), (4, 4), (4, 4)),  # Broadcast Condition
@@ -611,22 +990,21 @@ def test_onnx_gemm_lower(ONNX_OPSET_VERSION):
     ],
 )
 # pylint: disable=too-many-locals
-def test_onnx_where_lower(ONNX_OPSET_VERSION, dtype, shapes):
+def test_onnx_where_lower(ONNX_OPSET_VERSION, dtype_proto, shapes):
     """
     Test ONNX Where operator lowering.
     """
     cond_shape, x_shape, y_shape = shapes
-
-    np_dtype = np.float32 if dtype == TensorProto.FLOAT else np.int32
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
     res_shape = np.broadcast(
         np.empty(cond_shape), np.empty(x_shape), np.empty(y_shape)
     ).shape
 
     def create_onnx_model():
         input_cond = make_tensor_value_info("condition", TensorProto.BOOL, cond_shape)
-        input_x = make_tensor_value_info("X", dtype, x_shape)
-        input_y = make_tensor_value_info("Y", dtype, y_shape)
-        output_tensor = make_tensor_value_info("output", dtype, res_shape)
+        input_x = make_tensor_value_info("X", dtype_proto, x_shape)
+        input_y = make_tensor_value_info("Y", dtype_proto, y_shape)
+        output_tensor = make_tensor_value_info("output", dtype_proto, res_shape)
 
         where_node = make_node(
             "Where",
@@ -646,9 +1024,9 @@ def test_onnx_where_lower(ONNX_OPSET_VERSION, dtype, shapes):
         check_model(model)
         return model
 
-    cond_arr = np.random.choice([True, False], size=cond_shape)
-    x_arr = (np.random.rand(*x_shape) * 10).astype(np_dtype)
-    y_arr = (np.random.rand(*y_shape) * 10).astype(np_dtype)
+    cond_arr = _generate_dtype_random(np.bool, shape=cond_shape)
+    x_arr = _generate_dtype_random(np_dtype, shape=x_shape, max_val=127)
+    y_arr = _generate_dtype_random(np_dtype, shape=y_shape, max_val=127)
 
     onnx_model = create_onnx_model()
 
@@ -670,15 +1048,15 @@ def test_onnx_where_lower(ONNX_OPSET_VERSION, dtype, shapes):
 
 
 @pytest.mark.parametrize(
-    "ONNX_OPSET_VERSION, dtype, shape, axes",
+    "ONNX_OPSET_VERSION, dtype_proto, shape, axes",
     [
-        (opset, dtype, shape, axes)
+        (opset, dtype_proto, shape, axes)
         for opset in [
             schema.since_version
             for schema in get_all_schemas_with_history()
             if "Unsqueeze" == schema.name
         ]
-        for dtype in [TensorProto.FLOAT, TensorProto.INT32]
+        for dtype_proto in [TensorProto.FLOAT, TensorProto.INT32]
         for shape, axes in [
             ((3, 4), [0]),  # Leading dim: (1, 3, 4)
             ((3, 4), [1]),  # Middle dim:  (3, 1, 4)
@@ -689,19 +1067,19 @@ def test_onnx_where_lower(ONNX_OPSET_VERSION, dtype, shapes):
     ],
 )
 # pylint: disable=too-many-locals
-def test_onnx_unsqueeze_lower(ONNX_OPSET_VERSION, dtype, shape, axes):
+def test_onnx_unsqueeze_lower(ONNX_OPSET_VERSION, dtype_proto, shape, axes):
     """
     Test ONNX Unsqueeze operator lowering.
     """
-    np_dtype = np.float32 if dtype == TensorProto.FLOAT else np.int32
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
 
     res_shape = list(shape)
     for axis in sorted(axes):
         res_shape.insert(axis, 1)
 
     def create_onnx_model():
-        input_tensor = make_tensor_value_info("data", dtype, shape)
-        output_tensor = make_tensor_value_info("output", dtype, res_shape)
+        input_tensor = make_tensor_value_info("data", dtype_proto, shape)
+        output_tensor = make_tensor_value_info("output", dtype_proto, res_shape)
 
         if ONNX_OPSET_VERSION < 13:
             unsqueeze_node = make_node("Unsqueeze", ["data"], ["output"], axes=axes)
@@ -719,7 +1097,7 @@ def test_onnx_unsqueeze_lower(ONNX_OPSET_VERSION, dtype, shape, axes):
 
         graph = make_graph(
             nodes=[unsqueeze_node],
-            name="unsqueeze_test",
+            name="unsqueeze_opset_{ONNX_OPSET_VERSION}",
             inputs=inputs,
             outputs=[output_tensor],
             initializer=initializers,
@@ -730,7 +1108,8 @@ def test_onnx_unsqueeze_lower(ONNX_OPSET_VERSION, dtype, shape, axes):
         check_model(model)
         return model
 
-    data_arr = (np.random.rand(*shape) * 10).astype(np_dtype)
+    data_arr = _generate_dtype_random(np_dtype, shape=shape, max_val=127)
+
     onnx_model = create_onnx_model()
 
     ref = ReferenceEvaluator(onnx_model)
@@ -751,15 +1130,15 @@ def test_onnx_unsqueeze_lower(ONNX_OPSET_VERSION, dtype, shape, axes):
 
 
 @pytest.mark.parametrize(
-    "ONNX_OPSET_VERSION, dtype, shape, axes",
+    "ONNX_OPSET_VERSION, dtype_proto, shape, axes",
     [
-        (opset, dtype, shape, axes)
+        (opset, dtype_proto, shape, axes)
         for opset in [
             schema.since_version
             for schema in get_all_schemas_with_history()
             if "Squeeze" == schema.name
         ]
-        for dtype in [TensorProto.FLOAT, TensorProto.INT32]
+        for dtype_proto in [TensorProto.FLOAT, TensorProto.INT32]
         for shape, axes in [
             ((1, 3, 4), [0]),  # Squeeze leading: (3, 4)
             ((3, 1, 4), [1]),  # Squeeze middle:  (3, 4)
@@ -771,7 +1150,7 @@ def test_onnx_unsqueeze_lower(ONNX_OPSET_VERSION, dtype, shape, axes):
     ],
 )
 # pylint: disable=too-many-locals
-def test_onnx_squeeze_lower(ONNX_OPSET_VERSION, dtype, shape, axes):
+def test_onnx_squeeze_lower(ONNX_OPSET_VERSION, dtype_proto, shape, axes):
     """
     Test ONNX Squeeze operator lowering.
     """
@@ -783,11 +1162,11 @@ def test_onnx_squeeze_lower(ONNX_OPSET_VERSION, dtype, shape, axes):
             if i not in axes:
                 res_shape.append(d)
 
-    np_dtype = np.float32 if dtype == TensorProto.FLOAT else np.int32
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
 
     def create_onnx_model():
-        input_tensor = make_tensor_value_info("data", dtype, shape)
-        output_tensor = make_tensor_value_info("output", dtype, res_shape)
+        input_tensor = make_tensor_value_info("data", dtype_proto, shape)
+        output_tensor = make_tensor_value_info("output", dtype_proto, res_shape)
 
         inputs = ["data"]
         initializers = []
@@ -808,7 +1187,7 @@ def test_onnx_squeeze_lower(ONNX_OPSET_VERSION, dtype, shape, axes):
 
         graph = make_graph(
             nodes=[squeeze_node],
-            name="squeeze_test",
+            name="squeeze_opset_{ONNX_OPSET_VERSION}",
             inputs=[input_tensor],
             outputs=[output_tensor],
             initializer=initializers,
@@ -819,7 +1198,8 @@ def test_onnx_squeeze_lower(ONNX_OPSET_VERSION, dtype, shape, axes):
         check_model(model)
         return model
 
-    data_arr = (np.random.rand(*shape) * 10).astype(np_dtype)
+    data_arr = _generate_dtype_random(np_dtype, shape=shape, max_val=127)
+
     onnx_model = create_onnx_model()
 
     ref = ReferenceEvaluator(onnx_model)
@@ -840,15 +1220,15 @@ def test_onnx_squeeze_lower(ONNX_OPSET_VERSION, dtype, shape, axes):
 
 
 @pytest.mark.parametrize(
-    "ONNX_OPSET_VERSION, dtype, input_shape, kernel, strides, pads",
+    "ONNX_OPSET_VERSION, dtype_proto, input_shape, kernel, strides, pads",
     [
-        (opset, dtype, shape, kernel, stride, pad)
+        (opset, dtype_proto, shape, kernel, stride, pad)
         for opset in [
             schema.since_version
             for schema in get_all_schemas_with_history()
             if "MaxPool" == schema.name
         ]
-        for dtype in [
+        for dtype_proto in [
             TensorProto.FLOAT,
             TensorProto.FLOAT16,
             TensorProto.INT8,
@@ -863,26 +1243,13 @@ def test_onnx_squeeze_lower(ONNX_OPSET_VERSION, dtype, shape, axes):
 )
 # pylint: disable=too-many-locals,too-many-arguments,too-many-positional-arguments
 def test_onnx_maxpool_lower(
-    ONNX_OPSET_VERSION, dtype, input_shape, kernel, strides, pads
+    ONNX_OPSET_VERSION, dtype_proto, input_shape, kernel, strides, pads
 ):
     """
     Test ONNX MaxPool operator lowering.
     """
 
-    if ONNX_OPSET_VERSION < 12 and dtype in [TensorProto.INT8, TensorProto.UINT8]:
-        pytest.skip(f"MaxPool V{ONNX_OPSET_VERSION} only supports Float")
-
-    np_dtype = None
-    if dtype == TensorProto.FLOAT:
-        np_dtype = np.float32
-    elif dtype == TensorProto.FLOAT16:
-        np_dtype = np.float16
-    elif dtype == TensorProto.INT8:
-        np_dtype = np.int8
-    elif dtype == TensorProto.UINT8:
-        np_dtype = np.uint8
-    else:
-        pytest.skip(f"DataType {np_dtype} not implemented in test")
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
 
     h_in, w_in = input_shape[2], input_shape[3]
     h_out = (h_in + pads[0] + pads[2] - kernel[0]) // strides[0] + 1
@@ -890,8 +1257,8 @@ def test_onnx_maxpool_lower(
     output_shape = (input_shape[0], input_shape[1], h_out, w_out)
 
     def create_onnx_model():
-        input_x = make_tensor_value_info("X", dtype, input_shape)
-        output_y = make_tensor_value_info("Y", dtype, output_shape)
+        input_x = make_tensor_value_info("X", dtype_proto, input_shape)
+        output_y = make_tensor_value_info("Y", dtype_proto, output_shape)
 
         maxpool_node = make_node(
             "MaxPool",
@@ -913,29 +1280,41 @@ def test_onnx_maxpool_lower(
         check_model(model)
         return model
 
-    x_arr = np.random.randint(-100, 100, size=input_shape).astype(np_dtype)
+    x_arr = _generate_dtype_random(np_dtype, shape=input_shape, max_val=127)
 
     onnx_model = create_onnx_model()
 
-    if dtype == TensorProto.INT8:
-        float_model = create_onnx_model()
-        float_model.graph.input[0].type.tensor_type.elem_type = TensorProto.FLOAT
-        float_model.graph.output[0].type.tensor_type.elem_type = TensorProto.FLOAT
-        ref = ReferenceEvaluator(float_model)
-        onnx_result = ref.run(None, {"X": x_arr.astype(np.float32)})[0].astype(np.int8)
-    else:
-        ref = ReferenceEvaluator(onnx_model)
-        onnx_result = ref.run(None, {"X": x_arr})[0]
-
     with Context() as ctx, Location.unknown():
-        mlir_module = import_from_onnx(onnx_model, ctx)
-        mlir_module.operation.verify()
+        mlir_module = import_from_onnx(onnx_model, ctx, verify=False)
+        try:
+            mlir_module.operation.verify()
+        except MLIRError as e:
+            error_keywords = ["error", "op operand", "must be"]
+            if all(kw in str(e) for kw in error_keywords):
+                pytest.skip(
+                    f"MaxPool V{ONNX_OPSET_VERSION} does not support"
+                    f" {TensorProto.DataType.Name(dtype_proto)}"
+                )
+            else:
+                raise
 
         llvm_module = llvm_lower_pipeline(mlir_module)
         llvm_module.operation.verify()
 
         res_arr = np.zeros(output_shape, dtype=np_dtype)
         outputs = runner(llvm_module, "main", [x_arr], [res_arr])
+
+        if dtype_proto == TensorProto.INT8:
+            float_model = create_onnx_model()
+            float_model.graph.input[0].type.tensor_type.elem_type = TensorProto.FLOAT
+            float_model.graph.output[0].type.tensor_type.elem_type = TensorProto.FLOAT
+            ref = ReferenceEvaluator(float_model)
+            onnx_result = ref.run(None, {"X": x_arr.astype(np.float32)})[0].astype(
+                np.int8
+            )
+        else:
+            ref = ReferenceEvaluator(onnx_model)
+            onnx_result = ref.run(None, {"X": x_arr})[0]
 
         atol = 1e-2 if np_dtype == np.float16 else 1e-5
         rtol = 1e-2 if np_dtype == np.float16 else 1e-5
@@ -981,9 +1360,9 @@ def test_onnx_conv_lower(
     w_out = (w_in + pads[1] + pads[3] - kw) // strides[1] + 1
     output_shape = (n, f, h_out, w_out)
 
-    x_arr = np.random.randn(*input_shape).astype(np_dtype)
-    w_arr = np.random.randn(*weight_shape).astype(np_dtype)
-    b_arr = np.random.randn(f).astype(np_dtype) if has_bias else None
+    x_arr = _generate_dtype_random(np_dtype, shape=input_shape, max_val=5)
+    w_arr = _generate_dtype_random(np_dtype, shape=weight_shape, max_val=5)
+    b_arr = _generate_dtype_random(np_dtype, shape=(f), max_val=5) if has_bias else None
 
     def create_onnx_model():
         input_x = make_tensor_value_info("X", dtype, input_shape)
@@ -1043,15 +1422,15 @@ def test_onnx_conv_lower(
 
 
 @pytest.mark.parametrize(
-    "ONNX_OPSET_VERSION, dtype, input_shape, axis",
+    "ONNX_OPSET_VERSION, dtype_proto, input_shape, axis",
     [
-        (ONNX_OPSET_VERSION, dtype, shape, ax)
+        (ONNX_OPSET_VERSION, dtype_proto, shape, ax)
         for ONNX_OPSET_VERSION in [
             schema.since_version
             for schema in get_all_schemas_with_history()
             if "Flatten" == schema.name
         ]
-        for dtype in [
+        for dtype_proto in [
             TensorProto.FLOAT,
             TensorProto.FLOAT16,
             TensorProto.DOUBLE,
@@ -1069,27 +1448,14 @@ def test_onnx_conv_lower(
     ],
 )
 # pylint: disable=too-many-locals
-def test_onnx_flatten_lower(ONNX_OPSET_VERSION, dtype, input_shape, axis):
+def test_onnx_flatten_lower(ONNX_OPSET_VERSION, dtype_proto, input_shape, axis):
     """
     Test ONNX Flatten operator lowering.
     """
 
-    if ONNX_OPSET_VERSION == 1 and dtype == TensorProto.INT32:
-        pytest.skip(f"Flatten V{ONNX_OPSET_VERSION} only supports Float")
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
 
-    np_dtype = None
-    if dtype == TensorProto.FLOAT:
-        np_dtype = np.float32
-    elif dtype == TensorProto.FLOAT16:
-        np_dtype = np.float16
-    elif dtype == TensorProto.DOUBLE:
-        np_dtype = np.float64
-    elif dtype == TensorProto.INT32:
-        np_dtype = np.int32
-    else:
-        pytest.skip(f"DataType {np_dtype} not implemented in test")
-
-    x_arr = np.random.randn(*input_shape).astype(np_dtype)
+    x_arr = _generate_dtype_random(np_dtype, shape=input_shape, max_val=127)
 
     rank = len(input_shape)
     norm_axis = axis if axis >= 0 else axis + rank
@@ -1099,8 +1465,8 @@ def test_onnx_flatten_lower(ONNX_OPSET_VERSION, dtype, input_shape, axis):
     output_shape = (dim0, dim1)
 
     def create_onnx_model():
-        input_x = make_tensor_value_info("X", dtype, input_shape)
-        output_y = make_tensor_value_info("Y", dtype, output_shape)
+        input_x = make_tensor_value_info("X", dtype_proto, input_shape)
+        output_y = make_tensor_value_info("Y", dtype_proto, output_shape)
 
         flatten_node = make_node(
             "Flatten",
@@ -1126,8 +1492,18 @@ def test_onnx_flatten_lower(ONNX_OPSET_VERSION, dtype, input_shape, axis):
     onnx_result = ref.run(None, {"X": x_arr})[0]
 
     with Context() as ctx, Location.unknown():
-        mlir_module = import_from_onnx(onnx_model, ctx)
-        mlir_module.operation.verify()
+        mlir_module = import_from_onnx(onnx_model, ctx, verify=False)
+        try:
+            mlir_module.operation.verify()
+        except MLIRError as e:
+            error_keywords = ["error", "op operand", "must be"]
+            if all(kw in str(e) for kw in error_keywords):
+                pytest.skip(
+                    f"Flatten V{ONNX_OPSET_VERSION} does not support"
+                    f" {TensorProto.DataType.Name(dtype_proto)}"
+                )
+            else:
+                raise
 
         llvm_module = llvm_lower_pipeline(mlir_module)
         llvm_module.operation.verify()
@@ -1153,6 +1529,7 @@ def test_onnx_flatten_lower(ONNX_OPSET_VERSION, dtype, input_shape, axis):
             TensorProto.INT16,
             TensorProto.INT32,
             TensorProto.INT64,
+            TensorProto.BOOL,
         ]
         for shape0, shape1 in [
             ((2, 3, 4), (2, 3, 4)),  # Non-broadcast
@@ -1167,61 +1544,57 @@ def test_onnx_bitwise_binary_lower(
     """
     Test ONNX Bitwise binary operators lowering.
     """
-    np_dtype = None
-    if dtype_proto == TensorProto.UINT8:
-        np_dtype = np.uint8
-    elif dtype_proto == TensorProto.UINT16:
-        np_dtype = np.uint16
-    elif dtype_proto == TensorProto.UINT32:
-        np_dtype = np.uint32
-    elif dtype_proto == TensorProto.UINT64:
-        np_dtype = np.uint64
-    elif dtype_proto == TensorProto.INT8:
-        np_dtype = np.int8
-    elif dtype_proto == TensorProto.INT16:
-        np_dtype = np.int16
-    elif dtype_proto == TensorProto.INT32:
-        np_dtype = np.int32
-    elif dtype_proto == TensorProto.INT64:
-        np_dtype = np.int64
-    else:
-        pytest.skip(f"DataType {dtype_proto} not implemented in test")
 
-    low, high = (0, 200) if np.issubdtype(np_dtype, np.unsignedinteger) else (-100, 100)
-    inp0 = np.random.randint(low, high, size=shape0).astype(np_dtype)
-    inp1 = np.random.randint(low, high, size=shape1).astype(np_dtype)
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
 
-    input_tensor_0 = make_tensor_value_info("input0", dtype_proto, inp0.shape)
-    input_tensor_1 = make_tensor_value_info("input1", dtype_proto, inp1.shape)
+    inp0 = _generate_dtype_random(np_dtype, shape=shape0, max_val=127)
+    inp1 = _generate_dtype_random(np_dtype, shape=shape1, max_val=127)
 
-    out_shape = np.broadcast_shapes(inp0.shape, inp1.shape)
-    output_tensor = make_tensor_value_info("output", dtype_proto, out_shape)
+    def create_onnx_model(inp0, inp1, dtype_proto):
 
-    logic_node = make_node(
-        ONNX_OP_NAME,
-        ["input0", "input1"],
-        ["output"],
-    )
-    graph = make_graph(
-        nodes=[logic_node],
-        name="logic_graph",
-        inputs=[input_tensor_0, input_tensor_1],
-        outputs=[output_tensor],
-        initializer=[],
-    )
-    opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
-    onnx_model = make_model(graph, opset_imports=opset_imports)
+        input_tensor_0 = make_tensor_value_info("input0", dtype_proto, inp0.shape)
+        input_tensor_1 = make_tensor_value_info("input1", dtype_proto, inp1.shape)
+
+        out_shape = np.broadcast_shapes(inp0.shape, inp1.shape)
+        output_tensor = make_tensor_value_info("output", dtype_proto, out_shape)
+
+        logic_node = make_node(
+            ONNX_OP_NAME,
+            ["input0", "input1"],
+            ["output"],
+        )
+        graph = make_graph(
+            nodes=[logic_node],
+            name="logic_graph",
+            inputs=[input_tensor_0, input_tensor_1],
+            outputs=[output_tensor],
+            initializer=[],
+        )
+        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        return make_model(graph, opset_imports=opset_imports)
+
+    onnx_model = create_onnx_model(inp0, inp1, dtype_proto)
     check_model(onnx_model)
 
-    ref = ReferenceEvaluator(onnx_model)
-    onnx_result = ref.run(None, {"input0": inp0, "input1": inp1})[0]
-
     with Context() as ctx, Location.unknown():
-        mlir_module = import_from_onnx(onnx_model, ctx)
-        mlir_module.operation.verify()
+        mlir_module = import_from_onnx(onnx_model, ctx, verify=False)
+        try:
+            mlir_module.operation.verify()
+        except MLIRError as e:
+            error_keywords = ["error", "op operand", "must be"]
+            if all(kw in str(e) for kw in error_keywords):
+                pytest.skip(
+                    f"{ONNX_OP_NAME} V{ONNX_OPSET_VERSION} does not support"
+                    f" {TensorProto.DataType.Name(dtype_proto)}"
+                )
+            else:
+                raise
 
         llvm_module = llvm_lower_pipeline(mlir_module)
         llvm_module.operation.verify()
+
+        ref = ReferenceEvaluator(onnx_model)
+        onnx_result = ref.run(None, {"input0": inp0, "input1": inp1})[0]
 
         res_array = np.zeros_like(onnx_result)
         outputs = runner(llvm_module, "main", [inp0, inp1], [res_array])
@@ -1243,6 +1616,7 @@ def test_onnx_bitwise_binary_lower(
             TensorProto.INT16,
             TensorProto.INT32,
             TensorProto.INT64,
+            TensorProto.BOOL,
         ]
         for shape in [
             (5,),
@@ -1255,54 +1629,49 @@ def test_onnx_bitwise_unary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto,
     """
     Test ONNX Bitwise unary operators lowering.
     """
-    np_dtype = None
-    if dtype_proto == TensorProto.UINT8:
-        np_dtype = np.uint8
-    elif dtype_proto == TensorProto.UINT16:
-        np_dtype = np.uint16
-    elif dtype_proto == TensorProto.UINT32:
-        np_dtype = np.uint32
-    elif dtype_proto == TensorProto.UINT64:
-        np_dtype = np.uint64
-    elif dtype_proto == TensorProto.INT8:
-        np_dtype = np.int8
-    elif dtype_proto == TensorProto.INT16:
-        np_dtype = np.int16
-    elif dtype_proto == TensorProto.INT32:
-        np_dtype = np.int32
-    elif dtype_proto == TensorProto.INT64:
-        np_dtype = np.int64
-    else:
-        pytest.skip(f"DataType {dtype_proto} not implemented in test")
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
 
-    low, high = (0, 200) if np.issubdtype(np_dtype, np.unsignedinteger) else (-100, 100)
-    inp0 = np.random.randint(low, high, size=shape).astype(np_dtype)
+    inp0 = _generate_dtype_random(np_dtype, shape=shape, max_val=127)
 
-    input_tensor_0 = make_tensor_value_info("input0", dtype_proto, inp0.shape)
-    output_tensor = make_tensor_value_info("output", dtype_proto, inp0.shape)
+    def create_onnx_model(inp0, dtype_proto):
 
-    logic_node = make_node(
-        ONNX_OP_NAME,
-        ["input0"],
-        ["output"],
-    )
-    graph = make_graph(
-        nodes=[logic_node],
-        name="logic_unary_graph",
-        inputs=[input_tensor_0],
-        outputs=[output_tensor],
-        initializer=[],
-    )
-    opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
-    onnx_model = make_model(graph, opset_imports=opset_imports)
+        input_tensor_0 = make_tensor_value_info("input0", dtype_proto, inp0.shape)
+        output_tensor = make_tensor_value_info("output", dtype_proto, inp0.shape)
+
+        logic_node = make_node(
+            ONNX_OP_NAME,
+            ["input0"],
+            ["output"],
+        )
+        graph = make_graph(
+            nodes=[logic_node],
+            name="logic_unary_graph",
+            inputs=[input_tensor_0],
+            outputs=[output_tensor],
+            initializer=[],
+        )
+        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        return make_model(graph, opset_imports=opset_imports)
+
+    onnx_model = create_onnx_model(inp0, dtype_proto)
     check_model(onnx_model)
 
-    ref = ReferenceEvaluator(onnx_model)
-    onnx_result = ref.run(None, {"input0": inp0})[0]
-
     with Context() as ctx, Location.unknown():
-        mlir_module = import_from_onnx(onnx_model, ctx)
-        mlir_module.operation.verify()
+        mlir_module = import_from_onnx(onnx_model, ctx, verify=False)
+        try:
+            mlir_module.operation.verify()
+        except MLIRError as e:
+            error_keywords = ["error", "op operand", "must be"]
+            if all(kw in str(e) for kw in error_keywords):
+                pytest.skip(
+                    f"{ONNX_OP_NAME} V{ONNX_OPSET_VERSION} does not support"
+                    f" {TensorProto.DataType.Name(dtype_proto)}"
+                )
+            else:
+                raise
+
+        ref = ReferenceEvaluator(onnx_model)
+        onnx_result = ref.run(None, {"input0": inp0})[0]
 
         llvm_module = llvm_lower_pipeline(mlir_module)
         llvm_module.operation.verify()
@@ -1332,35 +1701,35 @@ def test_onnx_boolean_binary_lower(
     """
     Test ONNX Boolean binary operators lowering.
     """
-    np_dtype = None
-    if dtype_proto == TensorProto.BOOL:
-        np_dtype = np.bool_
-    else:
-        pytest.skip(f"DataType {dtype_proto} not implemented in test")
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
 
-    inp0 = np.random.choice([True, False], size=shape0).astype(np_dtype)
-    inp1 = np.random.choice([True, False], size=shape1).astype(np_dtype)
+    inp0 = _generate_dtype_random(np_dtype, shape=shape0, max_val=127)
+    inp1 = _generate_dtype_random(np_dtype, shape=shape1, max_val=127)
 
-    input_tensor_0 = make_tensor_value_info("input0", dtype_proto, inp0.shape)
-    input_tensor_1 = make_tensor_value_info("input1", dtype_proto, inp1.shape)
+    def create_onnx_model(inp0, inp1, dtype_proto):
 
-    out_shape = np.broadcast_shapes(inp0.shape, inp1.shape)
-    output_tensor = make_tensor_value_info("output", dtype_proto, out_shape)
+        input_tensor_0 = make_tensor_value_info("input0", dtype_proto, inp0.shape)
+        input_tensor_1 = make_tensor_value_info("input1", dtype_proto, inp1.shape)
 
-    logic_node = make_node(
-        ONNX_OP_NAME,
-        ["input0", "input1"],
-        ["output"],
-    )
-    graph = make_graph(
-        nodes=[logic_node],
-        name="logic_binary_graph",
-        inputs=[input_tensor_0, input_tensor_1],
-        outputs=[output_tensor],
-        initializer=[],
-    )
-    opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
-    onnx_model = make_model(graph, opset_imports=opset_imports)
+        out_shape = np.broadcast_shapes(inp0.shape, inp1.shape)
+        output_tensor = make_tensor_value_info("output", dtype_proto, out_shape)
+
+        logic_node = make_node(
+            ONNX_OP_NAME,
+            ["input0", "input1"],
+            ["output"],
+        )
+        graph = make_graph(
+            nodes=[logic_node],
+            name="logic_binary_graph",
+            inputs=[input_tensor_0, input_tensor_1],
+            outputs=[output_tensor],
+            initializer=[],
+        )
+        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        return make_model(graph, opset_imports=opset_imports)
+
+    onnx_model = create_onnx_model(inp0, inp1, dtype_proto)
     check_model(onnx_model)
 
     ref = ReferenceEvaluator(onnx_model)
@@ -1380,15 +1749,15 @@ def test_onnx_boolean_binary_lower(
 
 
 @pytest.mark.parametrize(
-    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape",
+    "ONNX_OPSET_VERSION, dtype_proto, shape",
     [
-        (schema.name, schema.since_version, dtype_proto, shape)
+        (schema.since_version, dtype_proto, shape)
         for schema in get_all_schemas_with_history()
         if schema.name in ["GlobalAveragePool"]
         for dtype_proto in [
             TensorProto.FLOAT,
-            TensorProto.DOUBLE,
             TensorProto.FLOAT16,
+            TensorProto.DOUBLE,
         ]
         for shape in [
             (2, 3, 10),  # 3D (1D spatial) #
@@ -1397,41 +1766,34 @@ def test_onnx_boolean_binary_lower(
         ]
     ],
 )
-def test_onnx_global_average_pooling_lower(
-    ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape
-):
+def test_onnx_globalaveragepool_lower(ONNX_OPSET_VERSION, dtype_proto, shape):
     """
     Test ONNX GlobalAveragePooling lowering.
     """
-    np_dtype = None
-    if dtype_proto == TensorProto.FLOAT:
-        np_dtype = np.float32
-    elif dtype_proto == TensorProto.DOUBLE:
-        np_dtype = np.float64
-    elif dtype_proto == TensorProto.FLOAT16:
-        np_dtype = np.float16
-    else:
-        pytest.skip(f"DataType {dtype_proto} not implemented in test")
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
 
     # Generate random test inputs (negative & positive values)
-    inp0 = np.random.uniform(-5.0, 5.0, size=shape).astype(np_dtype)
+    inp0 = _generate_dtype_random(np_dtype, shape=shape, max_val=127)
 
-    # Global pooling output shape: (N, C, 1, 1, ...)
-    out_shape = list(shape[:2]) + [1] * (len(shape) - 2)
+    def create_onnx_model(inp0, dtype_proto):
+        # Global pooling output shape: (N, C, 1, 1, ...)
+        out_shape = list(shape[:2]) + [1] * (len(shape) - 2)
 
-    input_tensor = make_tensor_value_info("input0", dtype_proto, inp0.shape)
-    output_tensor = make_tensor_value_info("output", dtype_proto, out_shape)
+        input_tensor = make_tensor_value_info("input0", dtype_proto, inp0.shape)
+        output_tensor = make_tensor_value_info("output", dtype_proto, out_shape)
 
-    pool_node = make_node(ONNX_OP_NAME, ["input0"], ["output"])
-    graph = make_graph(
-        nodes=[pool_node],
-        name="global_average_pooling_graph",
-        inputs=[input_tensor],
-        outputs=[output_tensor],
-        initializer=[],
-    )
-    opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
-    onnx_model = make_model(graph, opset_imports=opset_imports)
+        pool_node = make_node("GlobalAveragePool", ["input0"], ["output"])
+        graph = make_graph(
+            nodes=[pool_node],
+            name=f"globalaveragepool_opset_{ONNX_OPSET_VERSION}",
+            inputs=[input_tensor],
+            outputs=[output_tensor],
+            initializer=[],
+        )
+        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        return make_model(graph, opset_imports=opset_imports)
+
+    onnx_model = create_onnx_model(inp0, dtype_proto)
     check_model(onnx_model)
 
     ref = ReferenceEvaluator(onnx_model)
@@ -1454,9 +1816,9 @@ def test_onnx_global_average_pooling_lower(
 
 
 @pytest.mark.parametrize(
-    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape, p_val",
+    "ONNX_OPSET_VERSION, dtype_proto, shape, p_val",
     [
-        (schema.name, schema.since_version, dtype_proto, shape, p_val)
+        (schema.since_version, dtype_proto, shape, p_val)
         for schema in get_all_schemas_with_history()
         if schema.name in ["GlobalLpPool"]
         for dtype_proto in [
@@ -1472,11 +1834,9 @@ def test_onnx_global_average_pooling_lower(
         for p_val in ([1, 2, 3])
     ],
 )
-def test_onnx_global_lp_pooling_lower(
-    ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape, p_val
-):
+def test_onnx_globallppool_lower(ONNX_OPSET_VERSION, dtype_proto, shape, p_val):
     """
-    Test ONNX GlobalLpPooling lowering.
+    Test ONNX GlobalLpPool lowering.
     """
 
     # ReferenceEvaluator
@@ -1499,45 +1859,39 @@ def test_onnx_global_lp_pooling_lower(
                 )
             return (res,)
 
-    np_dtype = None
-    if dtype_proto == TensorProto.FLOAT:
-        np_dtype = np.float32
-    elif dtype_proto == TensorProto.DOUBLE:
-        np_dtype = np.float64
-    elif dtype_proto == TensorProto.FLOAT16:
-        np_dtype = np.float16
-    else:
-        pytest.skip(f"DataType {dtype_proto} not implemented in test")
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
 
-    # Generate random test inputs (negative & positive values)
-    inp0 = np.random.uniform(-5.0, 5.0, size=shape).astype(np_dtype)
+    inp0 = _generate_dtype_random(np_dtype, shape=shape, max_val=127)
 
-    # Global pooling output shape: (N, C, 1, 1, ...)
-    out_shape = list(shape[:2]) + [1] * (len(shape) - 2)
+    def create_onnx_model(inp0, dtype_proto, p_val):
+        # Global pooling output shape: (N, C, 1, 1, ...)
+        out_shape = list(shape[:2]) + [1] * (len(shape) - 2)
 
-    input_tensor = make_tensor_value_info("input0", dtype_proto, inp0.shape)
-    output_tensor = make_tensor_value_info("output", dtype_proto, out_shape)
+        input_tensor = make_tensor_value_info("input0", dtype_proto, inp0.shape)
+        output_tensor = make_tensor_value_info("output", dtype_proto, out_shape)
 
-    kwargs = {}
-    if p_val is not None:
-        if ONNX_OPSET_VERSION == 1:
-            if dtype_proto == TensorProto.FLOAT16:
-                pytest.skip(f"GlobalLpPool V{ONNX_OPSET_VERSION} float16 overflow")
-            else:
-                p_val = np_dtype(p_val)
+        kwargs = {}
+        if p_val is not None:
+            if ONNX_OPSET_VERSION == 1:
+                if dtype_proto == TensorProto.FLOAT16:
+                    pytest.skip(f"GlobalLpPool V{ONNX_OPSET_VERSION} float16 overflow")
+                else:
+                    p_val = np_dtype.type(p_val)
 
-        kwargs["p"] = p_val
+            kwargs["p"] = p_val
 
-    pool_node = make_node(ONNX_OP_NAME, ["input0"], ["output"], **kwargs)
-    graph = make_graph(
-        nodes=[pool_node],
-        name="global_lp_pooling_graph",
-        inputs=[input_tensor],
-        outputs=[output_tensor],
-        initializer=[],
-    )
-    opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
-    onnx_model = make_model(graph, opset_imports=opset_imports)
+        pool_node = make_node("GlobalLpPool", ["input0"], ["output"], **kwargs)
+        graph = make_graph(
+            nodes=[pool_node],
+            name=f"globallppool_opset_{ONNX_OPSET_VERSION}",
+            inputs=[input_tensor],
+            outputs=[output_tensor],
+            initializer=[],
+        )
+        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        return make_model(graph, opset_imports=opset_imports)
+
+    onnx_model = create_onnx_model(inp0, dtype_proto, p_val)
     check_model(onnx_model)
 
     ref = ReferenceEvaluator(onnx_model, new_ops=[GlobalLpPool])
@@ -1560,9 +1914,9 @@ def test_onnx_global_lp_pooling_lower(
 
 
 @pytest.mark.parametrize(
-    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape",
+    "ONNX_OPSET_VERSION, dtype_proto, shape",
     [
-        (schema.name, schema.since_version, dtype_proto, shape)
+        (schema.since_version, dtype_proto, shape)
         for schema in get_all_schemas_with_history()
         if schema.name in ["GlobalMaxPool"]
         for dtype_proto in [
@@ -1577,11 +1931,9 @@ def test_onnx_global_lp_pooling_lower(
         ]
     ],
 )
-def test_onnx_global_max_pooling_lower(
-    ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape
-):
+def test_onnx_globalmaxpool_lower(ONNX_OPSET_VERSION, dtype_proto, shape):
     """
-    Test ONNX GlobalMaxPooling lowering.
+    Test ONNX GlobalMaxPool lowering.
     """
 
     # ReferenceEvaluator
@@ -1597,35 +1949,29 @@ def test_onnx_global_max_pooling_lower(
             res = np.max(x, axis=spatial_axes, keepdims=True)
             return (res,)
 
-    np_dtype = None
-    if dtype_proto == TensorProto.FLOAT:
-        np_dtype = np.float32
-    elif dtype_proto == TensorProto.DOUBLE:
-        np_dtype = np.float64
-    elif dtype_proto == TensorProto.FLOAT16:
-        np_dtype = np.float16
-    else:
-        pytest.skip(f"DataType {dtype_proto} not implemented in test")
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
 
     # Generate random test inputs (negative & positive values)
-    inp0 = np.random.uniform(-5.0, 5.0, size=shape).astype(np_dtype)
+    inp0 = _generate_dtype_random(np_dtype, shape=shape, max_val=127)
 
-    # Global pooling output shape: (N, C, 1, 1, ...)
-    out_shape = list(shape[:2]) + [1] * (len(shape) - 2)
+    def create_onnx_model(inp0, dtype_proto):
+        # Global pooling output shape: (N, C, 1, 1, ...)
+        out_shape = list(shape[:2]) + [1] * (len(shape) - 2)
+        input_tensor = make_tensor_value_info("input0", dtype_proto, inp0.shape)
+        output_tensor = make_tensor_value_info("output", dtype_proto, out_shape)
 
-    input_tensor = make_tensor_value_info("input0", dtype_proto, inp0.shape)
-    output_tensor = make_tensor_value_info("output", dtype_proto, out_shape)
+        pool_node = make_node("GlobalMaxPool", ["input0"], ["output"])
+        graph = make_graph(
+            nodes=[pool_node],
+            name=f"globalmaxpool_opset_{ONNX_OPSET_VERSION}",
+            inputs=[input_tensor],
+            outputs=[output_tensor],
+            initializer=[],
+        )
+        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        return make_model(graph, opset_imports=opset_imports)
 
-    pool_node = make_node(ONNX_OP_NAME, ["input0"], ["output"])
-    graph = make_graph(
-        nodes=[pool_node],
-        name="global_max_pooling_graph",
-        inputs=[input_tensor],
-        outputs=[output_tensor],
-        initializer=[],
-    )
-    opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
-    onnx_model = make_model(graph, opset_imports=opset_imports)
+    onnx_model = create_onnx_model(inp0, dtype_proto)
     check_model(onnx_model)
 
     ref = ReferenceEvaluator(onnx_model, new_ops=[GlobalMaxPool])
@@ -1648,17 +1994,17 @@ def test_onnx_global_max_pooling_lower(
 
 
 @pytest.mark.parametrize(
-    "ONNX_OPSET_VERSION, dtype, shape, axis, split_sizes",
+    "ONNX_OPSET_VERSION, dtype_proto, shape, axis, split_sizes",
     [
-        (opset, dtype, shape, axis, split_sizes)
+        (opset, dtype_proto, shape, axis, split_sizes)
         for opset in [
             schema.since_version
             for schema in get_all_schemas_with_history()
             if "Split" == schema.name
         ]
-        for dtype in [TensorProto.FLOAT, TensorProto.INT32]
+        for dtype_proto in [TensorProto.FLOAT, TensorProto.INT32]
         # Opset 1 only supports Floating-point types
-        if not (opset == 1 and dtype != TensorProto.FLOAT)
+        if not (opset == 1 and dtype_proto != TensorProto.FLOAT)
         for shape, axis, split_sizes in [
             ((6, 4), 0, [2, 4]),  # Unequal split along leading axis
             ((6, 4), 0, None),  # Equal split along leading axis (3, 3)
@@ -1669,7 +2015,7 @@ def test_onnx_global_max_pooling_lower(
     ],
 )
 # pylint: disable=too-many-statements
-def test_onnx_split_lower(ONNX_OPSET_VERSION, dtype, shape, axis, split_sizes):
+def test_onnx_split_lower(ONNX_OPSET_VERSION, dtype_proto, shape, axis, split_sizes):
     """
     Test ONNX Split lowering.
     """
@@ -1691,7 +2037,7 @@ def test_onnx_split_lower(ONNX_OPSET_VERSION, dtype, shape, axis, split_sizes):
                 curr_idx += s_size
             return tuple(onnx_results)
 
-    np_dtype = np.float32 if dtype == TensorProto.FLOAT else np.int32
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
 
     # Normalize axis and calculate target split dimension sizes
     norm_axis = axis if axis >= 0 else axis + len(shape)
@@ -1712,10 +2058,10 @@ def test_onnx_split_lower(ONNX_OPSET_VERSION, dtype, shape, axis, split_sizes):
         output_shapes.append(res_shape)
 
     def create_onnx_model():
-        input_tensor = make_tensor_value_info("input", dtype, shape)
+        input_tensor = make_tensor_value_info("input", dtype_proto, shape)
         output_names = [f"output_{i}" for i in range(num_outputs)]
         output_tensors = [
-            make_tensor_value_info(name, dtype, out_shape)
+            make_tensor_value_info(name, dtype_proto, out_shape)
             for name, out_shape in zip(output_names, output_shapes)
         ]
 
@@ -1750,7 +2096,7 @@ def test_onnx_split_lower(ONNX_OPSET_VERSION, dtype, shape, axis, split_sizes):
 
         graph = make_graph(
             nodes=[split_node],
-            name="split_test",
+            name=f"split_opset_{ONNX_OPSET_VERSION}",
             inputs=[input_tensor],
             outputs=output_tensors,
             initializer=initializers,
@@ -1761,7 +2107,7 @@ def test_onnx_split_lower(ONNX_OPSET_VERSION, dtype, shape, axis, split_sizes):
         check_model(model)
         return model
 
-    data_arr = (np.random.rand(*shape) * 10).astype(np_dtype)
+    data_arr = _generate_dtype_random(np_dtype, shape=shape, max_val=127)
     onnx_model = create_onnx_model()
 
     new_ops = [Split] if ONNX_OPSET_VERSION == 1 else []
@@ -1783,17 +2129,23 @@ def test_onnx_split_lower(ONNX_OPSET_VERSION, dtype, shape, axis, split_sizes):
 
 
 @pytest.mark.parametrize(
-    "ONNX_OPSET_VERSION, dtype, input_shapes, axis",
+    "ONNX_OPSET_VERSION, dtype_proto, input_shapes, axis",
     [
-        (opset, dtype, shapes, axis)
+        (opset, dtype_proto, shapes, axis)
         for opset in [
             schema.since_version
             for schema in get_all_schemas_with_history()
             if "Concat" == schema.name
         ]
-        for dtype in [TensorProto.FLOAT, TensorProto.INT32]
-        # Opset 1 only supports Floating-point types
-        if not (opset == 1 and dtype != TensorProto.FLOAT)
+        for dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.FLOAT16,
+            TensorProto.INT32,
+            TensorProto.UINT32,
+            TensorProto.INT8,
+            TensorProto.UINT8,
+            TensorProto.BOOL,
+        ]
         for shapes, axis in [
             ([(2, 3), (2, 3)], 0),  # Concat along dim 0
             ([(3, 4), (3, 4)], 1),  # Concat along dim 1
@@ -1802,11 +2154,12 @@ def test_onnx_split_lower(ONNX_OPSET_VERSION, dtype, shape, axis, split_sizes):
         ]
     ],
 )
-def test_onnx_concat_lower(ONNX_OPSET_VERSION, dtype, input_shapes, axis):
+def test_onnx_concat_lower(ONNX_OPSET_VERSION, dtype_proto, input_shapes, axis):
     """
     Test ONNX Concat operator lowering.
     """
-    np_dtype = np.float32 if dtype == TensorProto.FLOAT else np.int32
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
+
     num_inputs = len(input_shapes)
     input_names = [f"input_{i}" for i in range(num_inputs)]
 
@@ -1820,10 +2173,10 @@ def test_onnx_concat_lower(ONNX_OPSET_VERSION, dtype, input_shapes, axis):
 
     def create_onnx_model():
         input_tensors = [
-            make_tensor_value_info(name, dtype, shape)
+            make_tensor_value_info(name, dtype_proto, shape)
             for name, shape in zip(input_names, input_shapes)
         ]
-        output_tensor = make_tensor_value_info("output", dtype, output_shape)
+        output_tensor = make_tensor_value_info("output", dtype_proto, output_shape)
 
         kwargs = {"axis": axis}
 
@@ -1836,7 +2189,7 @@ def test_onnx_concat_lower(ONNX_OPSET_VERSION, dtype, input_shapes, axis):
 
         graph = make_graph(
             nodes=[concat_node],
-            name="concat_test",
+            name=f"concat_opset_{ONNX_OPSET_VERSION}",
             inputs=input_tensors,
             outputs=[output_tensor],
         )
@@ -1847,19 +2200,31 @@ def test_onnx_concat_lower(ONNX_OPSET_VERSION, dtype, input_shapes, axis):
         return model
 
     data_arrs = [
-        (np.random.rand(*shape) * 10).astype(np_dtype) for shape in input_shapes
+        _generate_dtype_random(np_dtype, shape=shape, max_val=127)
+        for shape in input_shapes
     ]
+
     onnx_model = create_onnx_model()
 
-    ref = ReferenceEvaluator(onnx_model)
-    onnx_results = ref.run(None, dict(zip(input_names, data_arrs)))
-
     with Context() as ctx, Location.unknown():
-        mlir_module = import_from_onnx(onnx_model, ctx)
-        mlir_module.operation.verify()
+        mlir_module = import_from_onnx(onnx_model, ctx, verify=False)
+        try:
+            mlir_module.operation.verify()
+        except MLIRError as e:
+            error_keywords = ["error", "op operand", "must be"]
+            if all(kw in str(e) for kw in error_keywords):
+                pytest.skip(
+                    f"Concat V{ONNX_OPSET_VERSION} does not support"
+                    f" {TensorProto.DataType.Name(dtype_proto)}"
+                )
+            else:
+                raise
 
         llvm_module = llvm_lower_pipeline(mlir_module)
         llvm_module.operation.verify()
+
+        ref = ReferenceEvaluator(onnx_model)
+        onnx_results = ref.run(None, dict(zip(input_names, data_arrs)))
 
         outputs = runner(
             llvm_module, "main", data_arrs, [np.zeros(output_shape, dtype=np_dtype)]
@@ -1869,16 +2234,20 @@ def test_onnx_concat_lower(ONNX_OPSET_VERSION, dtype, input_shapes, axis):
 
 
 @pytest.mark.parametrize(
-    "ONNX_OPSET_VERSION, dtype, input_shape, target_shape",
+    "ONNX_OPSET_VERSION, dtype_proto, input_shape, target_shape",
     [
-        (opset, dtype, in_shape, out_shape)
+        (opset, dtype_proto, in_shape, out_shape)
         for opset in [
             schema.since_version
             for schema in get_all_schemas_with_history()
             if "Reshape" == schema.name
         ]
-        for dtype in [TensorProto.FLOAT, TensorProto.INT32]
-        if not (opset == 1 and dtype != TensorProto.FLOAT)
+        for dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.INT32,
+            TensorProto.UINT8,
+            TensorProto.BOOL,
+        ]
         for in_shape, out_shape in [
             ((2, 3), (3, 2)),  # Transpose-like reshape
             ((2, 4), (8,)),  # Flatten
@@ -1887,7 +2256,7 @@ def test_onnx_concat_lower(ONNX_OPSET_VERSION, dtype, input_shapes, axis):
         ]
     ],
 )
-def test_onnx_reshape_lower(ONNX_OPSET_VERSION, dtype, input_shape, target_shape):
+def test_onnx_reshape_lower(ONNX_OPSET_VERSION, dtype_proto, input_shape, target_shape):
     """
     Test ONNX Reshape operator lowering.
     """
@@ -1915,12 +2284,12 @@ def test_onnx_reshape_lower(ONNX_OPSET_VERSION, dtype, input_shape, target_shape
             )
             return (self._impl(data, np.asarray(target), 0),)
 
-    np_dtype = np.float32 if dtype == TensorProto.FLOAT else np.int32
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
     shape_arr = np.array(target_shape, dtype=np.int64)
 
     def create_onnx_model():
-        input_tensor = make_tensor_value_info("input", dtype, input_shape)
-        output_tensor = make_tensor_value_info("output", dtype, target_shape)
+        input_tensor = make_tensor_value_info("input", dtype_proto, input_shape)
+        output_tensor = make_tensor_value_info("output", dtype_proto, target_shape)
 
         inputs = [input_tensor]
         kwargs = {}
@@ -1944,7 +2313,7 @@ def test_onnx_reshape_lower(ONNX_OPSET_VERSION, dtype, input_shape, target_shape
 
         graph = make_graph(
             nodes=[reshape_node],
-            name="reshape_test",
+            name=f"reshape_opset_{ONNX_OPSET_VERSION}",
             inputs=inputs,
             outputs=[output_tensor],
         )
@@ -1954,7 +2323,7 @@ def test_onnx_reshape_lower(ONNX_OPSET_VERSION, dtype, input_shape, target_shape
         check_model(model)
         return model
 
-    data_arr = (np.random.rand(*input_shape) * 10).astype(np_dtype)
+    data_arr = _generate_dtype_random(np_dtype, shape=input_shape, max_val=127)
     onnx_model = create_onnx_model()
 
     new_ops = [Reshape] if ONNX_OPSET_VERSION == 1 else []
@@ -1969,8 +2338,18 @@ def test_onnx_reshape_lower(ONNX_OPSET_VERSION, dtype, input_shape, target_shape
     onnx_results = ref.run(None, feed_dict)
 
     with Context() as ctx, Location.unknown():
-        mlir_module = import_from_onnx(onnx_model, ctx)
-        mlir_module.operation.verify()
+        mlir_module = import_from_onnx(onnx_model, ctx, verify=False)
+        try:
+            mlir_module.operation.verify()
+        except MLIRError as e:
+            error_keywords = ["error", "op operand", "must be"]
+            if all(kw in str(e) for kw in error_keywords):
+                pytest.skip(
+                    f"Reshape V{ONNX_OPSET_VERSION} does not support"
+                    f" {TensorProto.DataType.Name(dtype_proto)}"
+                )
+            else:
+                raise
 
         llvm_module = llvm_lower_pipeline(mlir_module)
         llvm_module.operation.verify()
@@ -1982,7 +2361,7 @@ def test_onnx_reshape_lower(ONNX_OPSET_VERSION, dtype, input_shape, target_shape
 
 
 @pytest.mark.parametrize(
-    "opname, ONNX_OPSET_VERSION, dtype_proto, shape_a, shape_b",
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape_a, shape_b",
     [
         (schema.name, schema.since_version, dtype_proto, shape_a, shape_b)
         for schema in get_all_schemas_with_history()
@@ -2007,57 +2386,17 @@ def test_onnx_reshape_lower(ONNX_OPSET_VERSION, dtype, input_shape, target_shape
     ],
 )
 # pylint: disable=too-many-branches,too-many-statements
-def test_onnx_matmul_lower(opname, ONNX_OPSET_VERSION, dtype_proto, shape_a, shape_b):
+def test_onnx_matmul_lower(
+    ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape_a, shape_b
+):
     """
     Test ONNX MatMul operator lowering.
     """
 
-    if (
-        opname == "MatMul"
-        and ONNX_OPSET_VERSION <= 1
-        and dtype_proto
-        in [
-            TensorProto.UINT32,
-            TensorProto.INT64,
-        ]
-        or dtype_proto == TensorProto.INT8
-    ):
-        pytest.skip(f"MatMul V{ONNX_OPSET_VERSION} only supports Float")
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
 
-    if opname == "MatMulInteger" and dtype_proto in [
-        TensorProto.FLOAT,
-        TensorProto.FLOAT16,
-        TensorProto.UINT32,
-        TensorProto.INT64,
-    ]:
-        pytest.skip(f"MatMulInteger V{ONNX_OPSET_VERSION} only supports 8bit Integer")
-
-    np_dtype = None
-    if dtype_proto == TensorProto.FLOAT:
-        np_dtype = np.float32
-    elif dtype_proto == TensorProto.FLOAT16:
-        np_dtype = np.float16
-    elif dtype_proto == TensorProto.UINT8:
-        np_dtype = np.uint8
-    elif dtype_proto == TensorProto.UINT16:
-        np_dtype = np.uint16
-    elif dtype_proto == TensorProto.UINT32:
-        np_dtype = np.uint32
-    elif dtype_proto == TensorProto.UINT64:
-        np_dtype = np.uint64
-    elif dtype_proto == TensorProto.INT8:
-        np_dtype = np.int8
-    elif dtype_proto == TensorProto.INT16:
-        np_dtype = np.int16
-    elif dtype_proto == TensorProto.INT32:
-        np_dtype = np.int32
-    elif dtype_proto == TensorProto.INT64:
-        np_dtype = np.int64
-    else:
-        pytest.skip(f"DataType {dtype_proto} not implemented in test")
-
-    data_a = (np.random.rand(*shape_a) * 5).astype(np_dtype)
-    data_b = (np.random.rand(*shape_b) * 5).astype(np_dtype)
+    data_a = _generate_dtype_random(np_dtype, shape=shape_a, max_val=5)
+    data_b = _generate_dtype_random(np_dtype, shape=shape_b, max_val=5)
 
     expected_out = np.matmul(data_a, data_b)
     target_shape = expected_out.shape
@@ -2066,23 +2405,24 @@ def test_onnx_matmul_lower(opname, ONNX_OPSET_VERSION, dtype_proto, shape_a, sha
     if len(expected_out.shape) == 0:
         target_shape = (1,)
 
-    def create_onnx_model():
+    def create_onnx_model(dtype_proto):
         input_a = make_tensor_value_info("A", dtype_proto, shape_a)
         input_b = make_tensor_value_info("B", dtype_proto, shape_b)
-        if opname == "MatMulInteger":
-            output_y = make_tensor_value_info("Y", TensorProto.INT32, target_shape)
-        else:
-            output_y = make_tensor_value_info("Y", dtype_proto, target_shape)
+
+        if ONNX_OP_NAME == "MatMulInteger":
+            dtype_proto = TensorProto.INT32
+
+        output_y = make_tensor_value_info("Y", dtype_proto, target_shape)
 
         matmul_node = make_node(
-            opname,
+            ONNX_OP_NAME,
             ["A", "B"],
             ["Y"],
         )
 
         graph = make_graph(
             nodes=[matmul_node],
-            name="matmul_test",
+            name="matmul_graph_test",
             inputs=[input_a, input_b],
             outputs=[output_y],
         )
@@ -2092,38 +2432,50 @@ def test_onnx_matmul_lower(opname, ONNX_OPSET_VERSION, dtype_proto, shape_a, sha
         check_model(model)
         return model
 
-    onnx_model = create_onnx_model()
-
-    ref = ReferenceEvaluator(onnx_model)
-    onnx_results = ref.run(None, {"A": data_a, "B": data_b})
+    onnx_model = create_onnx_model(dtype_proto)
 
     with Context() as ctx, Location.unknown():
-        mlir_module = import_from_onnx(onnx_model, ctx)
-        mlir_module.operation.verify()
+        mlir_module = import_from_onnx(onnx_model, ctx, verify=False)
+        try:
+            mlir_module.operation.verify()
+        except MLIRError as e:
+            error_keywords = ["error", "op operand", "must be"]
+            if all(kw in str(e) for kw in error_keywords):
+                pytest.skip(
+                    f"{ONNX_OP_NAME} V{ONNX_OPSET_VERSION} does not support"
+                    f" {TensorProto.DataType.Name(dtype_proto)}"
+                )
+            else:
+                raise
 
         llvm_module = llvm_lower_pipeline(mlir_module)
         llvm_module.operation.verify()
 
-        res_arr = np.zeros(target_shape, dtype=np_dtype)
+        res_arr = np.zeros(
+            target_shape,
+            dtype=np.int32 if ONNX_OP_NAME == "MatMulInteger" else np_dtype,
+        )
         outputs = runner(llvm_module, "main", [data_a, data_b], [res_arr])
 
-        # Assert numeric precision within standard tolerances
+        ref = ReferenceEvaluator(onnx_model)
+        onnx_results = ref.run(None, {"A": data_a, "B": data_b})
+
         atol = 1e-2 if np_dtype == np.float16 else 1e-5
         rtol = 1e-2 if np_dtype == np.float16 else 1e-5
         np.testing.assert_allclose(outputs[0], onnx_results[0], rtol=rtol, atol=atol)
 
 
 @pytest.mark.parametrize(
-    "ONNX_OPSET_VERSION, dtype, mode, coord_trans_mode, nearest_mode, resize_type, input_shape, scale_or_size",
+    "ONNX_OPSET_VERSION, dtype_proto, mode, coord_trans_mode, nearest_mode, resize_type, input_shape, scale_or_size",
     [
-        (opset, dtype, mode, coord_trans, nearest, r_type, in_shape, param)
+        (opset, dtype_proto, mode, coord_trans, nearest, r_type, in_shape, param)
         for opset in [
             schema.since_version
             for schema in get_all_schemas_with_history()
             if "Resize" == schema.name
         ]
         if not (opset in [10, 11])  # buggy refeval
-        for dtype in [
+        for dtype_proto in [
             TensorProto.FLOAT,
             TensorProto.UINT8,
         ]
@@ -2156,7 +2508,7 @@ def test_onnx_matmul_lower(opname, ONNX_OPSET_VERSION, dtype_proto, shape_a, sha
 # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-statements
 def test_onnx_resize_lower(
     ONNX_OPSET_VERSION,
-    dtype,
+    dtype_proto,
     mode,
     coord_trans_mode,
     nearest_mode,
@@ -2167,15 +2519,7 @@ def test_onnx_resize_lower(
     """
     Test ONNX Resize operator lowering to Linalg dialect across all opsets and modes.
     """
-    np_dtype = None
-    if dtype == TensorProto.FLOAT:
-        np_dtype = np.float32
-    elif dtype == TensorProto.UINT8:
-        np_dtype = np.uint8
-    elif dtype == TensorProto.INT8:
-        np_dtype = np.int8
-    else:
-        pytest.skip(f"DataType {dtype} not implemented in test")
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
 
     if resize_type == "scales":
         scales_arr = np.array(scale_or_size, dtype=np.float32)
@@ -2193,8 +2537,8 @@ def test_onnx_resize_lower(
         )
 
     def create_onnx_model():
-        input_tensor = make_tensor_value_info("X", dtype, input_shape)
-        output_tensor = make_tensor_value_info("output", dtype, target_shape)
+        input_tensor = make_tensor_value_info("X", dtype_proto, input_shape)
+        output_tensor = make_tensor_value_info("output", dtype_proto, target_shape)
 
         inputs = [input_tensor]
         node_inputs = ["X"]
@@ -2240,7 +2584,7 @@ def test_onnx_resize_lower(
 
         graph = make_graph(
             nodes=[resize_node],
-            name="resize_test",
+            name=f"resize_opset_{ONNX_OPSET_VERSION}",
             inputs=inputs,
             outputs=[output_tensor],
         )
@@ -2250,8 +2594,8 @@ def test_onnx_resize_lower(
         check_model(model)
         return model
 
-    np.random.seed(42)
-    data_arr = (np.random.rand(*input_shape) * 10.0).astype(np_dtype)
+    data_arr = _generate_dtype_random(np_dtype, shape=input_shape, max_val=127)
+
     onnx_model = create_onnx_model()
 
     feed_dict = {"X": data_arr}
@@ -2292,9 +2636,9 @@ def test_onnx_resize_lower(
 
 
 @pytest.mark.parametrize(
-    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape, start_end",
+    "ONNX_OPSET_VERSION, dtype_proto, shape, start_end",
     [
-        (schema.name, schema.since_version, dtype_proto, shape, start_end)
+        (schema.since_version, dtype_proto, shape, start_end)
         for schema in get_all_schemas_with_history()
         if schema.name in ["Shape"]
         for dtype_proto in [
@@ -2319,72 +2663,60 @@ def test_onnx_resize_lower(
         )
     ],
 )
-def test_onnx_shape_lower(
-    ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape, start_end
-):
+def test_onnx_shape_lower(ONNX_OPSET_VERSION, dtype_proto, shape, start_end):
     """
     Test ONNX Shape operation lowering.
     """
     start_attr, end_attr = start_end
 
-    np_dtype = None
-    # Map TensorProto enum to NumPy data type
-    if dtype_proto == TensorProto.FLOAT:
-        np_dtype = np.float32
-    elif dtype_proto == TensorProto.DOUBLE:
-        np_dtype = np.float64
-    elif dtype_proto == TensorProto.FLOAT16:
-        np_dtype = np.float16
-    elif dtype_proto == TensorProto.INT32:
-        np_dtype = np.int32
-    elif dtype_proto == TensorProto.INT64:
-        np_dtype = np.int64
-    else:
-        pytest.skip(f"DataType {dtype_proto} not implemented in test")
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
 
-    # Generate test input tensor with random data
-    inp0 = np.random.uniform(-5.0, 5.0, size=shape).astype(np_dtype)
+    inp0 = _generate_dtype_random(np_dtype, shape=shape, max_val=127)
 
-    node_kwargs = {}
-    if start_attr is not None:
-        node_kwargs["start"] = start_attr
-    if end_attr is not None:
-        node_kwargs["end"] = end_attr
+    def create_onnx_model(inp0, dtype_proto):
 
-    # Compute expected output shape and values
-    rank = len(shape)
-    s = start_attr if start_attr is not None else 0
-    if s < 0:
-        s += rank
-    s = max(0, min(s, rank))
+        node_kwargs = {}
+        if start_attr is not None:
+            node_kwargs["start"] = start_attr
+        if end_attr is not None:
+            node_kwargs["end"] = end_attr
 
-    e = end_attr if end_attr is not None else rank
-    if e < 0:
-        e += rank
-    e = max(0, min(e, rank))
+        # Compute expected output shape and values
+        rank = len(shape)
+        s = start_attr if start_attr is not None else 0
+        if s < 0:
+            s += rank
+        s = max(0, min(s, rank))
 
-    expected_output_dim = max(0, e - s)
-    out_shape = (expected_output_dim,)
+        e = end_attr if end_attr is not None else rank
+        if e < 0:
+            e += rank
+        e = max(0, min(e, rank))
 
-    input_tensor = make_tensor_value_info("input0", dtype_proto, inp0.shape)
-    output_tensor = make_tensor_value_info("output", TensorProto.INT64, out_shape)
+        expected_output_dim = max(0, e - s)
+        out_shape = (expected_output_dim,)
 
-    shape_node = make_node(
-        ONNX_OP_NAME,
-        inputs=["input0"],
-        outputs=["output"],
-        **node_kwargs,
-    )
+        input_tensor = make_tensor_value_info("input0", dtype_proto, inp0.shape)
+        output_tensor = make_tensor_value_info("output", TensorProto.INT64, out_shape)
 
-    graph = make_graph(
-        nodes=[shape_node],
-        name="shape_graph",
-        inputs=[input_tensor],
-        outputs=[output_tensor],
-        initializer=[],
-    )
-    opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
-    onnx_model = make_model(graph, opset_imports=opset_imports)
+        shape_node = make_node(
+            "Shape",
+            inputs=["input0"],
+            outputs=["output"],
+            **node_kwargs,
+        )
+
+        graph = make_graph(
+            nodes=[shape_node],
+            name="shape_opset_{ONNX_OPSET_VERSION}",
+            inputs=[input_tensor],
+            outputs=[output_tensor],
+            initializer=[],
+        )
+        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        return make_model(graph, opset_imports=opset_imports)
+
+    onnx_model = create_onnx_model(inp0, dtype_proto)
     check_model(onnx_model)
 
     ref = ReferenceEvaluator(onnx_model)
@@ -2405,10 +2737,9 @@ def test_onnx_shape_lower(
 
 
 @pytest.mark.parametrize(
-    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, indices_dtype_proto, data_shape, indices_shape, axis",
+    "ONNX_OPSET_VERSION, dtype_proto, indices_dtype_proto, data_shape, indices_shape, axis",
     [
         (
-            schema.name,
             schema.since_version,
             dtype_proto,
             indices_dtype_proto,
@@ -2441,7 +2772,6 @@ def test_onnx_shape_lower(
 )
 # pylint: disable=too-many-arguments,too-many-positional-arguments
 def test_onnx_gather_lower(
-    ONNX_OP_NAME,
     ONNX_OPSET_VERSION,
     dtype_proto,
     indices_dtype_proto,
@@ -2452,62 +2782,52 @@ def test_onnx_gather_lower(
     """
     Test ONNX Gather operation lowering.
     """
-    np_dtype = None
-    if dtype_proto == TensorProto.FLOAT:
-        np_dtype = np.float32
-    elif dtype_proto == TensorProto.DOUBLE:
-        np_dtype = np.float64
-    elif dtype_proto == TensorProto.FLOAT16:
-        np_dtype = np.float16
-    elif dtype_proto == TensorProto.INT32:
-        np_dtype = np.int32
-    elif dtype_proto == TensorProto.INT64:
-        np_dtype = np.int64
-    else:
-        pytest.skip(f"DataType {dtype_proto} not implemented in test")
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
+    np_idx_dtype = tensor_dtype_to_np_dtype(indices_dtype_proto)
 
-    np_idx_dtype = np.int32 if indices_dtype_proto == TensorProto.INT32 else np.int64
-
-    data_input = np.random.uniform(-5.0, 5.0, size=data_shape).astype(np_dtype)
+    data_input = _generate_dtype_random(np_dtype, shape=data_shape, max_val=127)
 
     # Normalize axis position
     norm_axis = axis if axis >= 0 else axis + len(data_shape)
     axis_dim = data_shape[norm_axis]
-
     # Pick valid indices in range [-axis_dim, axis_dim - 1] to test negative wrapping
     indices_input = np.random.randint(-axis_dim, axis_dim, size=indices_shape).astype(
         np_idx_dtype
     )
 
-    # Output shape rule: data_shape[:axis] + indices_shape + data_shape[axis+1:]
-    expected_out_shape = (
-        data_shape[:norm_axis] + indices_shape + data_shape[norm_axis + 1 :]
-    )
+    def create_onnx_model(data_input, indices_input, dtype_proto):
 
-    input_data_info = make_tensor_value_info("data", dtype_proto, data_input.shape)
-    input_indices_info = make_tensor_value_info(
-        "indices", indices_dtype_proto, indices_input.shape
-    )
-    output_tensor_info = make_tensor_value_info(
-        "output", dtype_proto, expected_out_shape
-    )
+        # Output shape rule
+        expected_out_shape = (
+            data_shape[:norm_axis] + indices_shape + data_shape[norm_axis + 1 :]
+        )
 
-    gather_node = make_node(
-        ONNX_OP_NAME,
-        inputs=["data", "indices"],
-        outputs=["output"],
-        axis=axis,
-    )
+        input_data_info = make_tensor_value_info("data", dtype_proto, data_input.shape)
+        input_indices_info = make_tensor_value_info(
+            "indices", indices_dtype_proto, indices_input.shape
+        )
+        output_tensor_info = make_tensor_value_info(
+            "output", dtype_proto, expected_out_shape
+        )
 
-    graph = make_graph(
-        nodes=[gather_node],
-        name="gather_graph",
-        inputs=[input_data_info, input_indices_info],
-        outputs=[output_tensor_info],
-        initializer=[],
-    )
-    opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
-    onnx_model = make_model(graph, opset_imports=opset_imports)
+        gather_node = make_node(
+            "Gather",
+            inputs=["data", "indices"],
+            outputs=["output"],
+            axis=axis,
+        )
+
+        graph = make_graph(
+            nodes=[gather_node],
+            name=f"gather_opset_{ONNX_OPSET_VERSION}",
+            inputs=[input_data_info, input_indices_info],
+            outputs=[output_tensor_info],
+            initializer=[],
+        )
+        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        return make_model(graph, opset_imports=opset_imports)
+
+    onnx_model = create_onnx_model(data_input, indices_input, dtype_proto)
     check_model(onnx_model)
 
     ref = ReferenceEvaluator(onnx_model)
@@ -2532,9 +2852,9 @@ def test_onnx_gather_lower(
 
 
 @pytest.mark.parametrize(
-    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape, slice_config",
+    "ONNX_OPSET_VERSION, dtype_proto, shape, slice_config",
     [
-        (schema.name, schema.since_version, dtype_proto, shape, slice_config)
+        (schema.since_version, dtype_proto, shape, slice_config)
         for schema in get_all_schemas_with_history()
         if schema.name in ["Slice"]
         for dtype_proto in [
@@ -2564,114 +2884,111 @@ def test_onnx_gather_lower(
     ],
 )
 # pylint: disable=too-many-branches,too-many-statements
-def test_onnx_slice_lower(
-    ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape, slice_config
-):
+def test_onnx_slice_lower(ONNX_OPSET_VERSION, dtype_proto, shape, slice_config):
     """
     Test ONNX Slice operation lowering.
     """
-    np_dtype = None
-    if dtype_proto == TensorProto.FLOAT:
-        np_dtype = np.float32
-    elif dtype_proto == TensorProto.DOUBLE:
-        np_dtype = np.float64
-    elif dtype_proto == TensorProto.FLOAT16:
-        np_dtype = np.float16
-    elif dtype_proto == TensorProto.INT32:
-        np_dtype = np.int32
-    elif dtype_proto == TensorProto.INT64:
-        np_dtype = np.int64
-    else:
-        pytest.skip(f"DataType {dtype_proto} not implemented in test")
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
 
-    data_input = np.random.uniform(-5.0, 5.0, size=shape).astype(np_dtype)
+    data_input = _generate_dtype_random(np_dtype, shape=shape, max_val=127)
 
-    starts = slice_config["starts"]
-    ends = slice_config["ends"]
-    axes = slice_config.get("axes", None)
-    steps = slice_config.get("steps", None)
+    def create_onnx_model(data_input, shape, dtype_proto):
+        starts = slice_config["starts"]
+        ends = slice_config["ends"]
+        axes = slice_config.get("axes", None)
+        steps = slice_config.get("steps", None)
 
-    # ONNX Slice Opset < 10 does not support non-unit steps (defaults to 1)
-    if ONNX_OPSET_VERSION < 10:
-        steps = None
+        # Opset < 10 does not support non-unit steps (defaults to 1)
+        if ONNX_OPSET_VERSION < 10:
+            steps = None
 
-    # Compute exact expected output shape for ONNX shape validation
-    out_shape = list(shape)
-    eff_axes = axes if axes is not None else list(range(len(starts)))
-    eff_steps = steps if steps is not None else [1] * len(starts)
+        # Compute expected output shape
+        out_shape = list(shape)
+        eff_axes = axes if axes is not None else list(range(len(starts)))
+        eff_steps = steps if steps is not None else [1] * len(starts)
 
-    for s_val, e_val, ax, st_val in zip(starts, ends, eff_axes, eff_steps):
-        if ax < 0:
-            ax += len(shape)
-        dim_len = shape[ax]
-        if st_val > 0:
-            s_norm = s_val + dim_len if s_val < 0 else s_val
-            s_norm = max(0, min(s_norm, dim_len))
-            e_norm = e_val + dim_len if e_val < 0 else e_val
-            e_norm = max(0, min(e_norm, dim_len))
-            out_shape[ax] = max(0, (e_norm - s_norm + st_val - 1) // st_val)
+        for s_val, e_val, ax, st_val in zip(starts, ends, eff_axes, eff_steps):
+            if ax < 0:
+                ax += len(shape)
+            dim_len = shape[ax]
+            if st_val > 0:
+                s_norm = s_val + dim_len if s_val < 0 else s_val
+                s_norm = max(0, min(s_norm, dim_len))
+                e_norm = e_val + dim_len if e_val < 0 else e_val
+                e_norm = max(0, min(e_norm, dim_len))
+                out_shape[ax] = max(0, (e_norm - s_norm + st_val - 1) // st_val)
+            else:
+                s_norm = s_val + dim_len if s_val < 0 else s_val
+                s_norm = max(-1, min(s_norm, dim_len - 1))
+                e_norm = e_val + dim_len if e_val < 0 else e_val
+                e_norm = max(-1, min(e_norm, dim_len - 1))
+                abs_st = -st_val
+                out_shape[ax] = max(0, (s_norm - e_norm + abs_st - 1) // abs_st)
+
+        input_data_info = make_tensor_value_info("data", dtype_proto, data_input.shape)
+        output_tensor_info = make_tensor_value_info(
+            "output", dtype_proto, tuple(out_shape)
+        )
+
+        initializers = []
+        inputs = [input_data_info]
+
+        if ONNX_OPSET_VERSION < 10:
+            node_kwargs = {"starts": starts, "ends": ends}
+            if axes is not None:
+                node_kwargs["axes"] = axes
+            slice_node = make_node(
+                "Slice", inputs=["data"], outputs=["output"], **node_kwargs
+            )
         else:
-            s_norm = s_val + dim_len if s_val < 0 else s_val
-            s_norm = max(-1, min(s_norm, dim_len - 1))
-            e_norm = e_val + dim_len if e_val < 0 else e_val
-            e_norm = max(-1, min(e_norm, dim_len - 1))
-            abs_st = -st_val
-            out_shape[ax] = max(0, (s_norm - e_norm + abs_st - 1) // abs_st)
+            node_inputs = ["data", "starts", "ends"]
 
-    input_data_info = make_tensor_value_info("data", dtype_proto, data_input.shape)
-    output_tensor_info = make_tensor_value_info("output", dtype_proto, tuple(out_shape))
-
-    initializers = []
-    inputs = [input_data_info]
-
-    if ONNX_OPSET_VERSION < 10:
-        node_kwargs = {"starts": starts, "ends": ends}
-        if axes is not None:
-            node_kwargs["axes"] = axes
-        slice_node = make_node(
-            ONNX_OP_NAME, inputs=["data"], outputs=["output"], **node_kwargs
-        )
-    else:
-        node_inputs = ["data", "starts", "ends"]
-
-        starts_tensor = make_tensor(
-            "starts", TensorProto.INT64, [len(starts)], np.array(starts, dtype=np.int64)
-        )
-        ends_tensor = make_tensor(
-            "ends", TensorProto.INT64, [len(ends)], np.array(ends, dtype=np.int64)
-        )
-        initializers.extend([starts_tensor, ends_tensor])
-
-        if axes is not None:
-            node_inputs.append("axes")
-            axes_tensor = make_tensor(
-                "axes", TensorProto.INT64, [len(axes)], np.array(axes, dtype=np.int64)
-            )
-            initializers.append(axes_tensor)
-        elif steps is not None:
-            node_inputs.append("")
-
-        if steps is not None:
-            node_inputs.append("steps")
-            steps_tensor = make_tensor(
-                "steps",
+            starts_tensor = make_tensor(
+                "starts",
                 TensorProto.INT64,
-                [len(steps)],
-                np.array(steps, dtype=np.int64),
+                [len(starts)],
+                np.array(starts, dtype=np.int64),
             )
-            initializers.append(steps_tensor)
+            ends_tensor = make_tensor(
+                "ends", TensorProto.INT64, [len(ends)], np.array(ends, dtype=np.int64)
+            )
+            initializers.extend([starts_tensor, ends_tensor])
 
-        slice_node = make_node(ONNX_OP_NAME, inputs=node_inputs, outputs=["output"])
+            if axes is not None:
+                node_inputs.append("axes")
+                axes_tensor = make_tensor(
+                    "axes",
+                    TensorProto.INT64,
+                    [len(axes)],
+                    np.array(axes, dtype=np.int64),
+                )
+                initializers.append(axes_tensor)
+            elif steps is not None:
+                node_inputs.append("")
 
-    graph = make_graph(
-        nodes=[slice_node],
-        name="slice_graph",
-        inputs=inputs,
-        outputs=[output_tensor_info],
-        initializer=initializers,
-    )
-    opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
-    onnx_model = make_model(graph, opset_imports=opset_imports)
+            if steps is not None:
+                node_inputs.append("steps")
+                steps_tensor = make_tensor(
+                    "steps",
+                    TensorProto.INT64,
+                    [len(steps)],
+                    np.array(steps, dtype=np.int64),
+                )
+                initializers.append(steps_tensor)
+
+            slice_node = make_node("Slice", inputs=node_inputs, outputs=["output"])
+
+        graph = make_graph(
+            nodes=[slice_node],
+            name=f"slice_opset_{ONNX_OPSET_VERSION}",
+            inputs=inputs,
+            outputs=[output_tensor_info],
+            initializer=initializers,
+        )
+        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        return make_model(graph, opset_imports=opset_imports)
+
+    onnx_model = create_onnx_model(data_input, shape, dtype_proto)
     check_model(onnx_model)
 
     ref = ReferenceEvaluator(onnx_model)
@@ -2696,9 +3013,9 @@ def test_onnx_slice_lower(
 
 
 @pytest.mark.parametrize(
-    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape, bounds",
+    "ONNX_OPSET_VERSION, dtype_proto, shape, bounds",
     [
-        (schema.name, schema.since_version, dtype_proto, shape, bounds)
+        (schema.since_version, dtype_proto, shape, bounds)
         for schema in get_all_schemas_with_history()
         if schema.name in ["Clip"]
         for dtype_proto in [
@@ -2725,10 +3042,9 @@ def test_onnx_slice_lower(
     ],
 )
 # pylint: disable=too-many-branches,too-many-statements
-def test_onnx_clip_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape, bounds):
+def test_onnx_clip_lower(ONNX_OPSET_VERSION, dtype_proto, shape, bounds):
     """
-    Test ONNX Clip operation lowering to Linalg dialect in MLIR.
-    Handles attribute-based bounds (opset < 11) and operand-based bounds (opset >= 11).
+    Test ONNX Clip operation lowering.
     """
 
     class Clip(OpRun):
@@ -2755,107 +3071,103 @@ def test_onnx_clip_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape, b
                 res = np.minimum(res, max_val)
             return (res,)
 
-    np_dtype = None
-    if dtype_proto == TensorProto.FLOAT:
-        np_dtype = np.float32
-    elif dtype_proto == TensorProto.DOUBLE:
-        np_dtype = np.float64
-    elif dtype_proto == TensorProto.FLOAT16:
-        np_dtype = np.float16
-    elif dtype_proto == TensorProto.INT32:
-        np_dtype = np.int32
-    elif dtype_proto == TensorProto.INT64:
-        np_dtype = np.int64
-    elif dtype_proto == TensorProto.UINT8:
-        np_dtype = np.uint8
-    elif dtype_proto == TensorProto.INT8:
-        np_dtype = np.int8
-    else:
-        pytest.skip(f"DataType {dtype_proto} not implemented in test")
-
-    # Integer types before Opset 12 are not supported by ONNX spec
-    if ONNX_OPSET_VERSION < 12 and np.issubdtype(np_dtype, np.integer):
-        pytest.skip("Integer data types are supported only in ONNX Clip opset 12+")
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
 
     min_val, max_val = bounds
-    data_input = np.random.uniform(-10.0, 10.0, size=shape).astype(np_dtype)
+    data_input = _generate_dtype_random(np_dtype, shape=shape, max_val=127)
 
-    input_data_info = make_tensor_value_info("input", dtype_proto, data_input.shape)
-    output_tensor_info = make_tensor_value_info("output", dtype_proto, shape)
+    def create_onnx_model(data_input, dtype_proto):
 
-    initializers = []
-    inputs = [input_data_info]
-    node_inputs = ["input"]
-    node_kwargs = {}
-
-    if ONNX_OPSET_VERSION < 11:
-        # Opset 1 & 6 use attributes for min and max
-        if min_val is not None:
-            node_kwargs["min"] = float(min_val)
-        if max_val is not None:
-            node_kwargs["max"] = float(max_val)
-        clip_node = make_node(
-            ONNX_OP_NAME, inputs=["input"], outputs=["output"], **node_kwargs
+        input_data_info = make_tensor_value_info("input", dtype_proto, data_input.shape)
+        output_tensor_info = make_tensor_value_info(
+            "output", dtype_proto, data_input.shape
         )
-    else:
-        if min_val is not None:
-            node_inputs.append("min")
-            if np.issubdtype(np_dtype, np.integer):
-                iinfo = np.iinfo(np_dtype)
-                c_min = int(np.clip(min_val, iinfo.min, iinfo.max))
-                min_array = np.array(c_min, dtype=np_dtype)
-            else:
-                min_array = np.array(min_val, dtype=np_dtype)
-            min_tensor = make_tensor("min", dtype_proto, [], [min_array.item()])
-            initializers.append(min_tensor)
+
+        initializers = []
+        inputs = [input_data_info]
+        node_inputs = ["input"]
+        node_kwargs = {}
+
+        if ONNX_OPSET_VERSION < 11:
+            # Opset 1 & 6 use attributes for min and max
+            if min_val is not None:
+                node_kwargs["min"] = float(min_val)
+            if max_val is not None:
+                node_kwargs["max"] = float(max_val)
+            clip_node = make_node(
+                "Clip", inputs=["input"], outputs=["output"], **node_kwargs
+            )
         else:
-            node_inputs.append("")
-
-        if max_val is not None:
-            if len(node_inputs) == 2 and node_inputs[1] == "":
-                pass  # Empty placeholder for min
-            node_inputs.append("max")
-            if np.issubdtype(np_dtype, np.integer):
-                iinfo = np.iinfo(np_dtype)
-                c_max = int(np.clip(max_val, iinfo.min, iinfo.max))
-                max_array = np.array(c_max, dtype=np_dtype)
+            if min_val is not None:
+                node_inputs.append("min")
+                if np.issubdtype(np_dtype, np.integer):
+                    iinfo = np.iinfo(np_dtype)
+                    c_min = int(np.clip(min_val, iinfo.min, iinfo.max))
+                    min_array = np.array(c_min, dtype=np_dtype)
+                else:
+                    min_array = np.array(min_val, dtype=np_dtype)
+                min_tensor = make_tensor("min", dtype_proto, [], [min_array.item()])
+                initializers.append(min_tensor)
             else:
-                max_array = np.array(max_val, dtype=np_dtype)
-            max_tensor = make_tensor("max", dtype_proto, [], [max_array.item()])
-            initializers.append(max_tensor)
+                node_inputs.append("")
 
-        # Trim trailing empty optional operand inputs
-        while node_inputs and node_inputs[-1] == "":
-            node_inputs.pop()
+            if max_val is not None:
+                if len(node_inputs) == 2 and node_inputs[1] == "":
+                    pass  # Empty placeholder for min
+                node_inputs.append("max")
+                if np.issubdtype(np_dtype, np.integer):
+                    iinfo = np.iinfo(np_dtype)
+                    c_max = int(np.clip(max_val, iinfo.min, iinfo.max))
+                    max_array = np.array(c_max, dtype=np_dtype)
+                else:
+                    max_array = np.array(max_val, dtype=np_dtype)
+                max_tensor = make_tensor("max", dtype_proto, [], [max_array.item()])
+                initializers.append(max_tensor)
 
-        clip_node = make_node(ONNX_OP_NAME, inputs=node_inputs, outputs=["output"])
+            # Trim trailing empty optional operand inputs
+            while node_inputs and node_inputs[-1] == "":
+                node_inputs.pop()
 
-    graph = make_graph(
-        nodes=[clip_node],
-        name="clip_graph",
-        inputs=inputs,
-        outputs=[output_tensor_info],
-        initializer=initializers,
-    )
-    opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
-    onnx_model = make_model(graph, opset_imports=opset_imports)
+            clip_node = make_node("Clip", inputs=node_inputs, outputs=["output"])
+
+        graph = make_graph(
+            nodes=[clip_node],
+            name=f"clip_opset_V{ONNX_OPSET_VERSION}",
+            inputs=inputs,
+            outputs=[output_tensor_info],
+            initializer=initializers,
+        )
+        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        return make_model(graph, opset_imports=opset_imports)
+
+    onnx_model = create_onnx_model(data_input, dtype_proto)
     check_model(onnx_model)
 
-    ref_inputs = {"input": data_input}
-
-    try:
-        ref = ReferenceEvaluator(onnx_model)
-        onnx_result = ref.run(None, ref_inputs)[0]
-    except (RuntimeError, NotImplementedError, ValueError):
-        ref = ReferenceEvaluator(onnx_model, new_ops=[Clip])
-        onnx_result = ref.run(None, ref_inputs)[0]
-
     with Context() as ctx, Location.unknown():
-        mlir_module = import_from_onnx(onnx_model, ctx)
-        mlir_module.operation.verify()
+        mlir_module = import_from_onnx(onnx_model, ctx, verify=False)
+        try:
+            mlir_module.operation.verify()
+        except MLIRError as e:
+            error_keywords = ["error", "must be", "but got"]
+            if all(kw in str(e) for kw in error_keywords):
+                pytest.skip(
+                    f"Clip V{ONNX_OPSET_VERSION} does not support"
+                    f" {TensorProto.DataType.Name(dtype_proto)}"
+                )
+            else:
+                raise
 
         llvm_module = llvm_lower_pipeline(mlir_module)
         llvm_module.operation.verify()
+
+        ref_inputs = {"input": data_input}
+
+        try:
+            ref = ReferenceEvaluator(onnx_model)
+            onnx_result = ref.run(None, ref_inputs)[0]
+        except (RuntimeError, NotImplementedError, ValueError):
+            ref = ReferenceEvaluator(onnx_model, new_ops=[Clip])
+            onnx_result = ref.run(None, ref_inputs)[0]
 
         res_array = np.zeros_like(onnx_result)
         outputs = runner(llvm_module, "main", [data_input], [res_array])

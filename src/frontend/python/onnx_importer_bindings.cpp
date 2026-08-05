@@ -41,10 +41,12 @@ NB_MODULE(_onnx2mlirImporters, m) {
   m.def(
       "import_from_onnx",
       [](const std::string &ONNXFilename, MlirContext context,
-         int onnxConvertOps) -> MlirModule {
+         int onnxConvertOps, bool verify = true) -> MlirModule {
         std::map<std::string, std::string> options;
         if (onnxConvertOps >= 0)
           options["--onnx-convert-ops"] = std::to_string(onnxConvertOps);
+        if (!verify)
+          options["--noverify"] = "1";
         auto ONNXLoader =
             onnx2mlir::Importer<onnx2mlir::frontend::ONNXImporter>(options);
         mlir::MLIRContext *mlirCtx = unwrap(context);
@@ -54,16 +56,18 @@ NB_MODULE(_onnx2mlirImporters, m) {
       },
       nanobind::rv_policy::take_ownership, nanobind::arg("onnxfilename"),
       nanobind::arg("context"), nanobind::arg("onnx_convert_ops") = -1,
-      "Import from an ONNX file path");
+      nanobind::arg("verify") = true, "Import from an ONNX file path");
 
   m.def(
       "import_from_onnx",
       [](nanobind::object onnx_model_proto, MlirContext context,
-         int onnxConvertOps) -> MlirModule {
+         int onnxConvertOps, bool verify = true) -> MlirModule {
         std::map<std::string, std::string> options;
         if (onnxConvertOps >= 0)
           options["--onnx-convert-ops"] = std::to_string(onnxConvertOps);
         options["--import-serialized"] = "";
+        if (!verify)
+          options["--noverify"] = "1";
         nanobind::bytes serialized_bytes(
             onnx_model_proto.attr("SerializeToString")());
         std::string ONNXSerialString(serialized_bytes.c_str(),
@@ -77,5 +81,5 @@ NB_MODULE(_onnx2mlirImporters, m) {
       },
       nanobind::rv_policy::take_ownership, nanobind::arg("onnxfilename"),
       nanobind::arg("context"), nanobind::arg("onnx_convert_ops") = -1,
-      "Import from an ONNX ModelProto object");
+      nanobind::arg("verify") = true, "Import from an ONNX ModelProto object");
 }

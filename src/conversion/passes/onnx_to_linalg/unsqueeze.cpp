@@ -39,26 +39,29 @@
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_UnsqueezeOp(mlir::Operation *op,
-                                             mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_UnsqueezeOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                         const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  mlir::Value data = op->getOperand(0);
-  mlir::Value res = op->getResult(0);
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 
-  auto dataType = mlir::dyn_cast<mlir::RankedTensorType>(data.getType());
+  mlir::Value inp = convRewriter.getRemappedValue(op->getOperand(0));
+  mlir::Value res = convRewriter.getRemappedValue(op->getResult(0));
+
+  auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(inp.getType());
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
-  if (!dataType || !resType) {
+  if (!inpType || !resType) {
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " operand must be ranked tensor type");
   }
 
-  int64_t dataRank = dataType.getRank();
+  int64_t inpRank = inpType.getRank();
   int64_t resRank = resType.getRank();
 
-  if (resRank <= dataRank) {
+  if (resRank <= inpRank) {
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName +
                                " result rank must be greater than input rank");
@@ -75,9 +78,9 @@ mlir::LogicalResult OnnxToLinalg_UnsqueezeOp(mlir::Operation *op,
   // Unsqueeze only inserts dimensions of size 1
   int64_t currDataDim = 0;
   for (int64_t i = 0; i < resRank; ++i) {
-    if (currDataDim < dataRank &&
-        (dataType.getDimSize(currDataDim) == resType.getDimSize(i) ||
-         dataType.getDimSize(currDataDim) == mlir::ShapedType::kDynamic)) {
+    if (currDataDim < inpRank &&
+        (inpType.getDimSize(currDataDim) == resType.getDimSize(i) ||
+         inpType.getDimSize(currDataDim) == mlir::ShapedType::kDynamic)) {
       // If result dim is not a newly inserted unit dim, map it to input dim.
       // Note: If both input and result have a '1' at this position, we
       // greedily consume it as the original dimension.
@@ -87,7 +90,7 @@ mlir::LogicalResult OnnxToLinalg_UnsqueezeOp(mlir::Operation *op,
   }
 
   // All input dimensions must be mapped
-  if (currDataDim != dataRank) {
+  if (currDataDim != inpRank) {
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " failed to map input to output shape");
   }
@@ -102,8 +105,8 @@ mlir::LogicalResult OnnxToLinalg_UnsqueezeOp(mlir::Operation *op,
       resRank, mlir::utils::IteratorType::parallel);
 
   auto genericOp = mlir::linalg::GenericOp::create(
-      rewriter, loc, resType, mlir::ValueRange{data}, // Input
-      mlir::ValueRange{outBuff},                      // Output init
+      rewriter, loc, resType, mlir::ValueRange{inp}, // Input
+      mlir::ValueRange{outBuff},                     // Output init
       idxMaps, iterators,
       [&](mlir::OpBuilder &nest, mlir::Location l, mlir::ValueRange args) {
         mlir::linalg::YieldOp::create(nest, l, args[0]);

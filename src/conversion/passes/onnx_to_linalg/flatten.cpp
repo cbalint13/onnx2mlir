@@ -44,17 +44,20 @@
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_FlattenOp(mlir::Operation *op,
-                                           mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_FlattenOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                       const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
-  auto *context = rewriter.getContext();
+  auto *ctx = rewriter.getContext();
 
-  mlir::Value inp = op->getOperand(0);
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
+
+  mlir::Value inp = convRewriter.getRemappedValue(op->getOperand(0));
+  mlir::Value res = convRewriter.getRemappedValue(op->getResult(0));
 
   auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(inp.getType());
-  auto resType =
-      mlir::dyn_cast<mlir::RankedTensorType>(op->getResult(0).getType());
+  auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
 
   if (!inpType || !resType) {
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
@@ -107,7 +110,7 @@ mlir::LogicalResult OnnxToLinalg_FlattenOp(mlir::Operation *op,
     }
   }
 
-  auto inpMap = mlir::AffineMap::get(2, 0, inpExprs, context);
+  auto inpMap = mlir::AffineMap::get(2, 0, inpExprs, ctx);
 
   // Create the GenericOp
   auto outBuff = mlir::tensor::EmptyOp::create(

@@ -29,6 +29,7 @@
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Func/IR/FuncOps.h>
+#include <mlir/Dialect/Func/Transforms/FuncConversions.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/Math/IR/Math.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
@@ -76,36 +77,16 @@ static void registerOps(const std::vector<std::string> &opNames,
 static const std::unordered_map<std::string, LoweringFunc> &getLoweringMap() {
   static const auto loweringMap = [] {
     std::unordered_map<std::string, LoweringFunc> map;
-    registerOps( // clang-format off
-                {"Add",        "Div",          "Mod",         "Mul",
-                 "Pow",        "Sub"}, map,
-        OnnxToLinalg_ArithBinaryOps);   // clang-format on
-    registerOps( // clang-format off
-                {"Abs",        "Acos",         "Acosh",       "Asin",
-                 "Asinh",      "Atan",         "Atanh",       "Ceil",
-                 "Cos",        "Cosh",         "Elu",         "Erf",
-                 "Exp",        "Floor",        "HardSwish",   "Identity",
-                 "IsInf",      "IsNaN",        "Log",         "Neg",
-                 "Not",        "Reciprocal",   "Relu",        "Round",
-                 "Sign",       "Sigmoid",      "Sin",         "Sinh",
-                 "Softplus",   "Softsign",     "Sqrt",        "Tan",
-                 "Tanh"}, map,
-        OnnxToLinalg_ArithUnaryOps);    // clang-format on
-    registerOps( // clang-format off
-                {"BitwiseAnd", "BitwiseOr",    "BitwiseXor"}, map,
-        OnnxToLinalg_BitwiseBinaryOps); // clang-format on
-    registerOps({"BitwiseNot"}, map, OnnxToLinalg_BitwiseUnaryOps);
-    registerOps( // clang-format off
-                {"And",        "Or",           "Xor"}, map,
-        OnnxToLinalg_BooleanBinaryOps); // clang-format on
+    registerOps({"Add", "And", "BitwiseAnd", "BitwiseOr", "BitwiseXor", "Div",
+                 "Mod", "Mul", "Or", "Pow", "Sub", "Xor"},
+                map, OnnxToLinalg_BinaryOps);
     registerOps({"Cast"}, map, OnnxToLinalg_CastOp);
     registerOps({"Clip"}, map, OnnxToLinalg_ClipOp);
-    registerOps( // clang-format off
-                {"Equal",      "Greater",      "GreatherOrEqual",
-                 "Less",       "LessOrEqual"}, map,
-        OnnxToLinalg_CompBinaryOps); // clang-format on
+    registerOps({"Equal", "Greater", "GreatherOrEqual", "Less", "LessOrEqual"},
+                map, OnnxToLinalg_CompBinaryOps);
     registerOps({"Concat"}, map, OnnxToLinalg_ConcatOp);
     registerOps({"Constant"}, map, OnnxToLinalg_ConstantOp);
+    registerOps({"ConstantOfShape"}, map, OnnxToLinalg_ConstantOfShapeOp);
     registerOps({"Conv"}, map, OnnxToLinalg_ConvOp);
     registerOps({"Flatten"}, map, OnnxToLinalg_FlattenOp);
     registerOps({"Gather"}, map, OnnxToLinalg_GatherOp);
@@ -113,18 +94,25 @@ static const std::unordered_map<std::string, LoweringFunc> &getLoweringMap() {
     registerOps({"GlobalAveragePool"}, map, OnnxToLinalg_GlobalAveragePoolOp);
     registerOps({"GlobalLpPool"}, map, OnnxToLinalg_GlobalLpPoolOp);
     registerOps({"GlobalMaxPool"}, map, OnnxToLinalg_GlobalMaxPoolOp);
-    registerOps({"Hardmax"}, map, OnnxToLinalg_HardmaxOp);
-    registerOps({"LogSoftmax"}, map, OnnxToLinalg_LogSoftmaxOp);
     registerOps({"MatMul", "MatMulInteger"}, map, OnnxToLinalg_MatMulOp);
     registerOps({"MaxPool"}, map, OnnxToLinalg_MaxPoolOp);
     registerOps({"Reshape"}, map, OnnxToLinalg_ReshapeOp);
     registerOps({"Resize"}, map, OnnxToLinalg_ResizeOp);
     registerOps({"Shape"}, map, OnnxToLinalg_ShapeOp);
     registerOps({"Slice"}, map, OnnxToLinalg_SliceOp);
-    registerOps({"Softmax"}, map, OnnxToLinalg_SoftmaxOp);
+    registerOps({"Hardmax", "LogSoftmax", "Softmax"}, map,
+                OnnxToLinalg_SoftmaxOp);
     registerOps({"Split"}, map, OnnxToLinalg_SplitOp);
     registerOps({"Squeeze"}, map, OnnxToLinalg_SqueezeOp);
     registerOps({"Transpose"}, map, OnnxToLinalg_TransposeOp);
+    registerOps({"Abs",       "Acos",     "Acosh",      "Asin",  "Asinh",
+                 "Atan",      "Atanh",    "BitwiseNot", "Ceil",  "Cos",
+                 "Cosh",      "Elu",      "Erf",        "Exp",   "Floor",
+                 "HardSwish", "Identity", "IsInf",      "IsNaN", "Log",
+                 "Neg",       "Not",      "Reciprocal", "Relu",  "Round",
+                 "Sign",      "Sigmoid",  "Sin",        "Sinh",  "Softplus",
+                 "Softsign",  "Sqrt",     "Tan",        "Tanh"},
+                map, OnnxToLinalg_UnaryOps);
     registerOps({"Unsqueeze"}, map, OnnxToLinalg_UnsqueezeOp);
     registerOps({"Where"}, map, OnnxToLinalg_WhereOp);
     return map;
@@ -246,6 +234,22 @@ struct LowerONNXToLINALGPass
         });
 
     /*
+     * Type conversion legalizer
+     *
+     */
+
+    // mark FuncOp legal based on typeConverter
+    target.addDynamicallyLegalOp<mlir::func::FuncOp>(
+        [&](mlir::func::FuncOp op) {
+          return typeConverter.isSignatureLegal(op.getFunctionType()) &&
+                 typeConverter.isLegal(&op.getBody());
+        });
+
+    // mark ReturnOp legal based on typeConverter
+    target.addDynamicallyLegalOp<mlir::func::ReturnOp>(
+        [&](mlir::func::ReturnOp op) { return typeConverter.isLegal(op); });
+
+    /*
      * Rewriter patterns
      *
      */
@@ -255,6 +259,11 @@ struct LowerONNXToLINALGPass
 
     // add type converter
     patterns.add<ONNXToLINALGLowering>(typeConverter, ctx);
+
+    // add func & return converter
+    mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(
+        patterns, typeConverter);
+    mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
 
     // apply the partial conversion pattern
     if (mlir::failed(mlir::applyPartialConversion(module, target,

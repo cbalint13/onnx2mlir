@@ -184,15 +184,7 @@ static mlir::Value getScalarBound(mlir::PatternRewriter &rewriter,
       auto srcInt = mlir::cast<mlir::IntegerType>(srcType);
       auto dstInt = mlir::cast<mlir::IntegerType>(targetElemType);
 
-      mlir::Value signlessVal = scalarVal;
-      if (!srcInt.isSignless()) {
-        auto signlessSrcType = rewriter.getIntegerType(srcInt.getWidth());
-        signlessVal = mlir::UnrealizedConversionCastOp::create(
-                          rewriter, loc, signlessSrcType, scalarVal)
-                          .getResult(0);
-      }
-
-      auto dstSignless = rewriter.getIntegerType(dstInt.getWidth());
+      auto dstType = rewriter.getIntegerType(dstInt.getWidth());
 
       if (srcInt.getWidth() < dstInt.getWidth()) {
         bool isUnsigned = srcInt.isUnsigned();
@@ -201,27 +193,16 @@ static mlir::Value getScalarBound(mlir::PatternRewriter &rewriter,
             isUnsigned = true;
         }
         if (isUnsigned) {
-          signlessVal = mlir::arith::ExtUIOp::create(rewriter, loc, dstSignless,
-                                                     signlessVal);
+          scalarVal =
+              mlir::arith::ExtUIOp::create(rewriter, loc, dstType, scalarVal);
         } else {
-          signlessVal = mlir::arith::ExtSIOp::create(rewriter, loc, dstSignless,
-                                                     signlessVal);
+          scalarVal =
+              mlir::arith::ExtSIOp::create(rewriter, loc, dstType, scalarVal);
         }
       } else if (srcInt.getWidth() > dstInt.getWidth()) {
-        signlessVal = mlir::arith::TruncIOp::create(rewriter, loc, dstSignless,
-                                                    signlessVal);
+        scalarVal =
+            mlir::arith::TruncIOp::create(rewriter, loc, dstType, scalarVal);
       }
-
-      if (signlessVal.getType() != targetElemType) {
-        signlessVal = mlir::UnrealizedConversionCastOp::create(
-                          rewriter, loc, targetElemType, signlessVal)
-                          .getResult(0);
-      }
-      scalarVal = signlessVal;
-    } else {
-      scalarVal = mlir::UnrealizedConversionCastOp::create(
-                      rewriter, loc, targetElemType, scalarVal)
-                      .getResult(0);
     }
   }
 
@@ -234,20 +215,24 @@ OnnxToLinalg_ClipOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  // Extract input operand and type descriptor
-  mlir::Value data = op->getOperand(0);
-  mlir::Value result = op->getResult(0);
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 
-  auto dataType = mlir::dyn_cast<mlir::RankedTensorType>(data.getType());
-  auto resultType = mlir::dyn_cast<mlir::RankedTensorType>(result.getType());
+  mlir::Value inp = convRewriter.getRemappedValue(op->getOperand(0));
+  mlir::Value res = op->getResult(0);
 
-  if (!dataType || !resultType) {
+  auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(inp.getType());
+  auto resType = mlir::dyn_cast<mlir::RankedTensorType>(
+      typeConverter->convertType(res.getType()));
+
+  auto outType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
+
+  if (!inpType || !resType) {
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
                            opName + " requires ranked tensor input and result");
   }
 
-  int64_t rank = dataType.getRank();
-  mlir::Type origElemType = dataType.getElementType();
+  int64_t rank = inpType.getRank();
+  mlir::Type origElemType = outType.getElementType();
   mlir::Type elemType = typeConverter->convertType(origElemType);
 
   // Extract min and max operands if provided (Opset 11+)
@@ -266,21 +251,25 @@ OnnxToLinalg_ClipOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
   mlir::Value maxScalar = getScalarBound(rewriter, loc, maxOperand, maxAttr,
                                          elemType, origElemType);
 
+  // no clipping required
+  if (!minScalar && !maxScalar) {
+    rewriter.replaceOp(op, op->getOperand(0));
+    return mlir::success();
+  }
+
   // Query dynamic dimensions for creating output empty tensor destination
   llvm::SmallVector<mlir::Value> dynamicSizes;
   for (int64_t i = 0; i < rank; ++i) {
-    if (resultType.isDynamicDim(i)) {
+    if (resType.isDynamicDim(i)) {
       mlir::Value dimIdx =
           mlir::arith::ConstantIndexOp::create(rewriter, loc, i);
       dynamicSizes.push_back(
-          mlir::tensor::DimOp::create(rewriter, loc, data, dimIdx));
+          mlir::tensor::DimOp::create(rewriter, loc, inp, dimIdx));
     }
   }
 
-  auto signlessResType =
-      mlir::RankedTensorType::get(resultType.getShape(), origElemType);
-  auto initTensor = mlir::tensor::EmptyOp::create(
-      rewriter, loc, signlessResType, dynamicSizes);
+  auto outBuff =
+      mlir::tensor::EmptyOp::create(rewriter, loc, resType, dynamicSizes);
 
   auto identityMap = rewriter.getMultiDimIdentityMap(rank);
   llvm::SmallVector<mlir::AffineMap> indexingMaps = {identityMap, identityMap};
@@ -290,22 +279,15 @@ OnnxToLinalg_ClipOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
 
   auto genericOp = mlir::linalg::GenericOp::create(
       rewriter, loc,
-      /*resultTypes=*/mlir::TypeRange{signlessResType},
-      /*inputs=*/mlir::ValueRange{data},
-      /*outputs=*/mlir::ValueRange{initTensor},
+      /*resTypes=*/mlir::TypeRange{resType},
+      /*inputs=*/mlir::ValueRange{inp},
+      /*outputs=*/mlir::ValueRange{outBuff},
       /*indexingMaps=*/indexingMaps,
       /*iteratorTypes=*/iteratorTypes,
       /*bodyBuilder=*/
       [&](mlir::OpBuilder &b, mlir::Location nestedLoc,
           mlir::ValueRange blockArgs) {
         mlir::Value val = blockArgs[0];
-
-        // Convert input if needed
-        if (elemType != origElemType) {
-          val = mlir::UnrealizedConversionCastOp::create(b, nestedLoc, elemType,
-                                                         val)
-                    .getResult(0);
-        }
 
         // Apply lower bound clipping (val = max(val, minScalar))
         if (minScalar) {
@@ -345,24 +327,11 @@ OnnxToLinalg_ClipOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
           }
         }
 
-        // Convert back if needed
-        if (elemType != origElemType) {
-          val = mlir::UnrealizedConversionCastOp::create(b, nestedLoc,
-                                                         origElemType, val)
-                    .getResult(0);
-        }
-
         mlir::linalg::YieldOp::create(b, nestedLoc, val);
       });
 
   genericOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
   mlir::Value output = genericOp.getResult(0);
-
-  if (output.getType() != resultType) {
-    output = mlir::UnrealizedConversionCastOp::create(rewriter, loc, resultType,
-                                                      output)
-                 .getResult(0);
-  }
 
   rewriter.replaceOp(op, output);
 

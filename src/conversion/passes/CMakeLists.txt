@@ -3,11 +3,8 @@ add_definitions(-DONNX_NAMESPACE=onnx -DONNX_ML=${ONNX_USE_ML})
 add_mlir_conversion_library(onnx2mlir_onnx_linalg_pass
     conversion.cpp
     onnx_to_linalg.cpp
-    onnx_to_linalg/arith_binary.cpp
-    onnx_to_linalg/arith_unary.cpp
-    onnx_to_linalg/bitwise.cpp
-    onnx_to_linalg/boolean.cpp
     onnx_to_linalg/cast.cpp
+    onnx_to_linalg/binaries.cpp
     onnx_to_linalg/clip.cpp
     onnx_to_linalg/compare_binary.cpp
     onnx_to_linalg/concat.cpp
@@ -23,9 +20,11 @@ add_mlir_conversion_library(onnx2mlir_onnx_linalg_pass
     onnx_to_linalg/resize.cpp
     onnx_to_linalg/shape.cpp
     onnx_to_linalg/slice.cpp
+    onnx_to_linalg/softmax.cpp
     onnx_to_linalg/split.cpp
     onnx_to_linalg/squeeze.cpp
     onnx_to_linalg/transpose.cpp
+    onnx_to_linalg/unaries.cpp
     onnx_to_linalg/unsqueeze.cpp
     onnx_to_linalg/where.cpp
   DEPENDS

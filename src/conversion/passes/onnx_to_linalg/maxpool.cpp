@@ -46,8 +46,14 @@ OnnxToLinalg_MaxPoolOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  mlir::Value input = op->getOperand(0);
-  mlir::Value result = op->getResult(0);
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
+
+  mlir::Value inp = op->getOperand(0);
+  auto origInpType = mlir::dyn_cast<mlir::RankedTensorType>(inp.getType());
+  mlir::Type origElmType = origInpType.getElementType();
+
+  mlir::Value input = convRewriter.getRemappedValue(inp);
+  mlir::Value result = convRewriter.getRemappedValue(op->getResult(0));
 
   auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(input.getType());
   auto resType = mlir::dyn_cast<mlir::RankedTensorType>(result.getType());
@@ -93,7 +99,7 @@ OnnxToLinalg_MaxPoolOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
         rewriter, loc, rewriter.getFloatAttr(elementType, minFloat));
   } else {
     // Handle init using original input signedness
-    auto origInt = mlir::dyn_cast<mlir::IntegerType>(inpType.getElementType());
+    auto origInt = mlir::dyn_cast_or_null<mlir::IntegerType>(origElmType);
     if (origInt && origInt.isUnsigned()) {
       initValue = mlir::arith::ConstantOp::create(
           rewriter, loc, rewriter.getIntegerAttr(elementType, 0));
@@ -134,33 +140,17 @@ OnnxToLinalg_MaxPoolOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
 
     rewriter.setInsertionPointToStart(block);
 
-    // Cast initValue to input element type if needed for the yield
-    mlir::Value initYield = initValue;
-    if (elementType != inpType.getElementType()) {
-      initYield = mlir::UnrealizedConversionCastOp::create(
-                      rewriter, loc, inpType.getElementType(), initValue)
-                      .getResult(0);
-    }
-
-    mlir::tensor::YieldOp::create(rewriter, loc, initYield);
+    mlir::tensor::YieldOp::create(rewriter, loc, initValue);
     rewriter.setInsertionPointAfter(padOp);
 
     paddedInput = padOp.getResult();
   }
 
   // Output buffer
-  // Cast initValue to result element type for the fill op
-  mlir::Value fillInit = initValue;
-  if (elementType != resType.getElementType()) {
-    fillInit = mlir::UnrealizedConversionCastOp::create(
-                   rewriter, loc, resType.getElementType(), initValue)
-                   .getResult(0);
-  }
-
   auto emptyTensor = mlir::tensor::EmptyOp::create(
       rewriter, loc, resType.getShape(), resType.getElementType());
 
-  auto fillOp = mlir::linalg::FillOp::create(rewriter, loc, fillInit,
+  auto fillOp = mlir::linalg::FillOp::create(rewriter, loc, initValue,
                                              emptyTensor.getResult());
   mlir::Value outBuff = fillOp.getResult(0);
 
@@ -205,41 +195,20 @@ OnnxToLinalg_MaxPoolOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
       mlir::ValueRange{paddedInput, kernelTensor.getResult()},
       mlir::ValueRange{outBuff}, indexingMaps, iterators,
       [&](mlir::OpBuilder &nest, mlir::Location l, mlir::ValueRange args) {
-        mlir::Value inputVal = args[0];
+        mlir::Value inpVal = args[0];
         mlir::Value outVal = args[2];
-
-        // Element-wise casts: input/output to compute (signless) type
-        if (elementType != inpType.getElementType()) {
-          inputVal = mlir::UnrealizedConversionCastOp::create(
-                         nest, l, elementType, inputVal)
-                         .getResult(0);
-        }
-        if (elementType != resType.getElementType()) {
-          outVal = mlir::UnrealizedConversionCastOp::create(nest, l,
-                                                            elementType, outVal)
-                       .getResult(0);
-        }
-
         mlir::Value maxVal;
-        if (mlir::isa<mlir::FloatType>(elementType)) {
-          maxVal = mlir::arith::MaximumFOp::create(nest, l, inputVal, outVal);
+        if (origElmType &&
+            mlir::isa_and_nonnull<mlir::FloatType>(origElmType)) {
+          maxVal = mlir::arith::MaximumFOp::create(nest, l, inpVal, outVal);
         } else {
-          auto origInt =
-              mlir::dyn_cast<mlir::IntegerType>(inpType.getElementType());
+          auto origInt = mlir::dyn_cast_or_null<mlir::IntegerType>(origElmType);
           if (origInt && origInt.isUnsigned()) {
-            maxVal = mlir::arith::MaxUIOp::create(nest, l, inputVal, outVal);
+            maxVal = mlir::arith::MaxUIOp::create(nest, l, inpVal, outVal);
           } else {
-            maxVal = mlir::arith::MaxSIOp::create(nest, l, inputVal, outVal);
+            maxVal = mlir::arith::MaxSIOp::create(nest, l, inpVal, outVal);
           }
         }
-
-        // Cast result back to original type
-        if (elementType != resType.getElementType()) {
-          maxVal = mlir::UnrealizedConversionCastOp::create(
-                       nest, l, resType.getElementType(), maxVal)
-                       .getResult(0);
-        }
-
         mlir::linalg::YieldOp::create(nest, l, maxVal);
       });
 
