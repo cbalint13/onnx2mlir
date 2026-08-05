@@ -39,60 +39,64 @@
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_ReshapeOp(mlir::Operation *op,
-                                           mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_ReshapeOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                       const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  mlir::Value data = op->getOperand(0);
-  mlir::Value result = op->getResult(0);
-  mlir::Type resultType = result.getType();
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 
-  mlir::Value shapeOperand;
+  /*
+   * I/O Values
+   */
 
-  if (op->getNumOperands() > 1) {
-    shapeOperand = op->getOperand(1);
-  } else {
-    // Opset 1-4: shape is an INTS attribute
-    llvm::SmallVector<int64_t> shapeValues;
+  auto opInput = convRewriter.getRemappedValue(op->getOperand(0));
+  auto opOutput = convRewriter.getRemappedValue(op->getResult(0));
+  auto opInputShp = (op->getNumOperands() > 1 &&
+                     !mlir::isa<mlir::NoneType>(op->getOperand(1).getType()))
+                        ? convRewriter.getRemappedValue(op->getOperand(1))
+                        : nullptr;
 
-    if (auto denseI64Attr =
-            op->getAttrOfType<mlir::DenseI64ArrayAttr>("shape")) {
-      shapeValues = llvm::to_vector(denseI64Attr.asArrayRef());
-    } else if (auto arrayAttr = op->getAttrOfType<mlir::ArrayAttr>("shape")) {
-      for (auto attr : arrayAttr) {
-        if (auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(attr)) {
-          shapeValues.push_back(intAttr.getInt());
-        }
-      }
-    } else if (auto denseIntAttr =
-                   op->getAttrOfType<mlir::DenseIntElementsAttr>("shape")) {
-      for (auto val : denseIntAttr.getValues<mlir::APInt>()) {
-        shapeValues.push_back(val.getSExtValue());
-      }
-    }
+  auto outDatType = mlir::dyn_cast<mlir::RankedTensorType>(opOutput.getType());
 
-    if (shapeValues.empty()) {
-      return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                             opName + " missing or invalid shape attribute");
-    }
+  /*
+   * Attributes
+   */
 
+  // shape
+  llvm::SmallVector<int64_t> attr_shape;
+  if (auto a = op->getAttrOfType<mlir::DenseI64ArrayAttr>("shape")) {
+    attr_shape = llvm::to_vector(a.asArrayRef());
+  } else if (auto a = op->getAttrOfType<mlir::ArrayAttr>("shape")) {
+    for (auto i : a.getAsRange<mlir::IntegerAttr>())
+      attr_shape.push_back(i.getInt());
+  } else if (auto a = op->getAttrOfType<mlir::DenseIntElementsAttr>("shape")) {
+    attr_shape = llvm::to_vector(a.getValues<int64_t>());
+  }
+  if (!opInputShp && attr_shape.empty())
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " missing or invalid shape attribute";
+
+  /*
+   *  Linalg ops staging
+   */
+
+  if (!opInputShp) {
     auto shapedType = mlir::RankedTensorType::get(
-        {static_cast<int64_t>(shapeValues.size())}, rewriter.getI64Type());
-
-    shapeOperand = mlir::arith::ConstantOp::create(
-        rewriter, loc,
-        mlir::DenseElementsAttr::get(shapedType,
-                                     llvm::ArrayRef<int64_t>(shapeValues)));
+        {static_cast<int64_t>(attr_shape.size())}, rewriter.getI64Type());
+    auto shapeBuffer = mlir::DenseElementsAttr::get(
+        shapedType, llvm::ArrayRef<int64_t>(attr_shape));
+    opInputShp = mlir::arith::ConstantOp::create(rewriter, loc, shapeBuffer);
   }
 
-  auto reshapeOp = mlir::tensor::ReshapeOp::create(rewriter, loc, resultType,
-                                                   data, shapeOperand);
+  auto reshapeOp = mlir::tensor::ReshapeOp::create(rewriter, loc, outDatType,
+                                                   opInput, opInputShp);
 
-  // Tag for transform dialect
   reshapeOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
 
-  rewriter.replaceOp(op, reshapeOp.getResult());
+  rewriter.replaceOp(op, reshapeOp);
+
   return mlir::success();
 }
 

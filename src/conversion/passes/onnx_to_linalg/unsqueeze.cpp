@@ -39,80 +39,83 @@
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_UnsqueezeOp(mlir::Operation *op,
-                                             mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_UnsqueezeOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                         const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  mlir::Value data = op->getOperand(0);
-  mlir::Value res = op->getResult(0);
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 
-  auto dataType = mlir::dyn_cast<mlir::RankedTensorType>(data.getType());
-  auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
+  /*
+   * I/O Values
+   */
 
-  if (!dataType || !resType) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " operand must be ranked tensor type");
-  }
+  auto opInput = convRewriter.getRemappedValue(op->getOperand(0));
+  auto opOutput = convRewriter.getRemappedValue(op->getResult(0));
 
-  int64_t dataRank = dataType.getRank();
-  int64_t resRank = resType.getRank();
+  auto inpDatType = mlir::dyn_cast<mlir::RankedTensorType>(opInput.getType());
+  auto outDatType = mlir::dyn_cast<mlir::RankedTensorType>(opOutput.getType());
 
-  if (resRank <= dataRank) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName +
-                               " result rank must be greater than input rank");
-  }
+  int64_t inputRank = inpDatType.getRank();
+  int64_t outputRank = outDatType.getRank();
 
-  // Create output buffer
-  mlir::Value outBuff = mlir::tensor::EmptyOp::create(
-      rewriter, loc, resType.getShape(), resType.getElementType());
+  // checks
+  if (outputRank <= inputRank)
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " result rank must be greater than input rank";
 
-  // Define indexing maps for the generic op
-  llvm::SmallVector<mlir::AffineExpr, 4> exprs;
-  mlir::Builder builder(op->getContext());
+  /*
+   *  Affine mappings
+   */
 
-  // Unsqueeze only inserts dimensions of size 1
   int64_t currDataDim = 0;
-  for (int64_t i = 0; i < resRank; ++i) {
-    if (currDataDim < dataRank &&
-        (dataType.getDimSize(currDataDim) == resType.getDimSize(i) ||
-         dataType.getDimSize(currDataDim) == mlir::ShapedType::kDynamic)) {
-      // If result dim is not a newly inserted unit dim, map it to input dim.
-      // Note: If both input and result have a '1' at this position, we
-      // greedily consume it as the original dimension.
-      exprs.push_back(builder.getAffineDimExpr(i));
+  llvm::SmallVector<mlir::AffineExpr, 4> exprs;
+  for (int64_t i = 0; i < outputRank && currDataDim < inputRank; ++i) {
+    int64_t inSize = inpDatType.getDimSize(currDataDim);
+    if (inSize == outDatType.getDimSize(i) ||
+        mlir::ShapedType::isDynamic(inSize)) {
+      exprs.push_back(rewriter.getAffineDimExpr(i));
       currDataDim++;
     }
   }
 
-  // All input dimensions must be mapped
-  if (currDataDim != dataRank) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " failed to map input to output shape");
-  }
+  if (currDataDim != inputRank)
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " failed to map input to output shape";
 
-  mlir::SmallVector<mlir::AffineMap, 2> idxMaps;
-  idxMaps.push_back(
-      mlir::AffineMap::get(resRank, 0, exprs, builder.getContext()));
-  idxMaps.push_back(rewriter.getMultiDimIdentityMap(resRank));
+  auto inpMap = mlir::AffineMap::get(outputRank, 0, exprs, op->getContext());
+  auto outMap = rewriter.getMultiDimIdentityMap(outputRank);
 
-  // Create linalg.generic
-  mlir::SmallVector<mlir::utils::IteratorType> iterators(
-      resRank, mlir::utils::IteratorType::parallel);
+  mlir::SmallVector<mlir::AffineMap, 2> indexingMaps = {inpMap, outMap};
+
+  mlir::SmallVector<mlir::utils::IteratorType> iteratorTypes(
+      outputRank, mlir::utils::IteratorType::parallel);
+
+  /*
+   *  Linalg ops staging
+   */
+
+  auto outBuffer = mlir::tensor::EmptyOp::create(
+      rewriter, loc, outDatType.getShape(), outDatType.getElementType());
 
   auto genericOp = mlir::linalg::GenericOp::create(
-      rewriter, loc, resType, mlir::ValueRange{data}, // Input
-      mlir::ValueRange{outBuff},                      // Output init
-      idxMaps, iterators,
-      [&](mlir::OpBuilder &nest, mlir::Location l, mlir::ValueRange args) {
-        mlir::linalg::YieldOp::create(nest, l, args[0]);
+      /*op_builder*/ rewriter, /*src_location*/ loc,
+      /*result_types*/ mlir::TypeRange{outDatType},
+      /*input_values*/ mlir::ValueRange{opInput},
+      /*output_values*/ mlir::ValueRange{outBuffer},
+      /*affine_maps*/ indexingMaps,
+      /*iter_types*/ iteratorTypes,
+      [&](/*op_builder*/ mlir::OpBuilder &nest,
+          /*src_location*/ mlir::Location nloc,
+          /*value_args*/ mlir::ValueRange args) {
+        mlir::linalg::YieldOp::create(nest, nloc, args[0]);
       });
 
-  // Set transform tag for downstream optimization
   genericOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
 
   rewriter.replaceOp(op, genericOp);
+
   return mlir::success();
 }
 

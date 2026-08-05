@@ -39,81 +39,89 @@
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_WhereOp(mlir::Operation *op,
-                                         mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_WhereOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                     const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  if (op->getNumOperands() != 3) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " expected 3 operands");
-  }
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 
-  mlir::Value cond = op->getOperand(0);
-  mlir::Value x = op->getOperand(1);
-  mlir::Value y = op->getOperand(2);
-  mlir::Value res = op->getResult(0);
+  /*
+   * I/O Values
+   */
 
-  auto condType = mlir::dyn_cast<mlir::RankedTensorType>(cond.getType());
-  auto xType = mlir::dyn_cast<mlir::RankedTensorType>(x.getType());
-  auto yType = mlir::dyn_cast<mlir::RankedTensorType>(y.getType());
-  auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
+  if (op->getNumOperands() != 3)
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " is expecting 3 operands";
 
-  if (!condType || !xType || !yType || !resType) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " operand must be ranked tensor type");
-  }
+  auto opInputCond = convRewriter.getRemappedValue(op->getOperand(0));
+  auto opInputX = convRewriter.getRemappedValue(op->getOperand(1));
+  auto opInputY = convRewriter.getRemappedValue(op->getOperand(2));
+  auto opOutput = convRewriter.getRemappedValue(op->getResult(0));
 
-  int64_t resRank = resType.getRank();
+  auto cndDatType =
+      mlir::dyn_cast<mlir::RankedTensorType>(opInputCond.getType());
+  auto inXDatType = mlir::dyn_cast<mlir::RankedTensorType>(opInputX.getType());
+  auto inYDatType = mlir::dyn_cast<mlir::RankedTensorType>(opInputY.getType());
+  auto outDatType = mlir::dyn_cast<mlir::RankedTensorType>(opOutput.getType());
 
-  // Create output buffer
-  mlir::Value outBuff = mlir::tensor::EmptyOp::create(
-      rewriter, loc, resType.getShape(), resType.getElementType());
+  int64_t outputRank = outDatType.getRank();
 
-  // Define indexing maps for broadcasting
-  mlir::Builder builder(op->getContext());
-  mlir::AffineExpr zero = builder.getAffineConstantExpr(0);
+  /*
+   *  Affine mappings
+   */
+  auto getBroadcastMap = [&](mlir::RankedTensorType operType) {
+    int64_t operRank = operType.getRank();
+    int64_t rankDiff = outputRank - operRank;
 
-  auto getIndexingMap = [&](mlir::RankedTensorType type) {
     llvm::SmallVector<mlir::AffineExpr, 4> exprs;
-    int64_t rank = type.getRank();
-    for (unsigned i = 0; i < resRank; ++i) {
-      int64_t dimIdx = rank - (resRank - i);
-      if (dimIdx >= 0) {
-        if (type.getDimSize(dimIdx) == 1)
-          exprs.push_back(zero);
-        else
-          exprs.push_back(builder.getAffineDimExpr(i));
-      }
-    }
-    return mlir::AffineMap::get(resRank, 0, exprs, builder.getContext());
+    exprs.reserve(operRank);
+
+    for (auto [i, dim] : llvm::enumerate(operType.getShape()))
+      exprs.push_back(dim == 1 ? rewriter.getAffineConstantExpr(0)
+                               : rewriter.getAffineDimExpr(rankDiff + i));
+
+    return mlir::AffineMap::get(outputRank, 0, exprs, rewriter.getContext());
   };
 
-  llvm::SmallVector<mlir::AffineMap, 4> idxMaps;
-  idxMaps.push_back(getIndexingMap(condType));
-  idxMaps.push_back(getIndexingMap(xType));
-  idxMaps.push_back(getIndexingMap(yType));
-  idxMaps.push_back(rewriter.getMultiDimIdentityMap(resRank));
+  auto cndBroadcastMap = getBroadcastMap(cndDatType);
+  auto inXBroadcastMap = getBroadcastMap(inXDatType);
+  auto inYBroadcastMap = getBroadcastMap(inYDatType);
+  auto outputIdentityMap = rewriter.getMultiDimIdentityMap(outputRank);
 
-  // Create linalg.generic
-  llvm::SmallVector<mlir::utils::IteratorType> iterators(
-      resRank, mlir::utils::IteratorType::parallel);
+  llvm::SmallVector<mlir::AffineMap, 4> indexingMaps = {
+      cndBroadcastMap, inXBroadcastMap, inYBroadcastMap, outputIdentityMap};
+
+  llvm::SmallVector<mlir::utils::IteratorType> iteratorTypes(
+      outputRank, mlir::utils::IteratorType::parallel);
+
+  /*
+   *  Linalg ops staging
+   */
+
+  mlir::Value outBuffer = mlir::tensor::EmptyOp::create(
+      rewriter, loc, outDatType.getShape(), outDatType.getElementType());
 
   auto genericOp = mlir::linalg::GenericOp::create(
-      rewriter, loc, resType, mlir::ValueRange{cond, x, y}, // Inputs
-      mlir::ValueRange{outBuff},                            // Output init
-      idxMaps, iterators,
-      [&](mlir::OpBuilder &nest, mlir::Location l, mlir::ValueRange args) {
-        // args[0]: cond (i1), args[1]: x, args[2]: y
-        mlir::Value selected =
-            mlir::arith::SelectOp::create(nest, l, args[0], args[1], args[2]);
-        mlir::linalg::YieldOp::create(nest, l, selected);
+      /*op_builder*/ rewriter, /*src_location*/ loc,
+      /*result_type*/ mlir::TypeRange{outDatType},
+      /*input_values*/ mlir::ValueRange{opInputCond, opInputX, opInputY},
+      /*output_values*/ mlir::ValueRange{outBuffer},
+      /*affine_maps*/ indexingMaps,
+      /*iter_types*/ iteratorTypes,
+      [&](/*op_builder*/ mlir::OpBuilder &nest,
+          /*src_location*/ mlir::Location nloc,
+          /*value_args*/ mlir::ValueRange args) {
+        mlir::Value selected = mlir::arith::SelectOp::create(
+            nest, nloc, args[0], args[1], args[2]);
+        mlir::linalg::YieldOp::create(nest, nloc, selected);
       });
 
-  // Set transform tag for downstream optimization
   genericOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
 
   rewriter.replaceOp(op, genericOp);
+
   return mlir::success();
 }
 

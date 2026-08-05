@@ -42,221 +42,217 @@
 #include "onnx2mlir/common/onnx.hpp"
 #include "onnx2mlir/support/support.hpp"
 
-/// Helper to safely retrieve an optional operand
 static inline mlir::Value getOptionalOperand(mlir::Operation *op,
                                              unsigned idx) {
-  mlir::Value operand = op->getOperand(idx);
+  auto operand = op->getOperand(idx);
   if (mlir::isa<mlir::NoneType>(operand.getType()))
     return nullptr;
 
   return operand;
 }
 
-/// Helper to check if a tensor operand is present and non-empty.
-static bool isNonEmptyTensor(mlir::Value val) {
-  if (!val)
-    return false;
-  auto tensorType = mlir::dyn_cast<mlir::RankedTensorType>(val.getType());
-  if (!tensorType || tensorType.getRank() == 0)
-    return false;
-  if (tensorType.hasStaticShape() && tensorType.getNumElements() == 0) {
-    return false;
-  }
-  return true;
-}
-
-/// Computes the transformed input floating-point index for a given axis.
 static mlir::Value
-computeSourceCoordinate(mlir::OpBuilder &b, mlir::Location loc,
+computeSourceCoordinate(mlir::OpBuilder &nest, mlir::Location loc,
                         mlir::Value outIdx, mlir::Value inDim,
                         mlir::Value outDim, mlir::Value scale,
                         llvm::StringRef coordTransMode) {
-  mlir::FloatType f32Type = b.getF32Type();
+  mlir::FloatType f32Type = nest.getF32Type();
 
-  // Helper lambda to safely convert index -> i64 -> f32
+  // convert index -> i64 -> f32
   auto castIndexToF32 = [&](mlir::Value indexVal) -> mlir::Value {
-    mlir::Value i64Val =
-        mlir::arith::IndexCastOp::create(b, loc, b.getI64Type(), indexVal);
-    return mlir::arith::SIToFPOp::create(b, loc, f32Type, i64Val);
+    auto i64Val = mlir::arith::IndexCastOp::create(nest, loc, nest.getI64Type(),
+                                                   indexVal);
+    return mlir::arith::SIToFPOp::create(nest, loc, f32Type, i64Val);
   };
 
-  mlir::Value outIdxF32 = castIndexToF32(outIdx);
-  mlir::Value inDimF32 = castIndexToF32(inDim);
-  mlir::Value outDimF32 = castIndexToF32(outDim);
+  auto outIdxF32 = castIndexToF32(outIdx);
+  auto inDimF32 = castIndexToF32(inDim);
+  auto outDimF32 = castIndexToF32(outDim);
 
   if (coordTransMode == "asymmetric") {
-    return mlir::arith::DivFOp::create(b, loc, outIdxF32, scale);
+    return mlir::arith::DivFOp::create(nest, loc, outIdxF32, scale);
   }
 
   if (coordTransMode == "align_corners") {
-    mlir::Value one = mlir::arith::ConstantFloatOp::create(b, loc, f32Type,
-                                                           llvm::APFloat(1.0f));
-    mlir::Value inMinusOne = mlir::arith::SubFOp::create(b, loc, inDimF32, one);
-    mlir::Value outMinusOne =
-        mlir::arith::SubFOp::create(b, loc, outDimF32, one);
+    auto one = mlir::arith::ConstantFloatOp::create(nest, loc, f32Type,
+                                                    llvm::APFloat(1.0f));
+    auto inMinusOne = mlir::arith::SubFOp::create(nest, loc, inDimF32, one);
+    auto outMinusOne = mlir::arith::SubFOp::create(nest, loc, outDimF32, one);
 
-    mlir::Value zeroFloat = mlir::arith::ConstantFloatOp::create(
-        b, loc, f32Type, llvm::APFloat(0.0f));
-    mlir::Value isOne = mlir::arith::CmpFOp::create(
-        b, loc, mlir::arith::CmpFPredicate::OEQ, outMinusOne, zeroFloat);
+    auto zeroFloat = mlir::arith::ConstantFloatOp::create(nest, loc, f32Type,
+                                                          llvm::APFloat(0.0f));
+    auto isOne = mlir::arith::CmpFOp::create(
+        nest, loc, mlir::arith::CmpFPredicate::OEQ, outMinusOne, zeroFloat);
 
-    mlir::Value scaled =
-        mlir::arith::MulFOp::create(b, loc, outIdxF32, inMinusOne);
-    mlir::Value divResult =
-        mlir::arith::DivFOp::create(b, loc, scaled, outMinusOne);
+    auto scaled = mlir::arith::MulFOp::create(nest, loc, outIdxF32, inMinusOne);
+    auto divResult =
+        mlir::arith::DivFOp::create(nest, loc, scaled, outMinusOne);
 
-    return mlir::arith::SelectOp::create(b, loc, isOne, zeroFloat, divResult);
+    return mlir::arith::SelectOp::create(nest, loc, isOne, zeroFloat,
+                                         divResult);
   }
 
   if (coordTransMode == "tf_half_pixel_for_nn") {
-    mlir::Value half = mlir::arith::ConstantFloatOp::create(
-        b, loc, f32Type, llvm::APFloat(0.5f));
-    mlir::Value idxPlusHalf =
-        mlir::arith::AddFOp::create(b, loc, outIdxF32, half);
-    return mlir::arith::DivFOp::create(b, loc, idxPlusHalf, scale);
+    auto half = mlir::arith::ConstantFloatOp::create(nest, loc, f32Type,
+                                                     llvm::APFloat(0.5f));
+    auto idxPlusHalf = mlir::arith::AddFOp::create(nest, loc, outIdxF32, half);
+
+    return mlir::arith::DivFOp::create(nest, loc, idxPlusHalf, scale);
   }
 
   if (coordTransMode == "pytorch_half_pixel") {
-    mlir::Value half = mlir::arith::ConstantFloatOp::create(
-        b, loc, f32Type, llvm::APFloat(0.5f));
-    mlir::Value zero = mlir::arith::ConstantFloatOp::create(
-        b, loc, f32Type, llvm::APFloat(0.0f));
-    mlir::Value one = mlir::arith::ConstantFloatOp::create(b, loc, f32Type,
-                                                           llvm::APFloat(1.0f));
+    auto half = mlir::arith::ConstantFloatOp::create(nest, loc, f32Type,
+                                                     llvm::APFloat(0.5f));
+    auto zero = mlir::arith::ConstantFloatOp::create(nest, loc, f32Type,
+                                                     llvm::APFloat(0.0f));
+    auto one = mlir::arith::ConstantFloatOp::create(nest, loc, f32Type,
+                                                    llvm::APFloat(1.0f));
 
-    mlir::Value isOutDimGtOne = mlir::arith::CmpFOp::create(
-        b, loc, mlir::arith::CmpFPredicate::OGT, outDimF32, one);
+    auto isOutDimGtOne = mlir::arith::CmpFOp::create(
+        nest, loc, mlir::arith::CmpFPredicate::OGT, outDimF32, one);
 
-    mlir::Value idxPlusHalf =
-        mlir::arith::AddFOp::create(b, loc, outIdxF32, half);
-    mlir::Value divResult =
-        mlir::arith::DivFOp::create(b, loc, idxPlusHalf, scale);
-    mlir::Value subHalf = mlir::arith::SubFOp::create(b, loc, divResult, half);
+    auto idxPlusHalf = mlir::arith::AddFOp::create(nest, loc, outIdxF32, half);
+    auto divResult = mlir::arith::DivFOp::create(nest, loc, idxPlusHalf, scale);
+    auto subHalf = mlir::arith::SubFOp::create(nest, loc, divResult, half);
 
-    return mlir::arith::SelectOp::create(b, loc, isOutDimGtOne, subHalf, zero);
+    return mlir::arith::SelectOp::create(nest, loc, isOutDimGtOne, subHalf,
+                                         zero);
   }
 
-  // Default: "half_pixel"
-  mlir::Value half = mlir::arith::ConstantFloatOp::create(b, loc, f32Type,
-                                                          llvm::APFloat(0.5f));
-  mlir::Value idxPlusHalf =
-      mlir::arith::AddFOp::create(b, loc, outIdxF32, half);
-  mlir::Value divResult =
-      mlir::arith::DivFOp::create(b, loc, idxPlusHalf, scale);
-  return mlir::arith::SubFOp::create(b, loc, divResult, half);
+  // default: "half_pixel"
+  auto half = mlir::arith::ConstantFloatOp::create(nest, loc, f32Type,
+                                                   llvm::APFloat(0.5f));
+  auto idxPlusHalf = mlir::arith::AddFOp::create(nest, loc, outIdxF32, half);
+  auto divResult = mlir::arith::DivFOp::create(nest, loc, idxPlusHalf, scale);
+
+  return mlir::arith::SubFOp::create(nest, loc, divResult, half);
 }
 
-static mlir::Value computeNearestIndex(mlir::OpBuilder &b, mlir::Location loc,
-                                       mlir::Value coord,
+static mlir::Value computeNearestIndex(mlir::OpBuilder &nest,
+                                       mlir::Location loc, mlir::Value coord,
                                        mlir::Value inDimIndex,
                                        llvm::StringRef nearestMode) {
   mlir::Value rounded;
 
   if (nearestMode == "floor") {
-    rounded = mlir::math::FloorOp::create(b, loc, coord);
+    rounded = mlir::math::FloorOp::create(nest, loc, coord);
   } else if (nearestMode == "ceil") {
-    rounded = mlir::math::CeilOp::create(b, loc, coord);
+    rounded = mlir::math::CeilOp::create(nest, loc, coord);
   } else if (nearestMode == "round_prefer_ceil") {
-    mlir::Value half = mlir::arith::ConstantFloatOp::create(
-        b, loc, b.getF32Type(), llvm::APFloat(0.5f));
-    mlir::Value shifted = mlir::arith::AddFOp::create(b, loc, coord, half);
-    rounded = mlir::math::FloorOp::create(b, loc, shifted);
+    auto half = mlir::arith::ConstantFloatOp::create(
+        nest, loc, nest.getF32Type(), llvm::APFloat(0.5f));
+    auto shifted = mlir::arith::AddFOp::create(nest, loc, coord, half);
+    rounded = mlir::math::FloorOp::create(nest, loc, shifted);
   } else {
-    // Default: "round_prefer_floor" (ceil(coord - 0.5))
-    mlir::Value half = mlir::arith::ConstantFloatOp::create(
-        b, loc, b.getF32Type(), llvm::APFloat(0.5f));
-    mlir::Value shifted = mlir::arith::SubFOp::create(b, loc, coord, half);
-    rounded = mlir::math::CeilOp::create(b, loc, shifted);
+    // default: "round_prefer_floor" (ceil(coord - 0.5))
+    auto half = mlir::arith::ConstantFloatOp::create(
+        nest, loc, nest.getF32Type(), llvm::APFloat(0.5f));
+    auto shifted = mlir::arith::SubFOp::create(nest, loc, coord, half);
+    rounded = mlir::math::CeilOp::create(nest, loc, shifted);
   }
 
-  mlir::Value idxI64 =
-      mlir::arith::FPToSIOp::create(b, loc, b.getI64Type(), rounded);
-  mlir::Value inDimI64 =
-      mlir::arith::IndexCastOp::create(b, loc, b.getI64Type(), inDimIndex);
+  auto idxI64 =
+      mlir::arith::FPToSIOp::create(nest, loc, nest.getI64Type(), rounded);
+  auto inDimI64 = mlir::arith::IndexCastOp::create(nest, loc, nest.getI64Type(),
+                                                   inDimIndex);
 
-  // Clamp index to [0, inDim - 1]
-  mlir::Value zeroI64 = mlir::arith::ConstantIntOp::create(b, loc, 0, 64);
-  mlir::Value oneI64 = mlir::arith::ConstantIntOp::create(b, loc, 1, 64);
-  mlir::Value maxI64 = mlir::arith::SubIOp::create(b, loc, inDimI64, oneI64);
+  // clamp index to [0, inDim - 1]
+  auto zeroI64 = mlir::arith::ConstantIntOp::create(nest, loc, 0, 64);
+  auto oneI64 = mlir::arith::ConstantIntOp::create(nest, loc, 1, 64);
+  auto maxI64 = mlir::arith::SubIOp::create(nest, loc, inDimI64, oneI64);
 
-  mlir::Value clampedLow =
-      mlir::arith::MaxSIOp::create(b, loc, idxI64, zeroI64);
-  mlir::Value clampedHigh =
-      mlir::arith::MinSIOp::create(b, loc, clampedLow, maxI64);
+  auto clampLow = mlir::arith::MaxSIOp::create(nest, loc, idxI64, zeroI64);
+  auto clampHigh = mlir::arith::MinSIOp::create(nest, loc, clampLow, maxI64);
 
-  return mlir::arith::IndexCastOp::create(b, loc, b.getIndexType(),
-                                          clampedHigh);
+  return mlir::arith::IndexCastOp::create(nest, loc, nest.getIndexType(),
+                                          clampHigh);
 }
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_ResizeOp(mlir::Operation *op,
-                                          mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_ResizeOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                      const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  mlir::Value data = op->getOperand(0);
-  mlir::Value result = op->getResult(0);
-  auto resultType = mlir::dyn_cast<mlir::RankedTensorType>(result.getType());
-  auto dataType = mlir::dyn_cast<mlir::RankedTensorType>(data.getType());
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 
-  if (!resultType || !dataType) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName +
-                               " inputs and outputs must be ranked tensors");
-  }
+  /*
+   * I/O Values
+   */
 
-  int64_t rank = dataType.getRank();
+  auto opInput = convRewriter.getRemappedValue(op->getOperand(0));
 
-  llvm::StringRef mode = "nearest";
-  llvm::StringRef coordTransMode = "half_pixel";
-  llvm::StringRef nearestMode = "round_prefer_floor";
-
-  if (auto attr = op->getAttrOfType<mlir::StringAttr>("mode")) {
-    mode = attr.getValue();
-  }
-  if (auto attr = op->getAttrOfType<mlir::StringAttr>(
-          "coordinate_transformation_mode")) {
-    coordTransMode = attr.getValue();
-  }
-  if (auto attr = op->getAttrOfType<mlir::StringAttr>("nearest_mode")) {
-    nearestMode = attr.getValue();
-  }
-
-  mlir::Value scalesOperand;
-  mlir::Value sizesOperand;
-
+  mlir::Value opInputScales;
+  mlir::Value opInputSizes;
   if (opName.contains("V10")) {
-    scalesOperand = getOptionalOperand(op, 1);
+    opInputScales = getOptionalOperand(op, 1);
   } else {
-    // Resize V11, V13, V18, V19
-    scalesOperand = getOptionalOperand(op, 2);
-    sizesOperand = getOptionalOperand(op, 3);
+    opInputScales = getOptionalOperand(op, 2);
+    opInputSizes = getOptionalOperand(op, 3);
   }
 
-  bool hasScales = isNonEmptyTensor(scalesOperand);
-  bool hasSizes = isNonEmptyTensor(sizesOperand);
+  auto opOutput = convRewriter.getRemappedValue(op->getResult(0));
+
+  auto inpDatType = mlir::dyn_cast<mlir::RankedTensorType>(opInput.getType());
+  auto outDatType = mlir::dyn_cast<mlir::RankedTensorType>(opOutput.getType());
+
+  int64_t inputRank = inpDatType.getRank();
+
+  /*
+   * Attributes
+   */
+
+  // mode
+  llvm::StringRef attr_mode = "nearest";
+  if (auto attr = op->getAttrOfType<mlir::StringAttr>("mode"))
+    attr_mode = attr.getValue();
+
+  // coordinate_transformation_mode
+  llvm::StringRef attr_coord_trans_mode = "half_pixel";
+  if (auto attr =
+          op->getAttrOfType<mlir::StringAttr>("coordinate_transformation_mode"))
+    attr_coord_trans_mode = attr.getValue();
+
+  // nearest_mode
+  llvm::StringRef attr_nearest_mode = "round_prefer_floor";
+  if (auto attr = op->getAttrOfType<mlir::StringAttr>("nearest_mode"))
+    attr_nearest_mode = attr.getValue();
+
+  /*
+   * Affine mappings
+   */
+
+  mlir::AffineMap outputMap = rewriter.getMultiDimIdentityMap(inputRank);
+  llvm::SmallVector<mlir::AffineMap, 2> indexingMaps = {outputMap};
+
+  llvm::SmallVector<mlir::utils::IteratorType> iteratorTypes(
+      inputRank, mlir::utils::IteratorType::parallel);
+
+  /*
+   *  Linalg ops staging
+   */
 
   llvm::SmallVector<mlir::Value> outputDynDims;
-  llvm::SmallVector<mlir::Value> outDims(rank);
-  llvm::SmallVector<mlir::Value> inDims(rank);
-  llvm::SmallVector<mlir::Value> axisScales(rank);
+  llvm::SmallVector<mlir::Value> outDims(inputRank);
+  llvm::SmallVector<mlir::Value> inDims(inputRank);
+  llvm::SmallVector<mlir::Value> axisScales(inputRank);
 
-  for (int64_t i = 0; i < rank; ++i) {
-    inDims[i] = mlir::tensor::DimOp::create(rewriter, loc, data, i);
+  for (int64_t i = 0; i < inputRank; ++i) {
+    inDims[i] = mlir::tensor::DimOp::create(rewriter, loc, opInput, i);
 
-    if (resultType.isDynamicDim(i)) {
+    if (outDatType.isDynamicDim(i)) {
       mlir::Value outDimIdx;
-      if (hasSizes) {
-        mlir::Value idxVal =
-            mlir::arith::ConstantIndexOp::create(rewriter, loc, i);
-        mlir::Value extractedSize = mlir::tensor::ExtractOp::create(
-            rewriter, loc, sizesOperand, mlir::ValueRange{idxVal});
+      if (opInputSizes) {
+        auto idxVal = mlir::arith::ConstantIndexOp::create(rewriter, loc, i);
+        auto extractedSize = mlir::tensor::ExtractOp::create(
+            rewriter, loc, opInputSizes, mlir::ValueRange{idxVal});
         outDimIdx = mlir::arith::IndexCastOp::create(
             rewriter, loc, rewriter.getIndexType(), extractedSize);
-      } else if (resultType.hasStaticShape()) {
+      } else if (outDatType.hasStaticShape()) {
         outDimIdx = mlir::arith::ConstantIndexOp::create(
-            rewriter, loc, resultType.getDimSize(i));
+            rewriter, loc, outDatType.getDimSize(i));
       } else {
         outDimIdx = mlir::arith::ConstantIndexOp::create(rewriter, loc, 1);
       }
@@ -264,15 +260,13 @@ mlir::LogicalResult OnnxToLinalg_ResizeOp(mlir::Operation *op,
       outputDynDims.push_back(outDimIdx);
     } else {
       outDims[i] = mlir::arith::ConstantIndexOp::create(
-          rewriter, loc, resultType.getDimSize(i));
+          rewriter, loc, outDatType.getDimSize(i));
     }
 
-    // Extract dynamic scales if provided or calculate from dimension ratio
-    if (hasScales) {
-      mlir::Value idxVal =
-          mlir::arith::ConstantIndexOp::create(rewriter, loc, i);
-      mlir::Value extractedScale = mlir::tensor::ExtractOp::create(
-          rewriter, loc, scalesOperand, mlir::ValueRange{idxVal});
+    if (opInputScales) {
+      auto idxVal = mlir::arith::ConstantIndexOp::create(rewriter, loc, i);
+      auto extractedScale = mlir::tensor::ExtractOp::create(
+          rewriter, loc, opInputScales, mlir::ValueRange{idxVal});
       if (mlir::isa<mlir::Float64Type>(extractedScale.getType())) {
         axisScales[i] = mlir::arith::TruncFOp::create(
             rewriter, loc, rewriter.getF32Type(), extractedScale);
@@ -280,61 +274,59 @@ mlir::LogicalResult OnnxToLinalg_ResizeOp(mlir::Operation *op,
         axisScales[i] = extractedScale;
       }
     } else {
-      mlir::Value inI64 = mlir::arith::IndexCastOp::create(
+      auto inI64 = mlir::arith::IndexCastOp::create(
           rewriter, loc, rewriter.getI64Type(), inDims[i]);
-      mlir::Value inF32 = mlir::arith::SIToFPOp::create(
-          rewriter, loc, rewriter.getF32Type(), inI64);
-      mlir::Value outI64 = mlir::arith::IndexCastOp::create(
+      auto inF32 = mlir::arith::SIToFPOp::create(rewriter, loc,
+                                                 rewriter.getF32Type(), inI64);
+      auto outI64 = mlir::arith::IndexCastOp::create(
           rewriter, loc, rewriter.getI64Type(), outDims[i]);
-      mlir::Value outF32 = mlir::arith::SIToFPOp::create(
+      auto outF32 = mlir::arith::SIToFPOp::create(
           rewriter, loc, rewriter.getF32Type(), outI64);
       axisScales[i] = mlir::arith::DivFOp::create(rewriter, loc, outF32, inF32);
     }
   }
 
-  mlir::Value initTensor =
-      mlir::tensor::EmptyOp::create(rewriter, loc, resultType.getShape(),
-                                    resultType.getElementType(), outputDynDims);
-
-  mlir::AffineMap outputMap = rewriter.getMultiDimIdentityMap(rank);
-  llvm::SmallVector<mlir::AffineMap, 2> indexingMaps = {outputMap};
-  llvm::SmallVector<mlir::utils::IteratorType> iteratorTypes(
-      rank, mlir::utils::IteratorType::parallel);
+  auto outBuffer =
+      mlir::tensor::EmptyOp::create(rewriter, loc, outDatType.getShape(),
+                                    outDatType.getElementType(), outputDynDims);
 
   auto genericOp = mlir::linalg::GenericOp::create(
-      rewriter, loc,
-      /*resultTypes=*/mlir::TypeRange{resultType},
-      /*inputs=*/mlir::ValueRange{},
-      /*outputs=*/mlir::ValueRange{initTensor}, indexingMaps, iteratorTypes,
-      [&](mlir::OpBuilder &b, mlir::Location nestedLoc, mlir::ValueRange args) {
-        llvm::SmallVector<mlir::Value> inputIndices;
+      /*op_builder*/ rewriter, /*src_location*/ loc,
+      /*result_types*/ mlir::TypeRange{outDatType},
+      /*input_values*/ mlir::ValueRange{},
+      /*output_values*/ mlir::ValueRange{outBuffer},
+      /*affine_maps*/ indexingMaps, /*inter_types*/ iteratorTypes,
+      [&](/*op_builder*/ mlir::OpBuilder &nest,
+          /*src_location*/ mlir::Location nloc,
+          /*value_args*/ mlir::ValueRange args) {
+        llvm::SmallVector<mlir::Value> inpIndices;
 
-        for (int64_t d = 0; d < rank; ++d) {
-          mlir::Value outIdx = mlir::linalg::IndexOp::create(b, nestedLoc, d);
-          mlir::Value srcCoord = computeSourceCoordinate(
-              b, nestedLoc, outIdx, inDims[d], outDims[d], axisScales[d],
-              coordTransMode);
+        for (int64_t d = 0; d < inputRank; ++d) {
+          auto outIdx = mlir::linalg::IndexOp::create(nest, nloc, d);
+          auto srcCoord =
+              computeSourceCoordinate(nest, nloc, outIdx, inDims[d], outDims[d],
+                                      axisScales[d], attr_coord_trans_mode);
 
-          if (mode == "nearest") {
-            mlir::Value nearestIdx = computeNearestIndex(
-                b, nestedLoc, srcCoord, inDims[d], nearestMode);
-            inputIndices.push_back(nearestIdx);
+          if (attr_mode == "nearest") {
+            auto nearestIdx = computeNearestIndex(nest, nloc, srcCoord,
+                                                  inDims[d], attr_nearest_mode);
+            inpIndices.push_back(nearestIdx);
           } else {
-            // Fallback indexing for nearest modes
-            mlir::Value nearestIdx =
-                computeNearestIndex(b, nestedLoc, srcCoord, inDims[d], "floor");
-            inputIndices.push_back(nearestIdx);
+            auto nearestIdx =
+                computeNearestIndex(nest, nloc, srcCoord, inDims[d], "floor");
+            inpIndices.push_back(nearestIdx);
           }
         }
 
-        mlir::Value sampledVal =
-            mlir::tensor::ExtractOp::create(b, nestedLoc, data, inputIndices);
-        mlir::linalg::YieldOp::create(b, nestedLoc, sampledVal);
+        auto sampledVal =
+            mlir::tensor::ExtractOp::create(nest, nloc, opInput, inpIndices);
+        mlir::linalg::YieldOp::create(nest, nloc, sampledVal.getResult());
       });
 
   genericOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
 
-  rewriter.replaceOp(op, genericOp.getResult(0));
+  rewriter.replaceOp(op, genericOp);
+
   return mlir::success();
 }
 

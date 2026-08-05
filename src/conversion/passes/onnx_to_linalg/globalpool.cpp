@@ -37,395 +37,179 @@
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Support/LogicalResult.h>
 
+#include "onnx2mlir/conversion/onnx_passes.hpp"
 #include "onnx2mlir/support/support.hpp"
 
 namespace onnx2mlir::dialect {
 
 mlir::LogicalResult
-OnnxToLinalg_GlobalAveragePoolOp(mlir::Operation *op,
-                                 mlir::PatternRewriter &rewriter) {
+OnnxToLinalg_GlobalPoolOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                           const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  mlir::Value input = op->getOperand(0);
-  mlir::Value result = op->getResult(0);
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 
-  auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(input.getType());
-  auto resType = mlir::dyn_cast<mlir::RankedTensorType>(result.getType());
+  /*
+   * I/O Values
+   */
 
-  if (!inpType || !resType) {
-    return mlir::emitError(
-        Onnx2Mlir_SrcLoc(rewriter),
-        opName + " operand and result must be ranked tensor type");
-  }
+  auto opInput = convRewriter.getRemappedValue(op->getOperand(0));
+  auto opOutput = convRewriter.getRemappedValue(op->getResult(0));
 
-  auto elemType = inpType.getElementType();
-  auto floatType = mlir::dyn_cast<mlir::FloatType>(elemType);
-  if (!floatType) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " requires float element type");
-  }
+  auto inpDatType = mlir::dyn_cast<mlir::RankedTensorType>(opInput.getType());
+  auto outDatType = mlir::dyn_cast<mlir::RankedTensorType>(opOutput.getType());
 
-  int64_t rank = inpType.getRank();
-  if (rank < 3) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " input tensor rank must be at least 3");
-  }
+  auto inpElmType = inpDatType.getElementType();
+
+  int64_t inputRank = inpDatType.getRank();
+
+  // checks
+  if (inputRank < 3)
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " input tensor rank must be at least 3";
+  if (!inpElmType.isFloat())
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " requires float element type";
 
   int64_t numSpatialElements = 1;
-  for (int64_t i = 2; i < rank; ++i) {
-    int64_t dimSize = inpType.getDimSize(i);
-    if (dimSize == mlir::ShapedType::kDynamic) {
-      return mlir::emitError(
-          Onnx2Mlir_SrcLoc(rewriter),
-          opName + " dynamic spatial dimensions are not supported");
-    }
+  for (int64_t i = 2; i < inputRank; ++i) {
+    int64_t dimSize = inpDatType.getDimSize(i);
+    if (dimSize == mlir::ShapedType::kDynamic)
+      return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+             << opName << " dynamic spatial dimensions are not supported";
     numSpatialElements *= dimSize;
   }
 
-  mlir::Value initConst;
-  // Fill accumulator buffer with zero for sum / Lp reduction
-  initConst = mlir::arith::ConstantOp::create(
-      rewriter, loc, rewriter.getFloatAttr(elemType, 0.0));
+  /*
+   *  Attributes
+   */
 
-  mlir::Value sumEmpty = mlir::tensor::EmptyOp::create(
-      rewriter, loc, resType.getShape(), elemType);
-
-  mlir::Value sumBuffer =
-      mlir::linalg::FillOp::create(rewriter, loc, initConst, sumEmpty)
-          .getResult(0);
-
-  // Iterators: N, C are parallel; spatial dims (H, W, ...) are reduction
-  llvm::SmallVector<mlir::utils::IteratorType, 4> iteratorTypes;
-  iteratorTypes.push_back(mlir::utils::IteratorType::parallel); // N
-  iteratorTypes.push_back(mlir::utils::IteratorType::parallel); // C
-  for (int64_t i = 2; i < rank; ++i) {
-    iteratorTypes.push_back(mlir::utils::IteratorType::reduction);
-  }
-
-  // Input Map: (d0, d1, d2, ..., d_{rank-1}) -> (d0, d1, d2, ..., d_{rank-1})
-  mlir::AffineMap inputMap = rewriter.getMultiDimIdentityMap(rank);
-
-  // Output Map: (d0, d1, d2, ..., d_{rank-1}) -> (d0, d1, 0, 0, ..., 0)
-  mlir::Builder builder(op->getContext());
-  mlir::AffineExpr zeroExpr = builder.getAffineConstantExpr(0);
-  llvm::SmallVector<mlir::AffineExpr, 4> outputExprs;
-  outputExprs.push_back(builder.getAffineDimExpr(0)); // N
-  outputExprs.push_back(builder.getAffineDimExpr(1)); // C
-  for (int64_t i = 2; i < rank; ++i) {
-    outputExprs.push_back(zeroExpr);
-  }
-  mlir::AffineMap outputMap =
-      mlir::AffineMap::get(rank, 0, outputExprs, op->getContext());
-
-  llvm::SmallVector<mlir::AffineMap, 2> indexingMaps = {inputMap, outputMap};
-
-  auto reductionGenericOp = mlir::linalg::GenericOp::create(
-      rewriter, loc, mlir::TypeRange{resType}, mlir::ValueRange{input},
-      mlir::ValueRange{sumBuffer}, indexingMaps, iteratorTypes,
-      [&](mlir::OpBuilder &nestedBuilder, mlir::Location nestedLoc,
-          mlir::ValueRange args) {
-        mlir::Value scalarInput = args[0];
-        mlir::Value scalarAcc = args[1];
-        mlir::Value updatedAcc;
-
-        // Average pooling accumulation: updatedAcc = scalarInput + scalarAcc
-        updatedAcc = mlir::arith::AddFOp::create(nestedBuilder, nestedLoc,
-                                                 scalarInput, scalarAcc);
-
-        mlir::linalg::YieldOp::create(nestedBuilder, nestedLoc, updatedAcc);
-      });
-
-  reductionGenericOp->setAttr(
-      "transform.target_tag",
-      rewriter.getStringAttr(opName.str() + "_reduction"));
-
-  mlir::Value postEmpty = mlir::tensor::EmptyOp::create(
-      rewriter, loc, resType.getShape(), elemType);
-
-  mlir::AffineMap idMap = rewriter.getMultiDimIdentityMap(rank);
-  llvm::SmallVector<mlir::AffineMap, 2> postIndexingMaps = {idMap, idMap};
-  llvm::SmallVector<mlir::utils::IteratorType, 4> postIteratorTypes(
-      rank, mlir::utils::IteratorType::parallel);
-
-  auto postGenericOp = mlir::linalg::GenericOp::create(
-      rewriter, loc, mlir::TypeRange{resType},
-      mlir::ValueRange{reductionGenericOp.getResult(0)},
-      mlir::ValueRange{postEmpty}, postIndexingMaps, postIteratorTypes,
-      [&](mlir::OpBuilder &nestedBuilder, mlir::Location nestedLoc,
-          mlir::ValueRange args) {
-        mlir::Value scalarSum = args[0];
-        mlir::Value finalVal;
-
-        // Division by spatial volume count: avg = sum / numSpatialElements
-        mlir::Value countConst = mlir::arith::ConstantOp::create(
-            nestedBuilder, nestedLoc,
-            nestedBuilder.getFloatAttr(
-                elemType, static_cast<double>(numSpatialElements)));
-        finalVal = mlir::arith::DivFOp::create(nestedBuilder, nestedLoc,
-                                               scalarSum, countConst);
-        mlir::linalg::YieldOp::create(nestedBuilder, nestedLoc, finalVal);
-      });
-
-  postGenericOp->setAttr("transform.target_tag",
-                         rewriter.getStringAttr(opName));
-
-  rewriter.replaceOp(op, postGenericOp.getResults());
-
-  return mlir::success();
-}
-
-mlir::LogicalResult
-OnnxToLinalg_GlobalLpPoolOp(mlir::Operation *op,
-                            mlir::PatternRewriter &rewriter) {
-  auto loc = op->getLoc();
-  auto opName = op->getName().getStringRef();
-
-  mlir::Value input = op->getOperand(0);
-  mlir::Value result = op->getResult(0);
-
-  auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(input.getType());
-  auto resType = mlir::dyn_cast<mlir::RankedTensorType>(result.getType());
-
-  if (!inpType || !resType) {
-    return mlir::emitError(
-        Onnx2Mlir_SrcLoc(rewriter),
-        opName + " operand and result must be ranked tensor type");
-  }
-
-  auto elemType = inpType.getElementType();
-  auto floatType = mlir::dyn_cast<mlir::FloatType>(elemType);
-  if (!floatType) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " requires float element type");
-  }
-
-  int64_t rank = inpType.getRank();
-  if (rank < 3) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " input tensor rank must be at least 3");
-  }
-
-  int64_t numSpatialElements = 1;
-  for (int64_t i = 2; i < rank; ++i) {
-    int64_t dimSize = inpType.getDimSize(i);
-    if (dimSize == mlir::ShapedType::kDynamic) {
-      return mlir::emitError(
-          Onnx2Mlir_SrcLoc(rewriter),
-          opName + " dynamic spatial dimensions are not supported");
-    }
-    numSpatialElements *= dimSize;
-  }
-
-  double pVal = 2.0;
+  // p
+  double attr_p = 2.0;
   if (auto pAttr = op->getAttr("p")) {
-    if (auto floatAttr = mlir::dyn_cast<mlir::FloatAttr>(pAttr)) {
-      pVal = floatAttr.getValueAsDouble();
-    } else if (auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(pAttr)) {
-      pVal = static_cast<double>(intAttr.getInt());
-    }
+    if (auto floatAttr = mlir::dyn_cast<mlir::FloatAttr>(pAttr))
+      attr_p = floatAttr.getValueAsDouble();
+    else if (auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(pAttr))
+      attr_p = static_cast<double>(intAttr.getInt());
   }
 
-  mlir::Value initConst;
-  // Fill accumulator buffer with zero for sum / Lp reduction
-  initConst = mlir::arith::ConstantOp::create(
-      rewriter, loc, rewriter.getFloatAttr(elemType, 0.0));
+  /*
+   *  Affine mappings
+   */
 
-  mlir::Value sumEmpty = mlir::tensor::EmptyOp::create(
-      rewriter, loc, resType.getShape(), elemType);
+  auto zeroExpr = rewriter.getAffineConstantExpr(0);
+  llvm::SmallVector<mlir::AffineExpr, 4> outExprs;
+  outExprs.push_back(rewriter.getAffineDimExpr(0)); // N
+  outExprs.push_back(rewriter.getAffineDimExpr(1)); // C
+  for (int64_t i = 2; i < inputRank; ++i)
+    outExprs.push_back(zeroExpr);
 
-  mlir::Value sumBuffer =
-      mlir::linalg::FillOp::create(rewriter, loc, initConst, sumEmpty)
-          .getResult(0);
+  auto inpMap = rewriter.getMultiDimIdentityMap(inputRank);
+  auto outMap = mlir::AffineMap::get(inputRank, 0, outExprs, op->getContext());
 
-  // Iterators: N, C are parallel; spatial dims (H, W, ...) are reduction
+  llvm::SmallVector<mlir::AffineMap, 2> indexingMaps = {inpMap, outMap};
+
   llvm::SmallVector<mlir::utils::IteratorType, 4> iteratorTypes;
   iteratorTypes.push_back(mlir::utils::IteratorType::parallel); // N
   iteratorTypes.push_back(mlir::utils::IteratorType::parallel); // C
-  for (int64_t i = 2; i < rank; ++i) {
+  for (int64_t i = 2; i < inputRank; ++i)
     iteratorTypes.push_back(mlir::utils::IteratorType::reduction);
-  }
 
-  // Input Map: (d0, d1, d2, ..., d_{rank-1}) -> (d0, d1, d2, ..., d_{rank-1})
-  mlir::AffineMap inputMap = rewriter.getMultiDimIdentityMap(rank);
+  // post
+  auto postMap = rewriter.getMultiDimIdentityMap(inputRank);
+  llvm::SmallVector<mlir::AffineMap, 2> postIndexingMaps = {postMap, postMap};
 
-  // Output Map: (d0, d1, d2, ..., d_{rank-1}) -> (d0, d1, 0, 0, ..., 0)
-  mlir::Builder builder(op->getContext());
-  mlir::AffineExpr zeroExpr = builder.getAffineConstantExpr(0);
-  llvm::SmallVector<mlir::AffineExpr, 4> outputExprs;
-  outputExprs.push_back(builder.getAffineDimExpr(0)); // N
-  outputExprs.push_back(builder.getAffineDimExpr(1)); // C
-  for (int64_t i = 2; i < rank; ++i) {
-    outputExprs.push_back(zeroExpr);
-  }
-  mlir::AffineMap outputMap =
-      mlir::AffineMap::get(rank, 0, outputExprs, op->getContext());
+  llvm::SmallVector<mlir::utils::IteratorType, 4> postIteratorTypes(
+      inputRank, mlir::utils::IteratorType::parallel);
 
-  llvm::SmallVector<mlir::AffineMap, 2> indexingMaps = {inputMap, outputMap};
+  /*
+   *  Linalg ops staging
+   */
+
+  mlir::linalg::GenericOp globalpoolOp;
+
+  auto empty = mlir::tensor::EmptyOp::create(
+      rewriter, loc, outDatType.getShape(), inpDatType.getElementType());
+  auto zero = mlir::arith::ConstantOp::create(
+      rewriter, loc, rewriter.getFloatAttr(inpElmType, 0.0));
+  auto sumBuffer = mlir::linalg::FillOp::create(
+      rewriter, loc, mlir::ValueRange{zero}, mlir::ValueRange{empty});
 
   auto reductionGenericOp = mlir::linalg::GenericOp::create(
-      rewriter, loc, mlir::TypeRange{resType}, mlir::ValueRange{input},
-      mlir::ValueRange{sumBuffer}, indexingMaps, iteratorTypes,
-      [&](mlir::OpBuilder &nestedBuilder, mlir::Location nestedLoc,
-          mlir::ValueRange args) {
-        mlir::Value scalarInput = args[0];
-        mlir::Value scalarAcc = args[1];
-        mlir::Value updatedAcc;
-
-        // Lp pooling accumulation: updatedAcc = scalarAcc + |scalarInput|^p
-        mlir::Value absInput =
-            mlir::math::AbsFOp::create(nestedBuilder, nestedLoc, scalarInput);
-        mlir::Value poweredInput;
-        if (pVal == 1.0) {
-          poweredInput = absInput;
-        } else if (pVal == 2.0) {
-          poweredInput = mlir::arith::MulFOp::create(nestedBuilder, nestedLoc,
-                                                     absInput, absInput);
-        } else {
-          mlir::Value pConst = mlir::arith::ConstantOp::create(
-              nestedBuilder, nestedLoc,
-              nestedBuilder.getFloatAttr(elemType, pVal));
-          poweredInput = mlir::math::PowFOp::create(nestedBuilder, nestedLoc,
-                                                    absInput, pConst);
+      /*op_builder*/ rewriter, /*src_location*/ loc,
+      /*result_types*/ mlir::TypeRange{outDatType},
+      /*input_values*/ mlir::ValueRange{opInput},
+      /*output_values*/ mlir::ValueRange{sumBuffer.getResult(0)},
+      /*affine_maps*/ indexingMaps,
+      /*iter_types*/ iteratorTypes,
+      [&](/*op_builder*/ mlir::OpBuilder &nest,
+          /*src_location*/ mlir::Location nloc,
+          /*value_args*/ mlir::ValueRange args) {
+        mlir::Value accum;
+        if (opNameBeginsWith(opName, "GlobalAveragePool")) {
+          accum = mlir::arith::AddFOp::create(nest, nloc, args[0], args[1]);
+        } else if (opNameBeginsWith(opName, "GlobalMaxPool")) {
+          accum = mlir::arith::MaximumFOp::create(nest, nloc, args[0], args[1]);
+        } else if (opNameBeginsWith(opName, "GlobalLpPool")) {
+          mlir::Value pwrIn;
+          auto absInput = mlir::math::AbsFOp::create(nest, nloc, args[0]);
+          if (attr_p == 1.0f) {
+            pwrIn = absInput;
+          } else if (attr_p == 2.0f) {
+            pwrIn = mlir::arith::MulFOp::create(nest, nloc, absInput, absInput);
+          } else {
+            auto pAttr = nest.getFloatAttr(inpElmType, attr_p);
+            auto pConst = mlir::arith::ConstantOp::create(nest, nloc, pAttr);
+            pwrIn = mlir::math::PowFOp::create(nest, nloc, absInput, pConst);
+          }
+          accum = mlir::arith::AddFOp::create(nest, nloc, pwrIn, args[1]);
         }
-        updatedAcc = mlir::arith::AddFOp::create(nestedBuilder, nestedLoc,
-                                                 poweredInput, scalarAcc);
-
-        mlir::linalg::YieldOp::create(nestedBuilder, nestedLoc, updatedAcc);
+        mlir::linalg::YieldOp::create(nest, nloc, accum);
       });
 
-  reductionGenericOp->setAttr(
-      "transform.target_tag",
-      rewriter.getStringAttr(opName.str() + "_reduction"));
+  globalpoolOp = reductionGenericOp;
 
-  mlir::Value postEmpty = mlir::tensor::EmptyOp::create(
-      rewriter, loc, resType.getShape(), elemType);
+  if (opNameBeginsWith(opName, {"GlobalAveragePool", "GlobalLpPool"})) {
+    auto postBuffer = mlir::tensor::EmptyOp::create(
+        rewriter, loc, outDatType.getShape(), inpDatType.getElementType());
 
-  mlir::AffineMap idMap = rewriter.getMultiDimIdentityMap(rank);
-  llvm::SmallVector<mlir::AffineMap, 2> postIndexingMaps = {idMap, idMap};
-  llvm::SmallVector<mlir::utils::IteratorType, 4> postIteratorTypes(
-      rank, mlir::utils::IteratorType::parallel);
+    auto postGenericOp = mlir::linalg::GenericOp::create(
+        /*op_builder*/ rewriter, /*src_location*/ loc,
+        /*result_types*/ mlir::TypeRange{outDatType},
+        /*input_values*/ mlir::ValueRange{reductionGenericOp.getResult(0)},
+        /*output_values*/ mlir::ValueRange{postBuffer},
+        /*affine_maps*/ postIndexingMaps,
+        /*iter_types*/ postIteratorTypes,
+        [&](/*op_builder*/ mlir::OpBuilder &nest,
+            /*src_location*/ mlir::Location nloc,
+            /*value_args*/ mlir::ValueRange args) {
+          mlir::Value val;
+          if (opNameBeginsWith(opName, "GlobalAveragePool")) {
+            auto count = nest.getFloatAttr(
+                inpElmType, static_cast<double>(numSpatialElements));
+            auto cntConst = mlir::arith::ConstantOp::create(nest, nloc, count);
+            val = mlir::arith::DivFOp::create(nest, nloc, args[0], cntConst);
+          } else if (opNameBeginsWith(opName, "GlobalLpPool")) {
+            if (attr_p == 1.0f) {
+              val = args[0];
+            } else if (attr_p == 2.0f) {
+              val = mlir::math::SqrtOp::create(nest, nloc, args[0]);
+            } else {
+              auto pAttr = nest.getFloatAttr(inpElmType, 1.0 / attr_p);
+              auto invP = mlir::arith::ConstantOp::create(nest, nloc, pAttr);
+              val = mlir::math::PowFOp::create(nest, nloc, args[0], invP);
+            }
+          }
+          mlir::linalg::YieldOp::create(nest, nloc, val);
+        });
 
-  auto postGenericOp = mlir::linalg::GenericOp::create(
-      rewriter, loc, mlir::TypeRange{resType},
-      mlir::ValueRange{reductionGenericOp.getResult(0)},
-      mlir::ValueRange{postEmpty}, postIndexingMaps, postIteratorTypes,
-      [&](mlir::OpBuilder &nestedBuilder, mlir::Location nestedLoc,
-          mlir::ValueRange args) {
-        mlir::Value scalarSum = args[0];
-        mlir::Value finalVal;
-
-        // Root extraction: (sum)^(1/p)
-        if (pVal == 1.0) {
-          finalVal = scalarSum;
-        } else if (pVal == 2.0) {
-          finalVal =
-              mlir::math::SqrtOp::create(nestedBuilder, nestedLoc, scalarSum);
-        } else {
-          mlir::Value invPConst = mlir::arith::ConstantOp::create(
-              nestedBuilder, nestedLoc,
-              nestedBuilder.getFloatAttr(elemType, 1.0 / pVal));
-          finalVal = mlir::math::PowFOp::create(nestedBuilder, nestedLoc,
-                                                scalarSum, invPConst);
-        }
-
-        mlir::linalg::YieldOp::create(nestedBuilder, nestedLoc, finalVal);
-      });
-
-  postGenericOp->setAttr("transform.target_tag",
-                         rewriter.getStringAttr(opName));
-
-  rewriter.replaceOp(op, postGenericOp.getResults());
-
-  return mlir::success();
-}
-
-mlir::LogicalResult
-OnnxToLinalg_GlobalMaxPoolOp(mlir::Operation *op,
-                             mlir::PatternRewriter &rewriter) {
-  auto loc = op->getLoc();
-  auto opName = op->getName().getStringRef();
-
-  mlir::Value input = op->getOperand(0);
-  mlir::Value result = op->getResult(0);
-
-  auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(input.getType());
-  auto resType = mlir::dyn_cast<mlir::RankedTensorType>(result.getType());
-
-  if (!inpType || !resType) {
-    return mlir::emitError(
-        Onnx2Mlir_SrcLoc(rewriter),
-        opName + " operand and result must be ranked tensor type");
+    globalpoolOp = postGenericOp;
   }
 
-  auto elemType = inpType.getElementType();
-  auto floatType = mlir::dyn_cast<mlir::FloatType>(elemType);
-  if (!floatType) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " requires float element type");
-  }
+  globalpoolOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
 
-  int64_t rank = inpType.getRank();
-  if (rank < 3) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " input tensor rank must be at least 3");
-  }
-
-  auto negInf =
-      llvm::APFloat::getInf(floatType.getFloatSemantics(), /*Negative=*/true);
-  mlir::Value initConst = mlir::arith::ConstantOp::create(
-      rewriter, loc, rewriter.getFloatAttr(elemType, negInf));
-
-  mlir::Value emptyOut = mlir::tensor::EmptyOp::create(
-      rewriter, loc, resType.getShape(), elemType);
-
-  mlir::Value initBuf =
-      mlir::linalg::FillOp::create(rewriter, loc, initConst, emptyOut)
-          .getResult(0);
-
-  // Iterators: N, C are parallel; spatial dims (H, W, ...) are reduction
-  llvm::SmallVector<mlir::utils::IteratorType, 4> iteratorTypes;
-  iteratorTypes.push_back(mlir::utils::IteratorType::parallel); // N
-  iteratorTypes.push_back(mlir::utils::IteratorType::parallel); // C
-  for (int64_t i = 2; i < rank; ++i) {
-    iteratorTypes.push_back(mlir::utils::IteratorType::reduction);
-  }
-
-  // Input Map: identity
-  mlir::AffineMap inputMap = rewriter.getMultiDimIdentityMap(rank);
-
-  // Output Map: N, C, 0, 0, ...
-  mlir::Builder builder(op->getContext());
-  mlir::AffineExpr zeroExpr = builder.getAffineConstantExpr(0);
-  llvm::SmallVector<mlir::AffineExpr, 4> outputExprs;
-  outputExprs.push_back(builder.getAffineDimExpr(0)); // N
-  outputExprs.push_back(builder.getAffineDimExpr(1)); // C
-  for (int64_t i = 2; i < rank; ++i) {
-    outputExprs.push_back(zeroExpr);
-  }
-  mlir::AffineMap outputMap =
-      mlir::AffineMap::get(rank, 0, outputExprs, op->getContext());
-
-  llvm::SmallVector<mlir::AffineMap, 2> indexingMaps = {inputMap, outputMap};
-
-  auto genericOp = mlir::linalg::GenericOp::create(
-      rewriter, loc, mlir::TypeRange{resType}, mlir::ValueRange{input},
-      mlir::ValueRange{initBuf}, indexingMaps, iteratorTypes,
-      [&](mlir::OpBuilder &nestedBuilder, mlir::Location nestedLoc,
-          mlir::ValueRange args) {
-        mlir::Value scalarInput = args[0];
-        mlir::Value scalarAcc = args[1];
-
-        // Max pooling accumulation
-        auto maxOp = mlir::arith::MaximumFOp::create(nestedBuilder, nestedLoc,
-                                                     scalarInput, scalarAcc);
-        mlir::linalg::YieldOp::create(nestedBuilder, nestedLoc,
-                                      maxOp->getResult(0));
-      });
-
-  genericOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
-
-  rewriter.replaceOp(op, genericOp.getResults());
+  rewriter.replaceOp(op, globalpoolOp);
 
   return mlir::success();
 }

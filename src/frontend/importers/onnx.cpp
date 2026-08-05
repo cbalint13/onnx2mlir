@@ -62,6 +62,16 @@ getMlirTensor(const std::string &data, shp_T shape, typ_T dType,
               const mlir::Attribute &eAttr = {}) {
   auto dims = llvm::ArrayRef(shape.data(), shape.size());
   auto shapedType = mlir::RankedTensorType::get(dims, dType, eAttr);
+  if (dType.isInteger(1)) {
+    if (data.size() ==
+        static_cast<size_t>(llvm::divideCeil(shapedType.getNumElements(), 8)))
+      // Bit-packed raw buffer (1 bit per element)
+      return mlir::DenseElementsAttr::getFromRawBuffer(
+          shapedType, llvm::ArrayRef(data.data(), data.size()));
+    // Unpacked raw buffer (1 byte per element)
+    return mlir::DenseElementsAttr::get(
+        shapedType, llvm::SmallVector<bool>(data.begin(), data.end()));
+  }
   auto denseAttrs = mlir::DenseElementsAttr::getFromRawBuffer(
       shapedType, llvm::ArrayRef(data.data(), data.size()));
 
@@ -85,16 +95,19 @@ getMlirTensor(const Container &data, shp_T shape, typ_T dType,
 
   if (sizeof(dat_T) * 8 > targetBitWidth) {
     if (targetBitWidth == 64) {
-      std::vector<uint64_t> buffer(data.begin(), data.end());
+      llvm::SmallVector<uint64_t> buffer(data.begin(), data.end());
       return mlir::DenseElementsAttr::get(shapedType, llvm::ArrayRef(buffer));
     } else if (targetBitWidth == 32) {
-      std::vector<uint32_t> buffer(data.begin(), data.end());
+      llvm::SmallVector<uint32_t> buffer(data.begin(), data.end());
       return mlir::DenseElementsAttr::get(shapedType, llvm::ArrayRef(buffer));
     } else if (targetBitWidth == 16) {
-      std::vector<uint16_t> buffer(data.begin(), data.end());
+      llvm::SmallVector<uint16_t> buffer(data.begin(), data.end());
+      return mlir::DenseElementsAttr::get(shapedType, llvm::ArrayRef(buffer));
+    } else if (targetBitWidth == 1) {
+      llvm::SmallVector<bool> buffer(data.begin(), data.end());
       return mlir::DenseElementsAttr::get(shapedType, llvm::ArrayRef(buffer));
     } else if (targetBitWidth <= 8) {
-      std::vector<uint8_t> buffer(data.begin(), data.end());
+      llvm::SmallVector<uint8_t> buffer(data.begin(), data.end());
       return mlir::DenseElementsAttr::get(shapedType, llvm::ArrayRef(buffer));
     } else {
       onnx2mlir::error() << "Unimplemented datatype width: " << targetBitWidth
@@ -798,9 +811,12 @@ void ONNXImporter::parse_graph_io(const onnx::GraphProto &graph_proto) {
 
 void ONNXImporter::import(const std::string &file_or_string,
                           mlir::MLIRContext *ctx) {
+  bool verify = true;
   bool verbose = false;
   if (opt_args.count("--verbose") > 0)
     verbose = true;
+  if (opt_args.count("--noverify") > 0)
+    verify = false;
 
   // context setup
   mlirCtx = ctx;
@@ -919,7 +935,7 @@ void ONNXImporter::import(const std::string &file_or_string,
   parse_graph_nodes(graph_proto);
 
   // verify module
-  if (llvm::failed(mlir::verify(module))) {
+  if (verify && (llvm::failed(mlir::verify(module)))) {
     onnx2mlir::error() << "MLIR module verification failed.\n";
     exit(-1);
   }

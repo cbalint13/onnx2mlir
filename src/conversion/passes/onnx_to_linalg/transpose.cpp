@@ -40,84 +40,71 @@
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_TransposeOp(mlir::Operation *op,
-                                             mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_TransposeOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                         const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  mlir::Value inp = op->getOperand(0);
-  mlir::Value res = op->getResult(0);
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 
-  auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(inp.getType());
-  auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
-  if (!inpType) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " operand must be ranked tensor type");
-  }
+  /*
+   * I/O Values
+   */
 
-  if (!resType) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " result must be a ranked tensor type");
-  }
+  auto opInput = convRewriter.getRemappedValue(op->getOperand(0));
+  auto opOutput = convRewriter.getRemappedValue(op->getResult(0));
 
-  auto rank = inpType.getRank();
+  auto inpDatType = mlir::dyn_cast<mlir::RankedTensorType>(opInput.getType());
+  auto outDatType = mlir::dyn_cast<mlir::RankedTensorType>(opOutput.getType());
 
-  auto permAttr = op->getAttr("perm");
-  mlir::SmallVector<int64_t> perms, out_shape;
-  mlir::SmallVector<mlir::Value> dynamic_dims;
-  if (auto arrayPermAttr = mlir::dyn_cast_or_null<mlir::ArrayAttr>(permAttr)) {
-    for (auto attr : arrayPermAttr) {
-      if (auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(attr)) {
-        int64_t dim_index = intAttr.getInt();
-        perms.push_back(dim_index);
+  auto inputRank = inpDatType.getRank();
 
-        int64_t dim_size = inpType.getShape()[dim_index];
-        if (mlir::ShapedType::isDynamic(dim_size)) {
-          mlir::Value dim_value =
-              mlir::tensor::DimOp::create(rewriter, loc, inp, dim_index);
-          dynamic_dims.push_back(dim_value);
-          out_shape.push_back(mlir::ShapedType::kDynamic);
-        } else {
-          out_shape.push_back(dim_size);
-        }
-      } else {
-        return rewriter.notifyMatchFailure(
-            op, opName + " 'perm' array contains non-integer values");
-      }
+  /*
+   * Attributes
+   */
+
+  // perm
+  mlir::SmallVector<int64_t> attr_perms;
+  if (auto permAttr = op->getAttrOfType<mlir::ArrayAttr>("perm")) {
+    for (auto intAttr : permAttr.getAsRange<mlir::IntegerAttr>()) {
+      if (!intAttr)
+        return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+               << opName << " 'perm' array contains non-integer values";
+      attr_perms.push_back(intAttr.getInt());
     }
-    if (static_cast<int64_t>(perms.size()) != rank) {
-      return rewriter.notifyMatchFailure(
-          op, opName + " 'perm' array size mismatch with input rank");
-    }
+    if (static_cast<int64_t>(attr_perms.size()) != inputRank)
+      return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+             << opName << " 'perm' array size mismatch with input rank";
   } else {
-    // 'perm' attribute is not present
-    // default to reversing dimensions
-    for (int64_t i = 0; i < rank; ++i) {
-      int64_t dim_index = rank - 1 - i;
-      perms.push_back(dim_index);
-      int64_t dim_size = inpType.getShape()[dim_index];
-
-      if (mlir::ShapedType::isDynamic(dim_size)) {
-        mlir::Value dim_value =
-            mlir::tensor::DimOp::create(rewriter, loc, inp, dim_index);
-        dynamic_dims.push_back(dim_value);
-        out_shape.push_back(mlir::ShapedType::kDynamic);
-      } else {
-        out_shape.push_back(dim_size);
-      }
-    }
+    for (int64_t i = inputRank - 1; i >= 0; --i)
+      attr_perms.push_back(i);
   }
-  auto permsAttr = rewriter.getDenseI64ArrayAttr(perms);
 
-  auto outType =
-      mlir::RankedTensorType::get(out_shape, inpType.getElementType());
-  auto outBuff =
-      mlir::tensor::EmptyOp::create(rewriter, loc, outType, dynamic_dims);
+  /*
+   *  Linalg ops staging
+   */
 
-  auto transOp =
-      mlir::linalg::TransposeOp::create(rewriter, loc, inp, outBuff, permsAttr);
+  mlir::SmallVector<int64_t> outShape;
+  mlir::SmallVector<mlir::Value> dynDims;
+  outShape.reserve(inputRank);
 
-  // Tag for transform optimization
+  for (int64_t dim_idx : attr_perms) {
+    int64_t dim_size = inpDatType.getShape()[dim_idx];
+    outShape.push_back(dim_size);
+
+    if (mlir::ShapedType::isDynamic(dim_size))
+      dynDims.push_back(
+          mlir::tensor::DimOp::create(rewriter, loc, opInput, dim_idx));
+  }
+
+  auto outBuffer =
+      mlir::tensor::EmptyOp::create(rewriter, loc, outDatType, dynDims);
+
+  auto transOp = mlir::linalg::TransposeOp::create(
+      rewriter, loc, opInput, outBuffer,
+      rewriter.getDenseI64ArrayAttr(attr_perms));
+
   transOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
 
   rewriter.replaceOp(op, transOp);

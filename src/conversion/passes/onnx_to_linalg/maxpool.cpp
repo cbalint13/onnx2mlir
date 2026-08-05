@@ -46,206 +46,187 @@ OnnxToLinalg_MaxPoolOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  mlir::Value input = op->getOperand(0);
-  mlir::Value result = op->getResult(0);
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 
-  auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(input.getType());
-  auto resType = mlir::dyn_cast<mlir::RankedTensorType>(result.getType());
+  /*
+   * I/O Values
+   */
 
-  if (!inpType || !resType) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " operand must be ranked tensor type");
-  }
+  auto opInput = convRewriter.getRemappedValue(op->getOperand(0));
+  auto opOutput = convRewriter.getRemappedValue(op->getResult(0));
 
-  auto elementType = typeConverter->convertType(inpType.getElementType());
-  int64_t rank = inpType.getRank();
-  int64_t spatialRank = rank - 2;
+  auto inpDatType = mlir::dyn_cast<mlir::RankedTensorType>(opInput.getType());
+  auto outDatType = mlir::dyn_cast<mlir::RankedTensorType>(opOutput.getType());
+  auto orgDatType =
+      mlir::dyn_cast<mlir::RankedTensorType>(op->getOperand(0).getType());
 
-  if (spatialRank != 2) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName +
-                               " only 2D (NCHW) spatial pooling is supported");
-  }
+  auto inpElmType = inpDatType.getElementType();
+  auto orgElmType = orgDatType.getElementType();
 
-  // Extract attributes
-  auto getI64Array = [&](llvm::StringRef attrName, int64_t defaultValue) {
-    llvm::SmallVector<int64_t> values;
-    if (auto attr = op->getAttrOfType<mlir::ArrayAttr>(attrName)) {
+  int64_t inputRank = inpDatType.getRank();
+  int64_t spatialRank = inputRank - 2;
+
+  // check
+  if (spatialRank != 2)
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " only 2D (NCHW) spatial pooling is supported";
+
+  /*
+   * Attributes
+   */
+
+  auto getI64Array = [&](llvm::StringRef name, int64_t def) {
+    llvm::SmallVector<int64_t> vals;
+    if (auto attr = op->getAttrOfType<mlir::ArrayAttr>(name)) {
       for (auto val : attr.getAsRange<mlir::IntegerAttr>())
-        values.push_back(val.getInt());
+        vals.push_back(val.getInt());
     } else {
-      values.assign(spatialRank, defaultValue);
+      vals.assign(spatialRank, def);
     }
-    return values;
+    return vals;
   };
 
-  auto kernelShape = getI64Array("kernel_shape", 1);
-  auto strides = getI64Array("strides", 1);
-  auto dilations = getI64Array("dilations", 1);
-  auto pads = getI64Array("pads", 0);
+  // kernel_shape
+  auto attr_kernel_shape = getI64Array("kernel_shape", 1);
 
-  // Initialize constant padding value
+  // strides
+  auto attr_strides = getI64Array("strides", 1);
+
+  // dilation
+  auto attr_dilations = getI64Array("dilations", 1);
+
+  // pads
+  auto attr_pads = getI64Array("pads", 0);
+
+  /*
+   *  Affine mappings
+   */
+
+  // 6 dims: NCHW + KH, KW
+  mlir::AffineExpr dN, dC, dOH, dOW, dKH, dKW;
+  mlir::bindDims(op->getContext(), dN, dC, dOH, dOW, dKH, dKW);
+
+  // input:
+  // [N, C, OH * stride_h + KH * dilation_h, OW * stride_w + KW * dilation_w]
+  auto inputMap = mlir::AffineMap::get(
+      /*dimCount=*/6, /*symbolCount=*/0,
+      {dN, dC, dOH * attr_strides[0] + dKH * attr_dilations[0],
+       dOW * attr_strides[1] + dKW * attr_dilations[1]},
+      op->getContext());
+
+  // kernel: [KH, kW]
+  auto kernelMap = mlir::AffineMap::get(/*dimCount=*/6, /*symbolCount=*/0,
+                                        {dKH, dKW}, op->getContext());
+
+  // output: [N, C, OH, OW]
+  auto outputMap = mlir::AffineMap::get(/*dimCount=*/6, /*symbolCount=*/0,
+                                        {dN, dC, dOH, dOW}, op->getContext());
+
+  mlir::SmallVector<mlir::AffineMap, 3> indexingMaps = {inputMap, kernelMap,
+                                                        outputMap};
+
+  // iterators: [N, C, OH, OW, KH, KW]
+  mlir::SmallVector<mlir::utils::IteratorType> iteratorTypes(
+      inputRank, mlir::utils::IteratorType::parallel); // N, C, OH, OW
+  for (int i = 0; i < spatialRank; ++i)
+    iteratorTypes.push_back(mlir::utils::IteratorType::reduction); // KH, KW
+
+  /*
+   *  Linalg ops staging
+   */
+
+  // padding
   mlir::Value initValue;
-  if (mlir::isa<mlir::FloatType>(elementType)) {
+  if (mlir::isa<mlir::FloatType>(inpElmType)) {
     auto minFloat = llvm::APFloat::getLargest(
-        mlir::cast<mlir::FloatType>(elementType).getFloatSemantics(), true);
+        mlir::cast<mlir::FloatType>(inpElmType).getFloatSemantics(), true);
     initValue = mlir::arith::ConstantOp::create(
-        rewriter, loc, rewriter.getFloatAttr(elementType, minFloat));
+        rewriter, loc, rewriter.getFloatAttr(inpElmType, minFloat));
   } else {
-    // Handle init using original input signedness
-    auto origInt = mlir::dyn_cast<mlir::IntegerType>(inpType.getElementType());
+    auto origInt = mlir::dyn_cast_or_null<mlir::IntegerType>(orgElmType);
     if (origInt && origInt.isUnsigned()) {
       initValue = mlir::arith::ConstantOp::create(
-          rewriter, loc, rewriter.getIntegerAttr(elementType, 0));
+          rewriter, loc, rewriter.getIntegerAttr(inpElmType, 0));
     } else {
       auto minInt =
-          llvm::APInt::getSignedMinValue(elementType.getIntOrFloatBitWidth());
+          llvm::APInt::getSignedMinValue(inpElmType.getIntOrFloatBitWidth());
       initValue = mlir::arith::ConstantOp::create(
-          rewriter, loc, rewriter.getIntegerAttr(elementType, minInt));
+          rewriter, loc, rewriter.getIntegerAttr(inpElmType, minInt));
     }
   }
-
-  // Handle Padding
-  mlir::Value paddedInput = input;
-  bool hasPadding = llvm::any_of(pads, [](int64_t p) { return p != 0; });
+  mlir::Value paddedInput = opInput;
+  bool hasPadding = llvm::any_of(attr_pads, [](int64_t p) { return p != 0; });
   if (hasPadding) {
     llvm::SmallVector<mlir::OpFoldResult> lowPads;
     llvm::SmallVector<mlir::OpFoldResult> highPads;
-    // N, C dimensions have no padding
+    // no padding: N, C
     lowPads.push_back(rewriter.getIndexAttr(0));
     lowPads.push_back(rewriter.getIndexAttr(0));
     highPads.push_back(rewriter.getIndexAttr(0));
     highPads.push_back(rewriter.getIndexAttr(0));
 
-    // ONNX pads are [x1_begin, x2_begin... x1_end, x2_end...]
+    // pads: [x1_begin, x2_begin... x1_end, x2_end...]
     for (int i = 0; i < spatialRank; ++i) {
-      lowPads.push_back(rewriter.getIndexAttr(pads[i]));
-      highPads.push_back(rewriter.getIndexAttr(pads[i + spatialRank]));
+      lowPads.push_back(rewriter.getIndexAttr(attr_pads[i]));
+      highPads.push_back(rewriter.getIndexAttr(attr_pads[i + spatialRank]));
     }
 
     auto padOp = mlir::tensor::PadOp::create(
-        rewriter, loc, /*resultType=*/nullptr, input, lowPads, highPads,
+        rewriter, loc, /*resultType=*/nullptr, opInput, lowPads, highPads,
         /*nofold=*/false);
 
     mlir::Region &region = padOp.getRegion();
     mlir::Block *block = rewriter.createBlock(&region);
-    for (int64_t i = 0; i < rank; ++i)
+    for (int64_t i = 0; i < inputRank; ++i)
       block->addArgument(rewriter.getIndexType(), loc);
 
     rewriter.setInsertionPointToStart(block);
 
-    // Cast initValue to input element type if needed for the yield
-    mlir::Value initYield = initValue;
-    if (elementType != inpType.getElementType()) {
-      initYield = mlir::UnrealizedConversionCastOp::create(
-                      rewriter, loc, inpType.getElementType(), initValue)
-                      .getResult(0);
-    }
-
-    mlir::tensor::YieldOp::create(rewriter, loc, initYield);
+    mlir::tensor::YieldOp::create(rewriter, loc, initValue);
     rewriter.setInsertionPointAfter(padOp);
 
     paddedInput = padOp.getResult();
   }
 
-  // Output buffer
-  // Cast initValue to result element type for the fill op
-  mlir::Value fillInit = initValue;
-  if (elementType != resType.getElementType()) {
-    fillInit = mlir::UnrealizedConversionCastOp::create(
-                   rewriter, loc, resType.getElementType(), initValue)
-                   .getResult(0);
-  }
-
   auto emptyTensor = mlir::tensor::EmptyOp::create(
-      rewriter, loc, resType.getShape(), resType.getElementType());
-
-  auto fillOp = mlir::linalg::FillOp::create(rewriter, loc, fillInit,
+      rewriter, loc, outDatType.getShape(), outDatType.getElementType());
+  auto fillOp = mlir::linalg::FillOp::create(rewriter, loc, initValue,
                                              emptyTensor.getResult());
-  mlir::Value outBuff = fillOp.getResult(0);
+  auto outBuffer = fillOp.getResult(0);
 
-  // Mapping to Linalg Generic
-  // Iterators: [N, C, OH, OW, KH, KW]
-  mlir::SmallVector<mlir::utils::IteratorType> iterators(
-      rank, mlir::utils::IteratorType::parallel); // N, C, OH, OW
-  for (int i = 0; i < spatialRank; ++i) {
-    iterators.push_back(mlir::utils::IteratorType::reduction); // KH, KW
-  }
-
-  auto *ctx = rewriter.getContext();
-  // We need 6 dimensions for NCHW + KH, KW
-  mlir::AffineExpr dN, dC, dOH, dOW, dKH, dKW;
-  mlir::bindDims(ctx, dN, dC, dOH, dOW, dKH, dKW);
-
-  // Input Map:
-  // [n, c, oh * stride_h + kh * dilation_h, ow * stride_w + kw * dilation_w]
-  auto inputMap =
-      mlir::AffineMap::get(6, 0,
-                           {dN, dC, dOH * strides[0] + dKH * dilations[0],
-                            dOW * strides[1] + dKW * dilations[1]},
-                           ctx);
-
-  // Kernel Map (dummy for reduction shape): [kh, kw]
-  auto kernelMap = mlir::AffineMap::get(6, 0, {dKH, dKW}, ctx);
-
-  // Output Map: [n, c, oh, ow]
-  auto outputMap = mlir::AffineMap::get(6, 0, {dN, dC, dOH, dOW}, ctx);
-
-  // We need a tensor that represents the kernel shape for the reduction loops
   auto kernelTensor = mlir::tensor::EmptyOp::create(
-      rewriter, loc, llvm::ArrayRef<int64_t>(kernelShape),
-      inpType.getElementType());
+      rewriter, loc, llvm::ArrayRef<int64_t>(attr_kernel_shape),
+      inpDatType.getElementType());
 
-  mlir::SmallVector<mlir::AffineMap> indexingMaps = {inputMap, kernelMap,
-                                                     outputMap};
-
-  // Generic Op using original types
   auto genericOp = mlir::linalg::GenericOp::create(
-      rewriter, loc, mlir::TypeRange{resType},
-      mlir::ValueRange{paddedInput, kernelTensor.getResult()},
-      mlir::ValueRange{outBuff}, indexingMaps, iterators,
-      [&](mlir::OpBuilder &nest, mlir::Location l, mlir::ValueRange args) {
-        mlir::Value inputVal = args[0];
+      /*op_builder*/ rewriter, /*src_location*/ loc,
+      /*result_types*/ mlir::TypeRange{outDatType},
+      /*input_values*/ mlir::ValueRange{paddedInput, kernelTensor.getResult()},
+      /*output_values*/ mlir::ValueRange{outBuffer},
+      /*affine_maps*/ indexingMaps,
+      /*iter_types*/ iteratorTypes,
+      [&](/*op_builder*/ mlir::OpBuilder &nest,
+          /*src_location*/ mlir::Location nloc,
+          /*value_args*/ mlir::ValueRange args) {
+        mlir::Value inpVal = args[0];
         mlir::Value outVal = args[2];
-
-        // Element-wise casts: input/output to compute (signless) type
-        if (elementType != inpType.getElementType()) {
-          inputVal = mlir::UnrealizedConversionCastOp::create(
-                         nest, l, elementType, inputVal)
-                         .getResult(0);
-        }
-        if (elementType != resType.getElementType()) {
-          outVal = mlir::UnrealizedConversionCastOp::create(nest, l,
-                                                            elementType, outVal)
-                       .getResult(0);
-        }
-
         mlir::Value maxVal;
-        if (mlir::isa<mlir::FloatType>(elementType)) {
-          maxVal = mlir::arith::MaximumFOp::create(nest, l, inputVal, outVal);
+        if (orgElmType.isFloat()) {
+          maxVal = mlir::arith::MaximumFOp::create(nest, nloc, inpVal, outVal);
         } else {
-          auto origInt =
-              mlir::dyn_cast<mlir::IntegerType>(inpType.getElementType());
+          auto origInt = mlir::dyn_cast_or_null<mlir::IntegerType>(orgElmType);
           if (origInt && origInt.isUnsigned()) {
-            maxVal = mlir::arith::MaxUIOp::create(nest, l, inputVal, outVal);
+            maxVal = mlir::arith::MaxUIOp::create(nest, nloc, inpVal, outVal);
           } else {
-            maxVal = mlir::arith::MaxSIOp::create(nest, l, inputVal, outVal);
+            maxVal = mlir::arith::MaxSIOp::create(nest, nloc, inpVal, outVal);
           }
         }
-
-        // Cast result back to original type
-        if (elementType != resType.getElementType()) {
-          maxVal = mlir::UnrealizedConversionCastOp::create(
-                       nest, l, resType.getElementType(), maxVal)
-                       .getResult(0);
-        }
-
-        mlir::linalg::YieldOp::create(nest, l, maxVal);
+        mlir::linalg::YieldOp::create(nest, nloc, maxVal);
       });
 
   genericOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
 
-  rewriter.replaceOp(op, genericOp.getResults());
+  rewriter.replaceOp(op, genericOp);
 
   return mlir::success();
 }

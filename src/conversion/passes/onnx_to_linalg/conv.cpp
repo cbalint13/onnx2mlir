@@ -30,6 +30,7 @@
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
+#include <mlir/Dialect/Transform/IR/TransformOps.h>
 #include <mlir/IR/AffineExpr.h>
 #include <mlir/IR/AffineMap.h>
 #include <mlir/IR/PatternMatch.h>
@@ -40,56 +41,39 @@
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_ConvOp(mlir::Operation *op,
-                                        mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_ConvOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                    const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto *ctx = op->getContext();
   auto opName = op->getName().getStringRef();
 
-  // Get operands
-  mlir::Value input = op->getOperand(0);
-  mlir::Value weight = op->getOperand(1);
-  mlir::Value bias = op->getNumOperands() > 2 ? op->getOperand(2) : nullptr;
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 
-  auto inputType = mlir::dyn_cast<mlir::RankedTensorType>(input.getType());
-  auto weightType = mlir::dyn_cast<mlir::RankedTensorType>(weight.getType());
-  auto resType =
-      mlir::dyn_cast<mlir::RankedTensorType>(op->getResult(0).getType());
+  /*
+   * I/O Values
+   */
 
-  if (!inputType || !weightType || !resType)
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " operand must be ranked tensor");
+  auto opInput = convRewriter.getRemappedValue(op->getOperand(0));
+  auto opWeight = convRewriter.getRemappedValue(op->getOperand(1));
+  auto opBias = op->getNumOperands() > 2
+                    ? convRewriter.getRemappedValue(op->getOperand(2))
+                    : nullptr;
+  auto opResult = op->getResult(0);
+  auto opOutput = convRewriter.getRemappedValue(opResult);
 
-  int64_t group = 1;
-  if (auto groupAttr = op->getAttrOfType<mlir::IntegerAttr>("group"))
-    group = groupAttr.getInt();
+  auto inpDatType = mlir::dyn_cast<mlir::RankedTensorType>(opInput.getType());
+  auto wgtDatType = mlir::dyn_cast<mlir::RankedTensorType>(opWeight.getType());
+  auto outDatType = mlir::dyn_cast<mlir::RankedTensorType>(opOutput.getType());
 
-  if (group <= 0)
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " group attribute must be positive");
+  auto inpElmType = inpDatType.getElementType();
+  auto wgtElmType = wgtDatType.getElementType();
+  auto outElmType = outDatType.getElementType();
 
-  int64_t inChannels = inputType.getDimSize(1);
-  int64_t outChannels = resType.getDimSize(1);
-  int64_t weightOutChannels = weightType.getDimSize(0);
-  int64_t weightCPerGroup = weightType.getDimSize(1);
+  /*
+   * Attributes
+   */
 
-  if (!mlir::ShapedType::isDynamic(inChannels) && inChannels % group != 0) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName +
-                               " input channels must be divisible by group");
-  }
-
-  if (!mlir::ShapedType::isDynamic(outChannels) && outChannels % group != 0) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName +
-                               " output channels must be divisible by group");
-  }
-
-  // ONNX weight shape: [M, C / group, KH, KW]
-  int64_t cPerGroup = weightCPerGroup;
-  int64_t fPerGroup = weightOutChannels / group;
-
-  // Extract Attributes
   auto getI64Array = [&](llvm::StringRef name, llvm::ArrayRef<int64_t> def) {
     llvm::SmallVector<int64_t> vals;
     if (auto attr = op->getAttrOfType<mlir::ArrayAttr>(name)) {
@@ -101,12 +85,61 @@ mlir::LogicalResult OnnxToLinalg_ConvOp(mlir::Operation *op,
     return vals;
   };
 
-  auto strides = getI64Array("strides", {1, 1});
-  auto dilations = getI64Array("dilations", {1, 1});
+  // group
+  int64_t attr_group = 1;
+  if (auto groupAttr = op->getAttrOfType<mlir::IntegerAttr>("group"))
+    attr_group = groupAttr.getInt();
+  if (attr_group <= 0)
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " group attribute must be positive";
+
+  // kernel_shape
+  auto attr_kernel_shape = getI64Array("kernel_shape", {});
+  if (attr_kernel_shape.empty()) {
+    for (int64_t i = 2; i < wgtDatType.getRank(); ++i)
+      attr_kernel_shape.push_back(wgtDatType.getDimSize(i));
+  }
+  if (attr_kernel_shape[0] != wgtDatType.getDimSize(2) ||
+      attr_kernel_shape[1] != wgtDatType.getDimSize(3))
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " 'kernel_shape' not match weight kernel shape";
+
+  // strides
+  auto attr_strides = getI64Array("strides", {1, 1});
+
+  // dilations
+  auto attr_dilations = getI64Array("dilations", {1, 1});
+
+  // pads
   auto padsAttr = op->getAttrOfType<mlir::ArrayAttr>("pads");
 
-  // Handle padding
-  mlir::Value paddedInput = input;
+  int64_t inChannels = inpDatType.getDimSize(1);
+  int64_t outChannels = outDatType.getDimSize(1);
+  int64_t weightOutChannels = wgtDatType.getDimSize(0);
+  int64_t weightCPerGroup = wgtDatType.getDimSize(1);
+
+  if (!mlir::ShapedType::isDynamic(inChannels) &&
+      inChannels % attr_group != 0) {
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " input channels must be divisible by group";
+  }
+
+  if (!mlir::ShapedType::isDynamic(outChannels) &&
+      outChannels % attr_group != 0) {
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " output channels must be divisible by group";
+  }
+
+  // weight shape: [M, C / group, KH, KW]
+  int64_t cPerGroup = weightCPerGroup;
+  int64_t fPerGroup = weightOutChannels / attr_group;
+
+  /*
+   *  Linalg ops staging
+   */
+
+  // padding
+  auto paddedInput = opInput;
   if (padsAttr) {
     llvm::SmallVector<int64_t> p;
     for (auto a : padsAttr.getValue())
@@ -121,40 +154,36 @@ mlir::LogicalResult OnnxToLinalg_ConvOp(mlir::Operation *op,
           rewriter.getIndexAttr(0), rewriter.getIndexAttr(0),
           rewriter.getIndexAttr(p[2]), rewriter.getIndexAttr(p[3])};
       llvm::SmallVector<int64_t> pShape = {
-          inputType.getDimSize(0), inputType.getDimSize(1),
-          inputType.getDimSize(2) + p[0] + p[2],
-          inputType.getDimSize(3) + p[1] + p[3]};
-      auto pType =
-          mlir::RankedTensorType::get(pShape, inputType.getElementType());
+          inpDatType.getDimSize(0), inpDatType.getDimSize(1),
+          inpDatType.getDimSize(2) + p[0] + p[2],
+          inpDatType.getDimSize(3) + p[1] + p[3]};
 
-      // Create the padding value constant
-      mlir::Value padVal = mlir::arith::ConstantOp::create(
-          rewriter, loc, rewriter.getZeroAttr(inputType.getElementType()));
-
-      auto padOp = mlir::tensor::PadOp::create(rewriter, loc, pType, input, low,
-                                               high, padVal,
+      auto pType = mlir::RankedTensorType::get(pShape, inpElmType);
+      auto padVal = mlir::arith::ConstantOp::create(
+          rewriter, loc, rewriter.getZeroAttr(inpElmType));
+      auto padOp = mlir::tensor::PadOp::create(rewriter, loc, pType, opInput,
+                                               low, high, padVal,
                                                /*nofold=*/false);
       paddedInput = padOp.getResult();
     }
   }
 
-  // Create zero init output buffer
-  auto outBuff = mlir::tensor::EmptyOp::create(
-      rewriter, loc, resType.getShape(), resType.getElementType());
+  // output buffer
   mlir::Value zero = mlir::arith::ConstantOp::create(
-      rewriter, loc, rewriter.getZeroAttr(resType.getElementType()));
-  auto fill = mlir::linalg::FillOp::create(
-      rewriter, loc, mlir::TypeRange{resType}, zero, outBuff.getResult());
-  mlir::Value initBuff = fill.getResult(0);
+      rewriter, loc, rewriter.getZeroAttr(outElmType));
+  mlir::Value outBuffer = mlir::tensor::EmptyOp::create(
+      rewriter, loc, outDatType.getShape(), outElmType);
+  auto fillBuffer = mlir::linalg::FillOp::create(
+      rewriter, loc, mlir::TypeRange{outDatType}, zero, outBuffer);
 
-  mlir::Value convRes;
+  mlir::Value convOut;
 
-  if (group == 1) {
+  if (attr_group == 1) {
     // ---------------------------------------------------------------------
-    // Group == 1: Standard 4D convolution (7D iteration space)
+    // Group == 1: standard 4D convolution (7D iteration space)
     // Loops: n, f, oh, ow (parallel), c, kh, kw (reduction)
     // ---------------------------------------------------------------------
-    llvm::SmallVector<mlir::utils::IteratorType> iters = {
+    llvm::SmallVector<mlir::utils::IteratorType> iteratorTypes = {
         mlir::utils::IteratorType::parallel,  // n (batch)
         mlir::utils::IteratorType::parallel,  // f (output channel)
         mlir::utils::IteratorType::parallel,  // oh (output height)
@@ -172,71 +201,50 @@ mlir::LogicalResult OnnxToLinalg_ConvOp(mlir::Operation *op,
     auto dKH = rewriter.getAffineDimExpr(5);
     auto dKW = rewriter.getAffineDimExpr(6);
 
-    // Input Map: [n, c, oh*sh + kh*dh, ow*sw + kw*dw]
-    auto inMap =
-        mlir::AffineMap::get(7, 0,
-                             {dN, dC, dOH * strides[0] + dKH * dilations[0],
-                              dOW * strides[1] + dKW * dilations[1]},
-                             ctx);
+    // input map: [n, c, oh*sh + kh*dh, ow*sw + kw*dw]
+    auto inputMap = mlir::AffineMap::get(
+        /*dimCount=*/7, /*symbolCount=*/0,
+        /*results*/
+        {dN, dC, dOH * attr_strides[0] + dKH * attr_dilations[0],
+         dOW * attr_strides[1] + dKW * attr_dilations[1]},
+        ctx);
+    // weight map: [f, c, kh, kw]
+    auto weightMap = mlir::AffineMap::get(/*dimCount=*/7, /*symbolCount=*/0,
+                                          /*results*/ {dF, dC, dKH, dKW}, ctx);
+    // output map: [n, f, oh, ow]
+    auto outputMap = mlir::AffineMap::get(/*dimCount=*/7, /*symbolCount=*/0,
+                                          /*results*/ {dN, dF, dOH, dOW}, ctx);
 
-    // Weight Map: [f, c, kh, kw]
-    auto wMap = mlir::AffineMap::get(7, 0, {dF, dC, dKH, dKW}, ctx);
+    llvm::SmallVector<mlir::AffineMap, 3> indexingMaps = {inputMap, weightMap,
+                                                          outputMap};
 
-    // Output Map: [n, f, oh, ow]
-    auto outMap = mlir::AffineMap::get(7, 0, {dN, dF, dOH, dOW}, ctx);
+    auto convRes = mlir::linalg::GenericOp::create(
+        /*op_builder*/ rewriter, /*src_location*/ loc,
+        /*result_types*/ mlir::TypeRange{outDatType},
+        /*input_values*/ mlir::ValueRange{paddedInput, opWeight},
+        /*output_values*/ fillBuffer.getResult(0),
+        /**affine_maps*/ indexingMaps,
+        /*iter_types*/ iteratorTypes,
+        /*builder_callback*/
+        [&](/*op_builder*/ mlir::OpBuilder &nest,
+            /*src_location*/ mlir::Location nloc,
+            /*value_args*/ mlir::ValueRange args) {
+          auto mul = mlir::arith::MulFOp::create(nest, nloc, args[0], args[1]);
+          auto add = mlir::arith::AddFOp::create(nest, nloc, mul, args[2]);
+          mlir::linalg::YieldOp::create(nest, nloc, add.getResult());
+        });
 
-    convRes = mlir::linalg::GenericOp::create(
-                  rewriter, loc, resType, mlir::ValueRange{paddedInput, weight},
-                  initBuff,
-                  llvm::ArrayRef<mlir::AffineMap>{inMap, wMap, outMap}, iters,
-                  [&](mlir::OpBuilder &nest, mlir::Location l,
-                      mlir::ValueRange args) {
-                    mlir::Value mul =
-                        mlir::arith::MulFOp::create(nest, l, args[0], args[1]);
-                    mlir::Value add =
-                        mlir::arith::AddFOp::create(nest, l, mul, args[2]);
-                    mlir::linalg::YieldOp::create(nest, l, add);
-                  })
-                  .getResult(0);
+    convOut = convRes.getResult(0);
+
   } else {
     // ---------------------------------------------------------------------
-    // Group > 1: Grouped Convolution using 5D Reshaped Tensors
-    // Input [N, C, H, W]       -> [N, G, C/G, H, W]
-    // Weight [M, C/G, KH, KW]  -> [G, M/G, C/G, KH, KW]
-    // Output [N, M, OH, OW]    -> [N, G, M/G, OH, OW]
+    // Group > 1: grouped convolution using 5D reshaped tensors
+    //   input [N, C, H, W]       -> [N, G, C/G, H, W]
+    //   weight [M, C/G, KH, KW]  -> [G, M/G, C/G, KH, KW]
+    //   output [N, M, OH, OW]    -> [N, G, M/G, OH, OW]
+    // Loops: g (group), n, f_g, oh, ow (parallel), c_g, kh, kw (reduction)
     // ---------------------------------------------------------------------
-    auto pInputType = mlir::cast<mlir::RankedTensorType>(paddedInput.getType());
-
-    auto in5DType = mlir::RankedTensorType::get(
-        {pInputType.getDimSize(0), group, cPerGroup, pInputType.getDimSize(2),
-         pInputType.getDimSize(3)},
-        pInputType.getElementType());
-    auto w5DType = mlir::RankedTensorType::get({group, fPerGroup, cPerGroup,
-                                                weightType.getDimSize(2),
-                                                weightType.getDimSize(3)},
-                                               weightType.getElementType());
-    auto out5DType = mlir::RankedTensorType::get(
-        {resType.getDimSize(0), group, fPerGroup, resType.getDimSize(2),
-         resType.getDimSize(3)},
-        resType.getElementType());
-
-    llvm::SmallVector<mlir::ReassociationIndices, 4> inReassoc = {
-        {0}, {1, 2}, {3}, {4}};
-    llvm::SmallVector<mlir::ReassociationIndices, 4> wReassoc = {
-        {0, 1}, {2}, {3}, {4}};
-    llvm::SmallVector<mlir::ReassociationIndices, 4> outReassoc = {
-        {0}, {1, 2}, {3}, {4}};
-
-    auto in5D = mlir::tensor::ExpandShapeOp::create(rewriter, loc, in5DType,
-                                                    paddedInput, inReassoc);
-    auto w5D = mlir::tensor::ExpandShapeOp::create(rewriter, loc, w5DType,
-                                                   weight, wReassoc);
-    auto initBuff5D = mlir::tensor::ExpandShapeOp::create(
-        rewriter, loc, out5DType, initBuff, outReassoc);
-
-    // Loop structure (8D): g (group), n, f_g (parallel), oh, ow (parallel),
-    // c_g, kh, kw (reduction)
-    llvm::SmallVector<mlir::utils::IteratorType> iters = {
+    llvm::SmallVector<mlir::utils::IteratorType> iteratorTypes = {
         mlir::utils::IteratorType::parallel,  // g (group)
         mlir::utils::IteratorType::parallel,  // n (batch)
         mlir::utils::IteratorType::parallel,  // f_g (output channel per group)
@@ -247,6 +255,21 @@ mlir::LogicalResult OnnxToLinalg_ConvOp(mlir::Operation *op,
         mlir::utils::IteratorType::reduction  // kw (kernel width)
     };
 
+    auto pInputType = mlir::cast<mlir::RankedTensorType>(paddedInput.getType());
+
+    auto inp5DType = mlir::RankedTensorType::get(
+        {pInputType.getDimSize(0), attr_group, cPerGroup,
+         pInputType.getDimSize(2), pInputType.getDimSize(3)},
+        inpElmType);
+    auto wgt5DType = mlir::RankedTensorType::get(
+        {attr_group, fPerGroup, cPerGroup, attr_kernel_shape[0],
+         attr_kernel_shape[1]},
+        wgtElmType);
+    auto out5DType = mlir::RankedTensorType::get(
+        {outDatType.getDimSize(0), attr_group, fPerGroup,
+         outDatType.getDimSize(2), outDatType.getDimSize(3)},
+        outElmType);
+
     auto dG = rewriter.getAffineDimExpr(0);
     auto dN = rewriter.getAffineDimExpr(1);
     auto dFg = rewriter.getAffineDimExpr(2);
@@ -256,68 +279,96 @@ mlir::LogicalResult OnnxToLinalg_ConvOp(mlir::Operation *op,
     auto dKH = rewriter.getAffineDimExpr(6);
     auto dKW = rewriter.getAffineDimExpr(7);
 
-    // Input Map (5D): [n, g, c_g, oh*sh + kh*dh, ow*sw + kw*dw]
-    auto inMap = mlir::AffineMap::get(8, 0,
-                                      {dN, dG, dCg,
-                                       dOH * strides[0] + dKH * dilations[0],
-                                       dOW * strides[1] + dKW * dilations[1]},
-                                      ctx);
+    // input map (5D): [n, g, c_g, oh*sh + kh*dh, ow*sw + kw*dw]
+    auto inputMap = mlir::AffineMap::get(
+        /*dimCount=*/8, /*symbolCount=*/0,
+        /*results*/
+        {dN, dG, dCg, dOH * attr_strides[0] + dKH * attr_dilations[0],
+         dOW * attr_strides[1] + dKW * attr_dilations[1]},
+        /*context*/ ctx);
+    // weight map (5D): [g, f_g, c_g, kh, kw]
+    auto weightMap = mlir::AffineMap::get(/*dimCount=*/8, /*symbolCount=*/0,
+                                          /*results*/ {dG, dFg, dCg, dKH, dKW},
+                                          /*context*/ ctx);
+    // output map (5D): [n, g, f_g, oh, ow]
+    auto outputMap = mlir::AffineMap::get(/*dimCount=*/8, /*symbolCount=*/0,
+                                          /*results*/ {dN, dG, dFg, dOH, dOW},
+                                          /*context*/ ctx);
 
-    // Weight Map (5D): [g, f_g, c_g, kh, kw]
-    auto wMap = mlir::AffineMap::get(8, 0, {dG, dFg, dCg, dKH, dKW}, ctx);
+    llvm::SmallVector<mlir::AffineMap, 3> indexingMaps = {inputMap, weightMap,
+                                                          outputMap};
 
-    // Output Map (5D): [n, g, f_g, oh, ow]
-    auto outMap = mlir::AffineMap::get(8, 0, {dN, dG, dFg, dOH, dOW}, ctx);
+    llvm::SmallVector<mlir::ReassociationIndices, 4> inputReassoc = {
+        {0}, {1, 2}, {3}, {4}};
+    llvm::SmallVector<mlir::ReassociationIndices, 4> weightReassoc = {
+        {0, 1}, {2}, {3}, {4}};
+    llvm::SmallVector<mlir::ReassociationIndices, 4> outputReassoc = {
+        {0}, {1, 2}, {3}, {4}};
 
-    mlir::Value convRes5D =
-        mlir::linalg::GenericOp::create(
-            rewriter, loc, out5DType,
-            mlir::ValueRange{in5D.getResult(), w5D.getResult()},
-            initBuff5D.getResult(),
-            llvm::ArrayRef<mlir::AffineMap>{inMap, wMap, outMap}, iters,
-            [&](mlir::OpBuilder &nest, mlir::Location l,
-                mlir::ValueRange args) {
-              mlir::Value mul =
-                  mlir::arith::MulFOp::create(nest, l, args[0], args[1]);
-              mlir::Value add =
-                  mlir::arith::AddFOp::create(nest, l, mul, args[2]);
-              mlir::linalg::YieldOp::create(nest, l, add);
-            })
-            .getResult(0);
+    auto inp5D = mlir::tensor::ExpandShapeOp::create(rewriter, loc, inp5DType,
+                                                     paddedInput, inputReassoc);
+    auto wgt5D = mlir::tensor::ExpandShapeOp::create(rewriter, loc, wgt5DType,
+                                                     opWeight, weightReassoc);
+    auto initBuff5D = mlir::tensor::ExpandShapeOp::create(
+        rewriter, loc, out5DType, fillBuffer.getResult(0), outputReassoc);
 
-    // Collapse 5D output back to 4D [N, M, OH, OW]
-    convRes = mlir::tensor::CollapseShapeOp::create(rewriter, loc, resType,
-                                                    convRes5D, outReassoc)
-                  .getResult();
+    auto convRes5D = mlir::linalg::GenericOp::create(
+        /*op_builder*/ rewriter, /*src_location*/ loc,
+        /*result_type*/ mlir::TypeRange{out5DType},
+        /*input_values*/ mlir::ValueRange{inp5D, wgt5D},
+        /*output_values*/ mlir::ValueRange{initBuff5D},
+        /*affine_maps*/ indexingMaps,
+        /*iter_types*/ iteratorTypes,
+        /*builder_callback*/
+        [&](/*op_builder*/ mlir::OpBuilder &nest,
+            /*src_location*/ mlir::Location nloc,
+            /*value_args*/ mlir::ValueRange args) {
+          auto mul = mlir::arith::MulFOp::create(nest, nloc, args[0], args[1]);
+          auto add = mlir::arith::AddFOp::create(nest, nloc, mul, args[2]);
+          mlir::linalg::YieldOp::create(nest, nloc, add.getResult());
+        });
+
+    // collapse 5D output back to 4D [N, M, OH, OW]
+    auto convRes = mlir::tensor::CollapseShapeOp::create(
+        rewriter, loc, outDatType, convRes5D.getResult(0), outputReassoc);
+
+    convOut = convRes.getResult();
   }
 
-  // Handle Bias as a separate parallel GenericOp
-  mlir::Value finalResult = convRes;
-  if (bias && !mlir::isa<mlir::NoneType>(bias.getType())) {
+  // bias
+  if (opBias && !mlir::isa<mlir::NoneType>(opBias.getType())) {
     llvm::SmallVector<mlir::utils::IteratorType> biasIters(
         4, mlir::utils::IteratorType::parallel);
-    // Bias [F] mapped to Output [N, F, OH, OW] via dim 1
+
+    // mapped to output [N, F, OH, OW] via dim 1
     auto bMap = mlir::AffineMap::get(4, 0, {rewriter.getAffineDimExpr(1)}, ctx);
     auto rMap = rewriter.getMultiDimIdentityMap(4);
 
-    finalResult = mlir::linalg::GenericOp::create(
-                      rewriter, loc, resType, mlir::ValueRange{bias}, convRes,
-                      llvm::ArrayRef<mlir::AffineMap>{bMap, rMap}, biasIters,
-                      [&](mlir::OpBuilder &nest, mlir::Location l,
-                          mlir::ValueRange args) {
-                        mlir::Value addB = mlir::arith::AddFOp::create(
-                            nest, l, args[0], args[1]);
-                        mlir::linalg::YieldOp::create(nest, l, addB);
-                      })
-                      .getResult(0);
+    llvm::SmallVector<mlir::AffineMap, 2> indexingMaps = {bMap, rMap};
+
+    auto convRes = mlir::linalg::GenericOp::create(
+        /*op_builder*/ rewriter, /*src_location*/ loc,
+        /*result_type*/ mlir::TypeRange{outDatType},
+        /*input_values*/ mlir::ValueRange{opBias},
+        /*output_values*/ mlir::ValueRange{convOut},
+        /*affine_maps*/ indexingMaps,
+        /*iter_types*/ biasIters,
+        /*builder_callback*/
+        [&](/*op_builder*/ mlir::OpBuilder &nest,
+            /*src_location*/ mlir::Location nloc,
+            /*value_args*/ mlir::ValueRange args) {
+          auto addB = mlir::arith::AddFOp::create(nest, nloc, args[0], args[1]);
+          mlir::linalg::YieldOp::create(nest, nloc, addB.getResult());
+        });
+
+    convOut = convRes.getResult(0);
   }
 
-  // Set transform tag for downstream optimization
-  auto *finalOp = finalResult.getDefiningOp();
-  if (finalOp)
-    finalOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
+  convOut.getDefiningOp()->setAttr("transform.target_tag",
+                                   rewriter.getStringAttr(opName));
 
-  rewriter.replaceOp(op, finalResult);
+  rewriter.replaceOp(op, convOut);
+
   return mlir::success();
 }
 

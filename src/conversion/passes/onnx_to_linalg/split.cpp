@@ -39,151 +39,150 @@
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_SplitOp(mlir::Operation *op,
-                                         mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_SplitOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                     const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  // Extract input operand
-  mlir::Value input = op->getOperand(0);
-  auto inputType = mlir::dyn_cast<mlir::RankedTensorType>(input.getType());
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 
-  if (!inputType) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName +
-                               " input operand must be ranked tensor type");
+  /*
+   * I/O Values
+   */
+
+  auto opInput = convRewriter.getRemappedValue(op->getOperand(0));
+  auto opInputSplit = (op->getNumOperands() > 1 &&
+                       !mlir::isa<mlir::NoneType>(op->getOperand(1).getType()))
+                          ? convRewriter.getRemappedValue(op->getOperand(1))
+                          : nullptr;
+
+  auto inpDatType = mlir::dyn_cast<mlir::RankedTensorType>(opInput.getType());
+
+  int64_t inputRank = inpDatType.getRank();
+
+  unsigned numOutputs = op->getNumResults();
+
+  if (numOutputs == 0)
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " operation must produce at least 1 result";
+
+  /*
+   * Attributes
+   */
+
+  // axis
+  int64_t attr_axis = 0;
+  if (auto axisAttr = op->getAttrOfType<mlir::IntegerAttr>("axis"))
+    attr_axis = axisAttr.getInt();
+  if (attr_axis < -inputRank || attr_axis >= inputRank)
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " invalid axis: " << attr_axis;
+  if (attr_axis < 0)
+    attr_axis += inputRank;
+  attr_axis = std::clamp<int64_t>(attr_axis, 0, inputRank);
+
+  // split
+  llvm::SmallVector<int64_t, 4> attr_split;
+  auto arrayAttr = op->getAttrOfType<mlir::ArrayAttr>("split");
+  if (!arrayAttr)
+    arrayAttr = op->getAttrOfType<mlir::ArrayAttr>("input_split");
+  if (arrayAttr) {
+    for (auto intAttr : arrayAttr.getAsRange<mlir::IntegerAttr>())
+      attr_split.push_back(intAttr.getInt());
   }
-
-  int64_t inputRank = inputType.getRank();
-  if (inputRank == 0) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " input rank must be greater than 0");
-  }
-
-  // Get 'axis' attribute (defaults to 0 if absent)
-  int64_t axisValue = 0;
-  if (auto axisAttr = op->getAttrOfType<mlir::IntegerAttr>("axis")) {
-    axisValue = axisAttr.getInt();
-  }
-
-  // Handle negative axis index normalization
-  if (axisValue < 0) {
-    axisValue += inputRank;
-  }
-
-  if (axisValue < 0 || axisValue >= inputRank) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " axis attribute is out of range");
-  }
-
-  unsigned numResults = op->getNumResults();
-  if (numResults == 0) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName +
-                               " operation must produce at least 1 result");
-  }
-
-  llvm::SmallVector<int64_t, 4> splitSizes;
-  if (auto splitAttr = op->getAttrOfType<mlir::ArrayAttr>("split")) {
-    for (auto attr : splitAttr) {
-      splitSizes.push_back(mlir::cast<mlir::IntegerAttr>(attr).getInt());
-    }
-  } else if (auto inputSplitAttr =
-                 op->getAttrOfType<mlir::ArrayAttr>("input_split")) {
-    for (auto attr : inputSplitAttr) {
-      splitSizes.push_back(mlir::cast<mlir::IntegerAttr>(attr).getInt());
-    }
-  } else if (op->getNumOperands() > 1) {
-    mlir::Value splitOperand = op->getOperand(1);
-    if (splitOperand && !mlir::isa<mlir::NoneType>(splitOperand.getType())) {
-      if (auto *constOp = splitOperand.getDefiningOp()) {
-        if (auto denseAttr =
-                constOp->getAttrOfType<mlir::DenseElementsAttr>("value")) {
-          for (auto val : denseAttr.getValues<mlir::APInt>()) {
-            splitSizes.push_back(val.getSExtValue());
-          }
-        }
-      }
+  if (attr_split.empty() && !opInputSplit) {
+    int64_t axisDim = inpDatType.getDimSize(attr_axis);
+    if (axisDim != mlir::ShapedType::kDynamic) {
+      int64_t equalSize = axisDim / numOutputs;
+      attr_split.assign(numOutputs, equalSize);
     }
   }
 
-  // Populate split sizes for equal splitting if operand/attr was omitted
-  if (splitSizes.empty()) {
-    int64_t axisDim = inputType.getDimSize(axisValue);
-    if (axisDim != mlir::ShapedType::kDynamic && numResults > 0) {
-      int64_t equalSize = axisDim / numResults;
-      for (unsigned i = 0; i < numResults; ++i) {
-        splitSizes.push_back(equalSize);
-      }
-    }
-  }
+  /*
+   *  Linalg ops staging
+   */
 
-  llvm::SmallVector<mlir::Value, 4> newResults;
-  int64_t currentOffset = 0;
+  mlir::Value currOfsetVal;
+  int64_t currentOffsetStatic = 0;
+  if (attr_split.empty())
+    currOfsetVal = mlir::arith::ConstantIndexOp::create(rewriter, loc, 0);
 
-  for (unsigned i = 0; i < numResults; ++i) {
-    mlir::Value res = op->getResult(i);
-    auto resType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
+  llvm::SmallVector<mlir::Value, 4> newOutputs;
 
-    if (!resType) {
-      return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                             opName + " result must be ranked tensor type");
-    }
+  for (unsigned i = 0; i < numOutputs; ++i) {
+    auto opOut = convRewriter.getRemappedValue(op->getResult(i));
+    auto outDatType = mlir::dyn_cast<mlir::RankedTensorType>(opOut.getType());
 
-    if (resType.getRank() != inputRank) {
-      return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                             opName +
-                                 " result rank must match input tensor rank");
-    }
+    if (outDatType.getRank() != inputRank)
+      return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+             << opName << " result rank must match input tensor rank";
 
-    // Determine target dimension size along the split axis
-    int64_t dimSize = resType.getDimSize(axisValue);
-    if (dimSize == mlir::ShapedType::kDynamic && i < splitSizes.size()) {
-      dimSize = splitSizes[i];
-    }
-
-    // Construct slice parameters (offsets, sizes, strides)
-    llvm::SmallVector<mlir::OpFoldResult, 4> offsets;
     llvm::SmallVector<mlir::OpFoldResult, 4> sizes;
     llvm::SmallVector<mlir::OpFoldResult, 4> strides;
+    llvm::SmallVector<mlir::OpFoldResult, 4> offsets;
 
     for (int64_t d = 0; d < inputRank; ++d) {
       strides.push_back(rewriter.getIndexAttr(1));
-      if (d == axisValue) {
-        offsets.push_back(rewriter.getIndexAttr(currentOffset));
-        if (dimSize != mlir::ShapedType::kDynamic) {
-          sizes.push_back(rewriter.getIndexAttr(dimSize));
+
+      if (d == attr_axis) {
+        if (!attr_split.empty()) {
+          // use split attribute
+          offsets.push_back(rewriter.getIndexAttr(currentOffsetStatic));
+          sizes.push_back(rewriter.getIndexAttr(attr_split[i]));
+          currentOffsetStatic += attr_split[i];
         } else {
-          sizes.push_back(
-              mlir::tensor::DimOp::create(rewriter, loc, input, d).getResult());
+          // use split operand
+          offsets.push_back(currOfsetVal);
+
+          mlir::Value sliceSizeVal;
+          if (opInputSplit) {
+            auto idxConst =
+                mlir::arith::ConstantIndexOp::create(rewriter, loc, i);
+            auto extractedElem = mlir::tensor::ExtractOp::create(
+                rewriter, loc, opInputSplit, mlir::ValueRange{idxConst});
+            sliceSizeVal = mlir::arith::IndexCastOp::create(
+                rewriter, loc, rewriter.getIndexType(), extractedElem);
+          } else {
+            // equal split (default)
+            auto axisDimVal =
+                mlir::tensor::DimOp::create(rewriter, loc, opInput, attr_axis);
+            auto numOutputsConst =
+                mlir::arith::ConstantIndexOp::create(rewriter, loc, numOutputs);
+            sliceSizeVal = mlir::arith::DivUIOp::create(
+                rewriter, loc, axisDimVal, numOutputsConst);
+          }
+
+          if (outDatType.isDynamicDim(attr_axis))
+            sizes.push_back(sliceSizeVal);
+          else
+            sizes.push_back(
+                rewriter.getIndexAttr(outDatType.getDimSize(attr_axis)));
+
+          currOfsetVal = mlir::arith::AddIOp::create(
+              rewriter, loc, currOfsetVal, sliceSizeVal);
         }
       } else {
         offsets.push_back(rewriter.getIndexAttr(0));
-        if (resType.isDynamicDim(d)) {
-          sizes.push_back(
-              mlir::tensor::DimOp::create(rewriter, loc, input, d).getResult());
+        if (outDatType.isDynamicDim(d)) {
+          auto dimOp = mlir::tensor::DimOp::create(rewriter, loc, opInput, d);
+          sizes.push_back(dimOp.getResult());
         } else {
-          sizes.push_back(rewriter.getIndexAttr(resType.getDimSize(d)));
+          sizes.push_back(rewriter.getIndexAttr(outDatType.getDimSize(d)));
         }
       }
     }
 
-    mlir::Value slice = mlir::tensor::ExtractSliceOp::create(
-        rewriter, loc, resType, input, offsets, sizes, strides);
+    auto sliceOp = mlir::tensor::ExtractSliceOp::create(
+        rewriter, loc, outDatType, opInput, offsets, sizes, strides);
 
-    // Tag the slice for the transform dialect
-    slice.getDefiningOp()->setAttr("transform.target_tag",
-                                   rewriter.getStringAttr(opName));
+    sliceOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
 
-    newResults.push_back(slice);
-
-    // Advance offset along split axis
-    if (dimSize != mlir::ShapedType::kDynamic) {
-      currentOffset += dimSize;
-    }
+    newOutputs.push_back(sliceOp);
   }
 
-  rewriter.replaceOp(op, newResults);
+  rewriter.replaceOp(op, newOutputs);
+
   return mlir::success();
 }
 

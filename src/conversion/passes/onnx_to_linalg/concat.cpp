@@ -39,43 +39,68 @@
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_ConcatOp(mlir::Operation *op,
-                                          mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_ConcatOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                      const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  // Validate operands
-  if (op->getNumOperands() == 0) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " must have at least one input");
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
+
+  /*
+   * I/O Values
+   */
+
+  auto opInputs = op->getOperands();
+
+  // checks
+  if (op->getNumOperands() == 0)
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " must have at least one input";
+
+  auto inpDatType =
+      mlir::dyn_cast<mlir::RankedTensorType>(opInputs[0].getType());
+
+  auto inputRank = inpDatType.getRank();
+
+  /*
+   * Attributes
+   */
+
+  // axis
+  auto axisAttr = op->getAttr("axis");
+  if (!axisAttr)
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " missing 'axis' attribute";
+  auto axisInt = mlir::dyn_cast_or_null<mlir::IntegerAttr>(axisAttr);
+  if (!axisInt)
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " invalid 'axis' attribute type";
+  auto attr_axis = axisInt.getInt();
+  if (attr_axis < -inputRank || attr_axis >= inputRank)
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " invalid axis: " << attr_axis;
+
+  if (attr_axis < 0) {
+    attr_axis = inputRank + attr_axis;
   }
 
-  // Get 'axis' attribute (default is 0 if absent)
-  int64_t axisValue = 0;
-  if (auto axisAttr = op->getAttrOfType<mlir::IntegerAttr>("axis")) {
-    axisValue = axisAttr.getInt();
-  }
+  /*
+   * Linalg ops staging
+   */
 
-  // Normalize axis if needed
-  auto inputType =
-      mlir::dyn_cast<mlir::RankedTensorType>(op->getOperand(0).getType());
-  if (!inputType) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " input must be ranked tensor");
-  }
+  llvm::SmallVector<mlir::Value> remappedOperands;
+  if (mlir::failed(convRewriter.getRemappedValues(opInputs, remappedOperands)))
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " failed to remap operands";
 
-  int64_t rank = inputType.getRank();
-  if (axisValue < 0) {
-    axisValue += rank;
-  }
+  auto concatOp = mlir::tensor::ConcatOp::create(rewriter, loc, attr_axis,
+                                                 remappedOperands);
 
-  auto concatOp = mlir::tensor::ConcatOp::create(rewriter, loc, axisValue,
-                                                 op->getOperands());
-
-  // Tag for transform dialect
   concatOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
 
-  rewriter.replaceOp(op, concatOp.getResult());
+  rewriter.replaceOp(op, concatOp);
+
   return mlir::success();
 }
 

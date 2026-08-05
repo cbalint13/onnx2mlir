@@ -41,79 +41,73 @@
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_ShapeOp(mlir::Operation *op,
-                                         mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_ShapeOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                     const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  // Extract the input data tensor
-  mlir::Value data = op->getOperand(0);
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 
-  // Retrieve data type and verify input is a ranked tensor
-  auto dataType = mlir::dyn_cast<mlir::RankedTensorType>(data.getType());
-  if (!dataType) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " requires ranked tensor input");
-  }
+  /*
+   * I/O Values
+   */
 
-  int64_t rank = dataType.getRank();
+  auto opInput = convRewriter.getRemappedValue(op->getOperand(0));
 
-  // Handle optional 'start' attribute (default = 0)
-  int64_t start = 0;
-  if (auto startAttr = op->getAttrOfType<mlir::IntegerAttr>("start")) {
-    start = startAttr.getInt();
-  }
-  // Normalize negative index relative to rank
-  if (start < 0) {
-    start += rank;
-  }
-  // Clamp start into valid range [0, rank]
-  start = std::max<int64_t>(0, std::min<int64_t>(start, rank));
+  auto inpDatType = mlir::dyn_cast<mlir::RankedTensorType>(opInput.getType());
 
-  // Handle optional 'end' attribute (default = rank)
-  int64_t end = rank;
+  int64_t inputRank = inpDatType.getRank();
+
+  /*
+   * Attributes
+   */
+
+  // start
+  int64_t attr_start = 0;
+  if (auto startAttr = op->getAttrOfType<mlir::IntegerAttr>("start"))
+    attr_start = startAttr.getInt();
+  if (attr_start < 0)
+    attr_start += inputRank;
+  attr_start = std::clamp<int64_t>(attr_start, 0, inputRank);
+
+  // end
+  int64_t attr_end = inputRank;
   if (auto endAttr = op->getAttrOfType<mlir::IntegerAttr>("end")) {
-    end = endAttr.getInt();
-    if (end < 0) {
-      end += rank;
-    }
-    // Clamp end into valid range [0, rank]
-    end = std::max<int64_t>(0, std::min<int64_t>(end, rank));
+    attr_end = endAttr.getInt();
+    if (attr_end < 0)
+      attr_end += inputRank;
+    attr_end = std::clamp<int64_t>(attr_end, 0, inputRank);
   }
 
-  // Collect dimensions in range [start, end)
-  llvm::SmallVector<mlir::Value> dimValues;
-  if (start < end) {
-    dimValues.reserve(end - start);
-    for (int64_t i = start; i < end; ++i) {
-      // Create index constant for dimension position
-      mlir::Value indexVal =
-          mlir::arith::ConstantIndexOp::create(rewriter, loc, i);
+  /*
+   *  Linalg ops staging
+   */
 
-      // Query dynamic dimension size from input tensor
-      mlir::Value dimVal =
-          mlir::tensor::DimOp::create(rewriter, loc, data, indexVal);
-
-      // Convert index type to i64 tensor element type
-      mlir::Value dimI64 = mlir::arith::IndexCastOp::create(
-          rewriter, loc, rewriter.getI64Type(), dimVal);
-
-      dimValues.push_back(dimI64);
+  // collect dims in range [start, end)
+  llvm::SmallVector<mlir::Value> dimVals;
+  if (attr_start < attr_end) {
+    dimVals.reserve(attr_end - attr_start);
+    for (int64_t i = attr_start; i < attr_end; ++i) {
+      mlir::Value out;
+      out = mlir::arith::ConstantIndexOp::create(rewriter, loc, i);
+      out = mlir::tensor::DimOp::create(rewriter, loc, opInput, out);
+      out = mlir::arith::IndexCastOp::create(rewriter, loc,
+                                             rewriter.getI64Type(), out);
+      dimVals.push_back(out);
     }
   }
 
-  // Create target 1D int64 ranked tensor type
-  auto resultType = mlir::RankedTensorType::get(
-      {static_cast<int64_t>(dimValues.size())}, rewriter.getI64Type());
+  auto tgtDatType = mlir::RankedTensorType::get(
+      {static_cast<int64_t>(dimVals.size())}, rewriter.getI64Type());
 
-  // Construct tensor from individual element dimension values
-  auto shapeOp = mlir::tensor::FromElementsOp::create(rewriter, loc, resultType,
-                                                      dimValues);
+  auto shapeOp =
+      mlir::tensor::FromElementsOp::create(rewriter, loc, tgtDatType, dimVals);
 
-  // Attach transform dialect target tag
   shapeOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
 
-  rewriter.replaceOp(op, shapeOp.getResult());
+  rewriter.replaceOp(op, shapeOp);
+
   return mlir::success();
 }
 

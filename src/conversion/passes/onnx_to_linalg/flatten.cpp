@@ -44,86 +44,88 @@
 
 namespace onnx2mlir::dialect {
 
-mlir::LogicalResult OnnxToLinalg_FlattenOp(mlir::Operation *op,
-                                           mlir::PatternRewriter &rewriter) {
+mlir::LogicalResult
+OnnxToLinalg_FlattenOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                       const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
-  auto *context = rewriter.getContext();
 
-  mlir::Value inp = op->getOperand(0);
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 
-  auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(inp.getType());
-  auto resType =
-      mlir::dyn_cast<mlir::RankedTensorType>(op->getResult(0).getType());
+  /*
+   * I/O Values
+   */
 
-  if (!inpType || !resType) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " requires ranked tensor types");
-  }
+  mlir::Value opInput = convRewriter.getRemappedValue(op->getOperand(0));
+  mlir::Value opOutput = convRewriter.getRemappedValue(op->getResult(0));
 
-  // Get axis attribute
-  int64_t axis = 1;
-  if (auto axisAttr = op->getAttrOfType<mlir::IntegerAttr>("axis")) {
-    axis = axisAttr.getInt();
-  }
-  int64_t rank = inpType.getRank();
-  if (axis < 0)
-    axis += rank;
-  axis = std::clamp<int64_t>(axis, 0, rank);
+  auto inpDatType = mlir::dyn_cast<mlir::RankedTensorType>(opInput.getType());
+  auto outDatType = mlir::dyn_cast<mlir::RankedTensorType>(opOutput.getType());
 
-  // Flatten to 2D output
-  llvm::SmallVector<mlir::utils::IteratorType> iterators(
-      2, mlir::utils::IteratorType::parallel);
+  auto inputRank = inpDatType.getRank();
 
-  // Output map is identity: (d0, d1) -> (d0, d1)
+  /*
+   * Attributes
+   */
+
+  // axis
+  int64_t attr_axis = 1;
+  if (auto axisAttr = op->getAttrOfType<mlir::IntegerAttr>("axis"))
+    attr_axis = axisAttr.getInt();
+  if (attr_axis < 0)
+    attr_axis += inputRank;
+  attr_axis = std::clamp<int64_t>(attr_axis, 0, inputRank);
+
+  /*
+   *  Affine mappings
+   */
+
+  auto inpShape = inpDatType.getShape();
+  llvm::SmallVector<mlir::AffineExpr> inpExprs(inputRank);
+
+  // delinearize a dimension expression over index range [start, end)
+  auto delinearize = [&](mlir::AffineExpr expr, int start, int end) {
+    for (int i = end - 1; i >= start; --i) {
+      inpExprs[i] = (i == start) ? expr : expr % inpShape[i];
+      expr = expr.floorDiv(inpShape[i]);
+    }
+  };
+
+  delinearize(rewriter.getAffineDimExpr(0), 0, attr_axis);
+  delinearize(rewriter.getAffineDimExpr(1), attr_axis, inputRank);
+
+  auto inpMap = mlir::AffineMap::get(2, 0, inpExprs, rewriter.getContext());
   auto outMap = rewriter.getMultiDimIdentityMap(2);
 
-  // Input map: (d0, d1) -> (i_0, i_1, ..., i_{rank-1})
-  auto inpShape = inpType.getShape();
-  auto d0 = rewriter.getAffineDimExpr(0);
-  auto d1 = rewriter.getAffineDimExpr(1);
+  llvm::SmallVector<mlir::AffineMap, 2> indexingMaps = {inpMap, outMap};
 
-  llvm::SmallVector<mlir::AffineExpr> inpExprs(rank);
+  llvm::SmallVector<mlir::utils::IteratorType> iteratorTypes(
+      2, mlir::utils::IteratorType::parallel);
 
-  // Delinearize d0 into input dims [0, axis)
-  mlir::AffineExpr current0 = d0;
-  for (int i = axis - 1; i >= 0; --i) {
-    if (i == 0) {
-      inpExprs[i] = current0;
-    } else {
-      inpExprs[i] = current0 % inpShape[i];
-      current0 = current0.floorDiv(inpShape[i]);
-    }
-  }
+  /*
+   *  Linalg ops staging
+   */
 
-  // Delinearize d1 into input dims [axis, rank)
-  mlir::AffineExpr current1 = d1;
-  for (int i = rank - 1; i >= axis; --i) {
-    if (i == axis) {
-      inpExprs[i] = current1;
-    } else {
-      inpExprs[i] = current1 % inpShape[i];
-      current1 = current1.floorDiv(inpShape[i]);
-    }
-  }
-
-  auto inpMap = mlir::AffineMap::get(2, 0, inpExprs, context);
-
-  // Create the GenericOp
-  auto outBuff = mlir::tensor::EmptyOp::create(
-      rewriter, loc, resType.getShape(), resType.getElementType());
+  auto outBuffer = mlir::tensor::EmptyOp::create(
+      rewriter, loc, outDatType.getShape(), outDatType.getElementType());
 
   auto genericOp = mlir::linalg::GenericOp::create(
-      rewriter, loc, resType, mlir::ValueRange{inp},
-      mlir::ValueRange{outBuff.getResult()},
-      llvm::ArrayRef<mlir::AffineMap>{inpMap, outMap}, iterators,
-      [&](mlir::OpBuilder &nest, mlir::Location l, mlir::ValueRange args) {
-        mlir::linalg::YieldOp::create(nest, l, args[0]);
+      /*op_builder*/ rewriter, /*src_location*/ loc,
+      /*result_type*/ mlir::TypeRange{outDatType},
+      /*input_values*/ mlir::ValueRange{opInput},
+      /*output_values*/ mlir::ValueRange{outBuffer},
+      /*affine_maps*/ indexingMaps,
+      /*iter_types*/ iteratorTypes,
+      /*builder_callback*/
+      [&](/*op_builder*/ mlir::OpBuilder &nest,
+          /*src_location*/ mlir::Location nloc,
+          /*value_args*/ mlir::ValueRange args) {
+        mlir::linalg::YieldOp::create(nest, nloc, args[0]);
       });
 
   genericOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
 
-  rewriter.replaceOp(op, genericOp.getResult(0));
+  rewriter.replaceOp(op, genericOp);
 
   return mlir::success();
 }

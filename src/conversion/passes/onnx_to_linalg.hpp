@@ -39,152 +39,113 @@ namespace onnx2mlir::dialect {
  *
  */
 
-// onnx.{Add, Div, Mod, Mul, Pow, Sub}
 mlir::LogicalResult
-OnnxToLinalg_ArithBinaryOps(mlir::Operation *op,
-                            mlir::PatternRewriter &rewriter);
+OnnxToLinalg_BinaryOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                       const mlir::TypeConverter *typeConverter);
 
-// onnx.{Abs, Acos, Acosh, Asin, Asinh, Atan, Atanh, Ceil, Cos, Cosh, Elu,
-//       Erf, Exp, Floor, HardSwish, Identity, IsInf, IsNaN, Log, Neg, Not
-//       Reciprocal, Relu, Round, Sigmoid, Sign, Sin, Sinh, Softplus, Softsign,
-//       Sqrt, Tan, Tanh}
-mlir::LogicalResult OnnxToLinalg_ArithUnaryOps(mlir::Operation *op,
-                                               mlir::PatternRewriter &rewriter);
-
-// onnx.{BitwiseAnd, BitwiseOr, BitwiseXor}
 mlir::LogicalResult
-OnnxToLinalg_BitwiseBinaryOps(mlir::Operation *op,
-                              mlir::PatternRewriter &rewriter);
+OnnxToLinalg_CastOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                    const mlir::TypeConverter *typeConverter);
 
-// onnx.BitwiseNot
-mlir::LogicalResult
-OnnxToLinalg_BitwiseUnaryOps(mlir::Operation *op,
-                             mlir::PatternRewriter &rewriter);
-
-// onnx.{And, Or, Xor}
-mlir::LogicalResult
-OnnxToLinalg_BooleanBinaryOps(mlir::Operation *op,
-                              mlir::PatternRewriter &rewriter);
-
-// onnx.Cast
-mlir::LogicalResult OnnxToLinalg_CastOp(mlir::Operation *op,
-                                        mlir::PatternRewriter &rewriter);
-
-// onnx.Clip
 mlir::LogicalResult
 OnnxToLinalg_ClipOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
                     const mlir::TypeConverter *typeConverter);
 
-// onnx.{Equal, Greater, GreatherOrEqual, Less, LessOrEqual}
-mlir::LogicalResult OnnxToLinalg_CompBinaryOps(mlir::Operation *op,
-                                               mlir::PatternRewriter &rewriter);
+mlir::LogicalResult
+OnnxToLinalg_CompBinaryOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                           const mlir::TypeConverter *typeConverter);
 
-// onnx.Concat
-mlir::LogicalResult OnnxToLinalg_ConcatOp(mlir::Operation *op,
-                                          mlir::PatternRewriter &rewriter);
+mlir::LogicalResult
+OnnxToLinalg_ConcatOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                      const mlir::TypeConverter *typeConverter);
 
-// onnx.Constant
 mlir::LogicalResult
 OnnxToLinalg_ConstantOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
                         const mlir::TypeConverter *typeConverter);
 
-// onnx.Conv
-mlir::LogicalResult OnnxToLinalg_ConvOp(mlir::Operation *op,
-                                        mlir::PatternRewriter &rewriter);
-
-// onnx.Flatten
-mlir::LogicalResult OnnxToLinalg_FlattenOp(mlir::Operation *op,
-                                           mlir::PatternRewriter &rewriter);
-
-// onnx.Gather
-mlir::LogicalResult OnnxToLinalg_GatherOp(mlir::Operation *op,
-                                          mlir::PatternRewriter &rewriter);
-
-// onnx.Gemm
-mlir::LogicalResult OnnxToLinalg_GemmOp(mlir::Operation *op,
-                                        mlir::PatternRewriter &rewriter);
-
-// onnx.GlobalAveragePool
 mlir::LogicalResult
-OnnxToLinalg_GlobalAveragePoolOp(mlir::Operation *op,
-                                 mlir::PatternRewriter &rewriter);
+OnnxToLinalg_ConstantOfShapeOp(mlir::Operation *op,
+                               mlir::PatternRewriter &rewriter,
+                               const mlir::TypeConverter *typeConverter);
 
-// onnx.GlobalLpPool
 mlir::LogicalResult
-OnnxToLinalg_GlobalLpPoolOp(mlir::Operation *op,
-                            mlir::PatternRewriter &rewriter);
+OnnxToLinalg_ConvOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                    const mlir::TypeConverter *typeConverter);
 
-// onnx.GlobalMaxPool
 mlir::LogicalResult
-OnnxToLinalg_GlobalMaxPoolOp(mlir::Operation *op,
-                             mlir::PatternRewriter &rewriter);
+OnnxToLinalg_FlattenOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                       const mlir::TypeConverter *typeConverter);
 
-// onnx.Hardmax
+mlir::LogicalResult
+OnnxToLinalg_GatherOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                      const mlir::TypeConverter *typeConverter);
+
+mlir::LogicalResult
+OnnxToLinalg_GemmOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                    const mlir::TypeConverter *typeConverter);
+
+mlir::LogicalResult
+OnnxToLinalg_GlobalPoolOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                           const mlir::TypeConverter *typeConverter);
+
 mlir::LogicalResult OnnxToLinalg_HardmaxOp(mlir::Operation *op,
                                            mlir::PatternRewriter &rewriter);
 
-// onnx.LogSoftmax
-mlir::LogicalResult OnnxToLinalg_LogSoftmaxOp(mlir::Operation *op,
-                                              mlir::PatternRewriter &rewriter);
+mlir::LogicalResult
+OnnxToLinalg_LogSoftmaxOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                          const mlir::TypeConverter *typeConverter);
 
-// onnx.{MatMul, MatMulInteger}
-mlir::LogicalResult OnnxToLinalg_MatMulOp(mlir::Operation *op,
-                                          mlir::PatternRewriter &rewriter);
+mlir::LogicalResult
+OnnxToLinalg_MatMulOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                      const mlir::TypeConverter *typeConverter);
 
-// onnx.Maxpool
 mlir::LogicalResult
 OnnxToLinalg_MaxPoolOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
                        const mlir::TypeConverter *typeConverter);
 
-// onnx.Reshape
-mlir::LogicalResult OnnxToLinalg_ReshapeOp(mlir::Operation *op,
-                                           mlir::PatternRewriter &rewriter);
+mlir::LogicalResult
+OnnxToLinalg_ReshapeOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                       const mlir::TypeConverter *typeConverter);
 
-// onnx.Resize
-mlir::LogicalResult OnnxToLinalg_ResizeOp(mlir::Operation *op,
-                                          mlir::PatternRewriter &rewriter);
+mlir::LogicalResult
+OnnxToLinalg_ResizeOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                      const mlir::TypeConverter *typeConverter);
 
-// onnx.Shape
-mlir::LogicalResult OnnxToLinalg_ShapeOp(mlir::Operation *op,
-                                         mlir::PatternRewriter &rewriter);
+mlir::LogicalResult
+OnnxToLinalg_ShapeOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                     const mlir::TypeConverter *typeConverter);
 
-// onnx.Slice
-mlir::LogicalResult OnnxToLinalg_SliceOp(mlir::Operation *op,
-                                         mlir::PatternRewriter &rewriter);
+mlir::LogicalResult
+OnnxToLinalg_SliceOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                     const mlir::TypeConverter *typeConverter);
 
-// onnx.Softmax
-mlir::LogicalResult OnnxToLinalg_SoftmaxOp(mlir::Operation *op,
-                                           mlir::PatternRewriter &rewriter);
+mlir::LogicalResult
+OnnxToLinalg_SoftmaxOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                       const mlir::TypeConverter *typeConverter);
 
-// onnx.Split
-mlir::LogicalResult OnnxToLinalg_SplitOp(mlir::Operation *op,
-                                         mlir::PatternRewriter &rewriter);
+mlir::LogicalResult
+OnnxToLinalg_SplitOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                     const mlir::TypeConverter *typeConverter);
 
-// onnx.Squeeze
-mlir::LogicalResult OnnxToLinalg_SqueezeOp(mlir::Operation *op,
-                                           mlir::PatternRewriter &rewriter);
+mlir::LogicalResult
+OnnxToLinalg_SqueezeOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                       const mlir::TypeConverter *typeConverter);
 
-// onnx.Transpose
-mlir::LogicalResult OnnxToLinalg_TransposeOp(mlir::Operation *op,
-                                             mlir::PatternRewriter &rewriter);
+mlir::LogicalResult
+OnnxToLinalg_TransposeOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                         const mlir::TypeConverter *typeConverter);
 
-// onnx.Unsqueeze
-mlir::LogicalResult OnnxToLinalg_UnsqueezeOp(mlir::Operation *op,
-                                             mlir::PatternRewriter &rewriter);
+mlir::LogicalResult
+OnnxToLinalg_UnaryOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                      const mlir::TypeConverter *typeConverter);
 
-// onnx.Where
-mlir::LogicalResult OnnxToLinalg_WhereOp(mlir::Operation *op,
-                                         mlir::PatternRewriter &rewriter);
+mlir::LogicalResult
+OnnxToLinalg_UnsqueezeOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                         const mlir::TypeConverter *typeConverter);
 
-/*
- * Helpers
- *
- */
-
-mlir::Value createArithCastOp(mlir::OpBuilder *builder,
-                              const mlir::Location &loc,
-                              const mlir::Value &inputElement,
-                              const mlir::Type &targetElementType);
+mlir::LogicalResult
+OnnxToLinalg_WhereOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                     const mlir::TypeConverter *typeConverter);
 
 } // namespace onnx2mlir::dialect
 
