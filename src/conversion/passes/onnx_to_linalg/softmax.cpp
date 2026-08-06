@@ -43,7 +43,6 @@ namespace onnx2mlir::dialect {
 mlir::LogicalResult
 OnnxToLinalg_SoftmaxOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
                        const mlir::TypeConverter *typeConverter) {
-  // auto *ctx = rewriter.getContext();
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
@@ -59,18 +58,6 @@ OnnxToLinalg_SoftmaxOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
 
   auto inputRank = inpDatType.getRank();
 
-  // value checks
-  if (!inpDatType)
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
-           << opName << " operand must be tensor type";
-  if (!outDatType)
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
-           << opName << " result must be tensor type";
-  if (!mlir::isa<mlir::FloatType>(inpElmType)) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
-           << opName << " requires float element type";
-  }
-
   /*
    * Attributes
    */
@@ -79,11 +66,11 @@ OnnxToLinalg_SoftmaxOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
   auto axisAttr = op->getAttr("axis");
   if (!axisAttr)
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
-           << opName << " is missing 'axis' attribute";
+           << opName << " missing 'axis' attribute";
   auto axisInt = mlir::dyn_cast_or_null<mlir::IntegerAttr>(axisAttr);
   if (!axisInt)
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
-           << opName << " has invalid 'axis' attribute type";
+           << opName << " invalid 'axis' attribute type";
   auto attr_axis = axisInt.getInt();
   if (attr_axis < -inputRank || attr_axis >= inputRank) {
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
@@ -125,8 +112,7 @@ OnnxToLinalg_SoftmaxOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
   // 1.0f
   mlir::Value one;
 
-  mlir::Value expBuffer;
-  mlir::Value sumBuffer;
+  mlir::Value expBuffer, sumBuffer;
   mlir::linalg::FillOp sumFillBuffer;
 
   mlir::Value maxBuffer =

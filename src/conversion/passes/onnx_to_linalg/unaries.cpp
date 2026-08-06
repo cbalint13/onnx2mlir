@@ -62,12 +62,10 @@ OnnxToLinalg_UnaryOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
   auto outDatType = mlir::dyn_cast<mlir::RankedTensorType>(opOutput.getType());
 
   // value checks
-  if (!inpDatType)
+  if (mlir::dyn_cast<mlir::RankedTensorType>(inpDatType).getShape() !=
+      mlir::dyn_cast<mlir::RankedTensorType>(outDatType).getShape())
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
-           << opName << " operand must be tensor type";
-  if (!outDatType)
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
-           << opName << " result must be a tensor type";
+           << opName << " input and output shapes are different";
 
   /*
    * Attributes

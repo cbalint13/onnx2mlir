@@ -67,15 +67,9 @@ OnnxToLinalg_BinaryOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
   int64_t outRank = outDatType.getRank();
 
   // value checks
-  if ((!lhsDatType) || (!rhsDatType))
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
-           << opName << " operands must be tensor type";
   if (lhsDatType.getElementType() != rhsDatType.getElementType())
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
            << opName << " operands element type are different";
-  if (!outDatType)
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
-           << opName << " result must be a tensor type";
   if (!bcastShpType)
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
            << opName << " operands are not broadcastable";
