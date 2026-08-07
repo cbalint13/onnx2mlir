@@ -41,42 +41,58 @@ namespace onnx2mlir::dialect {
 mlir::LogicalResult
 OnnxToLinalg_ConstantOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
                         const mlir::TypeConverter *typeConverter) {
+  auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  // Get legit result type
-  auto resType = typeConverter->convertType(op->getResult(0));
+  auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 
-  // Cannot handle NoneType return
-  if (mlir::isa<mlir::NoneType>(resType)) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " with 'NoneType' is not supported");
-  }
-  // Get the 'value' attribute
-  mlir::Attribute valueAttr = op->getAttr("value");
+  /*
+   * I/O Values
+   */
+
+  auto opOutput = convRewriter.getRemappedValue(op->getResult(0));
+  auto outDatType = mlir::dyn_cast<mlir::RankedTensorType>(opOutput.getType());
+
+  auto dstDatType =
+      mlir::dyn_cast<mlir::RankedTensorType>(op->getResult(0).getType());
+
+  // checks
+  if (mlir::isa<mlir::NoneType>(outDatType))
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " with 'NoneType' is not supported";
+
+  /*
+   * Attributes
+   */
+
+  // value
+  auto valueAttr = op->getAttr("value");
   auto typedAttr = mlir::dyn_cast_or_null<mlir::TypedAttr>(valueAttr);
-
-  // Cannot handle empty tensor
-  if (!typedAttr) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName +
-                               " without a valid tensor 'value' attribute");
-  }
+  if (!typedAttr)
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " without a valid tensor 'value' attribute";
+  if (typedAttr.getType() != dstDatType)
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " 'value' attribute type does not match result type";
 
   bool isChanged = false;
-  // Match value type to result type
-  if (resType != typedAttr.getType()) {
+  // convert value type to result type
+  if (outDatType != typedAttr.getType()) {
     isChanged = true;
-    typedAttr = changeAttrType(valueAttr, resType);
+    typedAttr = changeAttrType(valueAttr, outDatType);
   }
 
-  // Create the new arithmetic constant op
-  auto constOp = rewriter.replaceOpWithNewOp<mlir::arith::ConstantOp>(
-      op, resType, typedAttr);
+  /*
+   *  Linalg ops staging
+   */
 
-  if (isChanged) {
-    // preserve metadata
+  auto constOp =
+      mlir::arith::ConstantOp::create(rewriter, loc, outDatType, typedAttr);
+
+  if (isChanged)
     constOp->setAttr("onnx_value", valueAttr);
-  }
+
+  rewriter.replaceOp(op, constOp);
 
   return mlir::success();
 }
@@ -88,14 +104,14 @@ OnnxToLinalg_ConstantOfShapeOp(mlir::Operation *op,
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 
-  auto resType = typeConverter->convertType(op->getResult(0));
+  auto outDatType = typeConverter->convertType(op->getResult(0));
 
   // Cannot handle NoneType return
-  if (mlir::isa<mlir::NoneType>(resType)) {
+  if (mlir::isa<mlir::NoneType>(outDatType)) {
     return mlir::emitError(loc, opName + " with 'NoneType' is not supported");
   }
 
-  auto rankedResType = mlir::dyn_cast<mlir::RankedTensorType>(resType);
+  auto rankedResType = mlir::dyn_cast<mlir::RankedTensorType>(outDatType);
   if (!rankedResType) {
     return mlir::emitError(loc, opName + " result must be a tensor type");
   }
