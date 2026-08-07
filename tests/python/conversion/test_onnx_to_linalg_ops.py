@@ -765,9 +765,9 @@ def test_onnx_transpose_lower(ONNX_OPSET_VERSION, dtype_proto):
 
 
 @pytest.mark.parametrize(
-    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto",
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shapes",
     [
-        (schema.name, schema.since_version, dtype_proto)
+        (schema.name, schema.since_version, dtype_proto, shapes)
         for schema in get_all_schemas_with_history()
         if schema.name in ["Greather", "GreatherOrEqual", "Less", "LessOrEqual"]
         for dtype_proto in [
@@ -776,13 +776,18 @@ def test_onnx_transpose_lower(ONNX_OPSET_VERSION, dtype_proto):
             TensorProto.INT8,
             TensorProto.INT32,
             TensorProto.INT64,
+            TensorProto.UINT8,
             TensorProto.UINT32,
             TensorProto.UINT64,
             TensorProto.BOOL,
         ]
+        for shapes in [
+            [(1, 3, 3), (1, 3, 3)],  # Non-broadcasting
+            [(1, 3, 1), (4, 1, 5)],  # Broadcasting
+        ]
     ],
 )
-def test_onnx_compare_binary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto):
+def test_onnx_compare_binary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shapes):
     """
     Test ONNX comparison binary operators lowering.
     """
@@ -812,8 +817,8 @@ def test_onnx_compare_binary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto
         check_model(model)
         return model
 
-    inp_array0 = _generate_dtype_random(np_dtype, shape=(1, 3, 1), max_val=10)
-    inp_array1 = _generate_dtype_random(np_dtype, shape=(4, 1, 5), max_val=10)
+    inp_array0 = _generate_dtype_random(np_dtype, shape=shapes[0], max_val=10)
+    inp_array1 = _generate_dtype_random(np_dtype, shape=shapes[1], max_val=10)
 
     onnx_model = create_onnx_model(inp_array0, inp_array1, dtype_proto)
 
