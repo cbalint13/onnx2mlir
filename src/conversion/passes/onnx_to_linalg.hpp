@@ -40,8 +40,7 @@ namespace onnx2mlir::dialect {
  */
 
 mlir::LogicalResult
-OnnxToLinalg_BinaryOps(mlir::Operation *op,
-                       mlir::PatternRewriter &rewriter,
+OnnxToLinalg_BinaryOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
                        const mlir::TypeConverter *typeConverter);
 
 mlir::LogicalResult

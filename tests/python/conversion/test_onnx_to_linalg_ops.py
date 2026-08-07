@@ -3020,12 +3020,12 @@ def test_onnx_slice_lower(ONNX_OPSET_VERSION, dtype_proto, shape, slice_config):
         if schema.name in ["Clip"]
         for dtype_proto in [
             TensorProto.FLOAT,
+            TensorProto.FLOAT16,
             TensorProto.DOUBLE,
             TensorProto.INT32,
             TensorProto.INT64,
-            TensorProto.UINT8,
             TensorProto.INT8,
-            TensorProto.FLOAT16,
+            TensorProto.UINT8,
         ]
         for shape in [
             (10,),

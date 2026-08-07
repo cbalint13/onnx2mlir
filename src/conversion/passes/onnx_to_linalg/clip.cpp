@@ -44,169 +44,31 @@
 
 namespace onnx2mlir::dialect {
 
-// Utility function to extract a scalar Value for min/max bounds from either
-// an SSA tensor operand (Opsets 11+) or an operation attribute (Opsets 1 & 6).
-static mlir::Value getScalarBound(mlir::PatternRewriter &rewriter,
-                                  mlir::Location loc, mlir::Value boundOperand,
-                                  mlir::Attribute boundAttr,
-                                  mlir::Type targetElemType,
-                                  mlir::Type origElemType) {
-  mlir::Value scalarVal = nullptr;
+static mlir::TypedAttr getAttrScalar(mlir::PatternRewriter &rewriter,
+                                     mlir::Attribute valAttr,
+                                     mlir::Type inpElmType) {
+  if (!valAttr)
+    return nullptr;
 
-  // 1. Unwrap cast operations on the bound operand tensor
-  while (boundOperand && boundOperand.getDefiningOp()) {
-    auto *defOp = boundOperand.getDefiningOp();
-    if (auto castOp = mlir::dyn_cast<mlir::UnrealizedConversionCastOp>(defOp)) {
-      if (castOp.getInputs().empty())
-        break;
-      boundOperand = castOp.getInputs()[0];
-    } else if (auto castOp = mlir::dyn_cast<mlir::tensor::CastOp>(defOp)) {
-      boundOperand = castOp.getSource();
-    } else if (defOp->getName().getStringRef().contains("Cast")) {
-      if (defOp->getNumOperands() > 0)
-        boundOperand = defOp->getOperand(0);
-      else
-        break;
-    } else {
-      break;
-    }
+  double floatVal = 0.0;
+  if (auto floatAttr = mlir::dyn_cast<mlir::FloatAttr>(valAttr)) {
+    floatVal = floatAttr.getValueAsDouble();
+  } else if (auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(valAttr)) {
+    floatVal = static_cast<double>(intAttr.getInt());
+  } else {
+    return nullptr;
   }
 
-  // 2. Extract constant scalar bound directly from constant defining op
-  // attribute if present
-  if (boundOperand && boundOperand.getDefiningOp()) {
-    auto *defOp = boundOperand.getDefiningOp();
-    mlir::Attribute valAttr = defOp->getAttr("value");
-    if (!valAttr)
-      valAttr = boundAttr;
-
-    if (valAttr) {
-      if (auto denseAttr = mlir::dyn_cast<mlir::DenseElementsAttr>(valAttr)) {
-        if (denseAttr.isSplat() || denseAttr.getNumElements() == 1) {
-          if (mlir::isa<mlir::FloatType>(targetElemType)) {
-            double doubleVal = 0.0;
-            if (mlir::isa<mlir::FloatType>(denseAttr.getElementType())) {
-              doubleVal =
-                  denseAttr.getSplatValue<mlir::APFloat>().convertToDouble();
-            } else if (mlir::isa<mlir::IntegerType>(
-                           denseAttr.getElementType())) {
-              doubleVal = static_cast<double>(
-                  denseAttr.getSplatValue<mlir::APInt>().getSExtValue());
-            }
-            scalarVal = mlir::arith::ConstantOp::create(
-                rewriter, loc, targetElemType,
-                rewriter.getFloatAttr(targetElemType, doubleVal));
-          } else if (auto intType =
-                         mlir::dyn_cast<mlir::IntegerType>(targetElemType)) {
-            int64_t intVal = 0;
-            if (mlir::isa<mlir::IntegerType>(denseAttr.getElementType())) {
-              auto apInt = denseAttr.getSplatValue<mlir::APInt>();
-              auto origInt = mlir::dyn_cast<mlir::IntegerType>(origElemType);
-              bool isUnsigned = origInt && origInt.isUnsigned();
-              intVal = isUnsigned ? apInt.getZExtValue() : apInt.getSExtValue();
-            } else if (mlir::isa<mlir::FloatType>(denseAttr.getElementType())) {
-              intVal = static_cast<int64_t>(
-                  denseAttr.getSplatValue<mlir::APFloat>().convertToDouble());
-            }
-            scalarVal = mlir::arith::ConstantOp::create(
-                rewriter, loc, targetElemType,
-                rewriter.getIntegerAttr(targetElemType, intVal));
-          }
-        }
-      }
-    }
+  mlir::TypedAttr attr;
+  if (inpElmType.isFloat()) {
+    attr = rewriter.getFloatAttr(inpElmType, floatVal);
+  } else if (inpElmType.isInteger()) {
+    attr = rewriter.getIntegerAttr(inpElmType, static_cast<int64_t>(floatVal));
+  } else {
+    return nullptr;
   }
 
-  // 3. Extract scalar from dynamic/runtime tensor operand if present and not
-  // NoneType
-  if (!scalarVal && boundOperand &&
-      !mlir::isa<mlir::NoneType>(boundOperand.getType())) {
-    auto tensorType =
-        mlir::dyn_cast<mlir::RankedTensorType>(boundOperand.getType());
-    if (tensorType) {
-      int64_t rank = tensorType.getRank();
-      llvm::SmallVector<mlir::Value> zeroIndices;
-      zeroIndices.reserve(rank);
-      for (int64_t i = 0; i < rank; ++i) {
-        zeroIndices.push_back(
-            mlir::arith::ConstantIndexOp::create(rewriter, loc, 0));
-      }
-      scalarVal = mlir::tensor::ExtractOp::create(rewriter, loc, boundOperand,
-                                                  zeroIndices);
-    }
-  }
-
-  // 4. Fall back to operation attribute for Opset 1 / Opset 6
-  if (!scalarVal && boundAttr) {
-    if (auto floatAttr = mlir::dyn_cast<mlir::FloatAttr>(boundAttr)) {
-      if (mlir::isa<mlir::FloatType>(targetElemType)) {
-        scalarVal = mlir::arith::ConstantOp::create(
-            rewriter, loc, targetElemType,
-            rewriter.getFloatAttr(targetElemType,
-                                  floatAttr.getValueAsDouble()));
-      } else if (auto intType =
-                     mlir::dyn_cast<mlir::IntegerType>(targetElemType)) {
-        int64_t intVal = static_cast<int64_t>(floatAttr.getValueAsDouble());
-        scalarVal = mlir::arith::ConstantOp::create(
-            rewriter, loc, targetElemType,
-            rewriter.getIntegerAttr(targetElemType, intVal));
-      }
-    } else if (auto intAttr = mlir::dyn_cast<mlir::IntegerAttr>(boundAttr)) {
-      if (auto intType = mlir::dyn_cast<mlir::IntegerType>(targetElemType)) {
-        scalarVal = mlir::arith::ConstantOp::create(
-            rewriter, loc, targetElemType,
-            rewriter.getIntegerAttr(targetElemType, intAttr.getInt()));
-      } else if (mlir::isa<mlir::FloatType>(targetElemType)) {
-        scalarVal = mlir::arith::ConstantOp::create(
-            rewriter, loc, targetElemType,
-            rewriter.getFloatAttr(targetElemType,
-                                  static_cast<double>(intAttr.getInt())));
-      }
-    }
-  }
-
-  // 3. Cast scalar type to match target input element type if needed
-  if (scalarVal && scalarVal.getType() != targetElemType) {
-    auto srcType = scalarVal.getType();
-    if (mlir::isa<mlir::FloatType>(srcType) &&
-        mlir::isa<mlir::FloatType>(targetElemType)) {
-      auto srcFloat = mlir::cast<mlir::FloatType>(srcType);
-      auto dstFloat = mlir::cast<mlir::FloatType>(targetElemType);
-      if (srcFloat.getWidth() < dstFloat.getWidth()) {
-        scalarVal = mlir::arith::ExtFOp::create(rewriter, loc, targetElemType,
-                                                scalarVal);
-      } else if (srcFloat.getWidth() > dstFloat.getWidth()) {
-        scalarVal = mlir::arith::TruncFOp::create(rewriter, loc, targetElemType,
-                                                  scalarVal);
-      }
-    } else if (mlir::isa<mlir::IntegerType>(srcType) &&
-               mlir::isa<mlir::IntegerType>(targetElemType)) {
-      auto srcInt = mlir::cast<mlir::IntegerType>(srcType);
-      auto dstInt = mlir::cast<mlir::IntegerType>(targetElemType);
-
-      auto dstType = rewriter.getIntegerType(dstInt.getWidth());
-
-      if (srcInt.getWidth() < dstInt.getWidth()) {
-        bool isUnsigned = srcInt.isUnsigned();
-        if (auto origInt = mlir::dyn_cast<mlir::IntegerType>(origElemType)) {
-          if (origInt.isUnsigned())
-            isUnsigned = true;
-        }
-        if (isUnsigned) {
-          scalarVal =
-              mlir::arith::ExtUIOp::create(rewriter, loc, dstType, scalarVal);
-        } else {
-          scalarVal =
-              mlir::arith::ExtSIOp::create(rewriter, loc, dstType, scalarVal);
-        }
-      } else if (srcInt.getWidth() > dstInt.getWidth()) {
-        scalarVal =
-            mlir::arith::TruncIOp::create(rewriter, loc, dstType, scalarVal);
-      }
-    }
-  }
-
-  return scalarVal;
+  return attr;
 }
 
 mlir::LogicalResult
@@ -217,123 +79,150 @@ OnnxToLinalg_ClipOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
 
   auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 
-  mlir::Value inp = convRewriter.getRemappedValue(op->getOperand(0));
-  mlir::Value res = op->getResult(0);
+  /*
+   * I/O Values
+   */
 
-  auto inpType = mlir::dyn_cast<mlir::RankedTensorType>(inp.getType());
-  auto resType = mlir::dyn_cast<mlir::RankedTensorType>(
-      typeConverter->convertType(res.getType()));
+  auto opInput = convRewriter.getRemappedValue(op->getOperand(0));
+  auto opOutput = convRewriter.getRemappedValue(op->getResult(0));
 
-  auto outType = mlir::dyn_cast<mlir::RankedTensorType>(res.getType());
+  auto minOperand = (op->getNumOperands() > 1 &&
+                     !mlir::isa<mlir::NoneType>(op->getOperand(1).getType()))
+                        ? op->getOperand(1)
+                        : nullptr;
+  auto maxOperand = (op->getNumOperands() > 2 &&
+                     !mlir::isa<mlir::NoneType>(op->getOperand(2).getType()))
+                        ? op->getOperand(2)
+                        : nullptr;
 
-  if (!inpType || !resType) {
-    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter),
-                           opName + " requires ranked tensor input and result");
-  }
+  auto inpDatType = mlir::dyn_cast<mlir::RankedTensorType>(opInput.getType());
+  auto outDatType = mlir::dyn_cast<mlir::RankedTensorType>(opOutput.getType());
 
-  int64_t rank = inpType.getRank();
-  mlir::Type origElemType = outType.getElementType();
-  mlir::Type elemType = typeConverter->convertType(origElemType);
+  auto srcDatType =
+      mlir::dyn_cast<mlir::RankedTensorType>(op->getOperand(0).getType());
 
-  // Extract min and max operands if provided (Opset 11+)
-  mlir::Value minOperand =
-      (op->getNumOperands() > 1) ? op->getOperand(1) : nullptr;
-  mlir::Value maxOperand =
-      (op->getNumOperands() > 2) ? op->getOperand(2) : nullptr;
+  auto minDatType =
+      minOperand ? mlir::dyn_cast<mlir::RankedTensorType>(minOperand.getType())
+                 : nullptr;
+  auto maxDatType =
+      maxOperand ? mlir::dyn_cast<mlir::RankedTensorType>(maxOperand.getType())
+                 : nullptr;
 
-  // Retrieve min and max attributes if present (Opset 1 and Opset 6)
-  mlir::Attribute minAttr = op->getAttr("min");
-  mlir::Attribute maxAttr = op->getAttr("max");
+  // linalg type conversion
+  if (minOperand)
+    minOperand = convRewriter.getRemappedValue(op->getOperand(1));
+  if (maxOperand)
+    maxOperand = convRewriter.getRemappedValue(op->getOperand(2));
 
-  // Retrieve scalar values for bounds converted to signless elemType
-  mlir::Value minScalar = getScalarBound(rewriter, loc, minOperand, minAttr,
-                                         elemType, origElemType);
-  mlir::Value maxScalar = getScalarBound(rewriter, loc, maxOperand, maxAttr,
-                                         elemType, origElemType);
+  // onnx original data types
+  auto srcElmType = srcDatType.getElementType();
+  // linalg converted data types (signless)
+  auto inpElmType = inpDatType.getElementType();
 
-  // no clipping required
-  if (!minScalar && !maxScalar) {
-    rewriter.replaceOp(op, op->getOperand(0));
+  // value checks
+  if (mlir::dyn_cast<mlir::RankedTensorType>(inpDatType).getShape() !=
+      mlir::dyn_cast<mlir::RankedTensorType>(outDatType).getShape())
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " input and output shapes are different";
+  if (minOperand && (!minDatType || minDatType.getRank() != 0))
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " operand 'min' should be a tensor of rank zero";
+  if (maxOperand && (!maxDatType || maxDatType.getRank() != 0))
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " operand 'min' should be a tensor of rank zero";
+  if (minDatType && minDatType.getElementType() != srcElmType)
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " operand 'min' and input element types are different";
+  if (maxDatType && maxDatType.getElementType() != srcElmType)
+    return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
+           << opName << " operand 'max' and input element types are different";
+
+  /*
+   * Attributes
+   */
+
+  // min
+  auto minAttr = op->getAttr("min");
+  auto minScalar = getAttrScalar(rewriter, minAttr, inpElmType);
+
+  // max
+  auto maxAttr = op->getAttr("max");
+  auto maxScalar = getAttrScalar(rewriter, maxAttr, inpElmType);
+
+  // no clipping identity
+  if (!minAttr && !maxAttr && !minOperand && !maxOperand) {
+    rewriter.replaceOp(op, opInput);
     return mlir::success();
   }
 
-  // Query dynamic dimensions for creating output empty tensor destination
-  llvm::SmallVector<mlir::Value> dynamicSizes;
-  for (int64_t i = 0; i < rank; ++i) {
-    if (resType.isDynamicDim(i)) {
-      mlir::Value dimIdx =
-          mlir::arith::ConstantIndexOp::create(rewriter, loc, i);
-      dynamicSizes.push_back(
-          mlir::tensor::DimOp::create(rewriter, loc, inp, dimIdx));
-    }
-  }
+  /*
+   *  Affine mappings
+   */
 
-  auto outBuff =
-      mlir::tensor::EmptyOp::create(rewriter, loc, resType, dynamicSizes);
+  auto inpIdentityMap = rewriter.getMultiDimIdentityMap(inpDatType.getRank());
+  auto outIdentityMap = rewriter.getMultiDimIdentityMap(outDatType.getRank());
 
-  auto identityMap = rewriter.getMultiDimIdentityMap(rank);
-  llvm::SmallVector<mlir::AffineMap> indexingMaps = {identityMap, identityMap};
+  mlir::SmallVector<mlir::AffineMap, 2> indexingMaps;
+  indexingMaps = {inpIdentityMap, outIdentityMap};
 
-  llvm::SmallVector<mlir::utils::IteratorType> iteratorTypes(
-      rank, mlir::utils::IteratorType::parallel);
+  llvm::SmallVector<mlir::utils::IteratorType, 4> iteratorTypes(
+      inpDatType.getRank(), mlir::utils::IteratorType::parallel);
+
+  /*
+   *  Linalg ops staging
+   */
+
+  auto outBuffer = mlir::tensor::EmptyOp::create(
+      rewriter, loc, outDatType.getShape(), outDatType.getElementType());
 
   auto genericOp = mlir::linalg::GenericOp::create(
-      rewriter, loc,
-      /*resTypes=*/mlir::TypeRange{resType},
-      /*inputs=*/mlir::ValueRange{inp},
-      /*outputs=*/mlir::ValueRange{outBuff},
-      /*indexingMaps=*/indexingMaps,
-      /*iteratorTypes=*/iteratorTypes,
-      /*bodyBuilder=*/
-      [&](mlir::OpBuilder &b, mlir::Location nestedLoc,
-          mlir::ValueRange blockArgs) {
-        mlir::Value val = blockArgs[0];
+      /*op_builder*/ rewriter, /*src_location*/ loc,
+      /*result_types*/ mlir::TypeRange{outDatType},
+      /*input_values*/ mlir::ValueRange{opInput},
+      /*output_values=*/mlir::ValueRange{outBuffer},
+      /*affine_maps*/ indexingMaps,
+      /*iter_types*/ iteratorTypes,
+      /*builder_callback=*/
+      [&](/*op_builder*/ mlir::OpBuilder nest,
+          /*src_location*/ mlir::Location nloc,
+          /*value_args*/ mlir::ValueRange args) {
+        mlir::Value scalar;
+        mlir::Value val = args[0];
 
-        // Apply lower bound clipping (val = max(val, minScalar))
-        if (minScalar) {
-          if (mlir::isa<mlir::FloatType>(elemType)) {
-            mlir::Value isLess = mlir::arith::CmpFOp::create(
-                b, nestedLoc, mlir::arith::CmpFPredicate::OLT, val, minScalar);
-            val = mlir::arith::SelectOp::create(b, nestedLoc, isLess, minScalar,
-                                                val);
-          } else if (mlir::isa<mlir::IntegerType>(elemType)) {
-            auto origInt = mlir::dyn_cast<mlir::IntegerType>(origElemType);
-            auto pred = (origInt && origInt.isUnsigned())
-                            ? mlir::arith::CmpIPredicate::ult
-                            : mlir::arith::CmpIPredicate::slt;
-            mlir::Value isLess =
-                mlir::arith::CmpIOp::create(b, nestedLoc, pred, val, minScalar);
-            val = mlir::arith::SelectOp::create(b, nestedLoc, isLess, minScalar,
-                                                val);
-          }
+        if (minOperand || minScalar) {
+          if (minOperand)
+            scalar = mlir::tensor::ExtractOp::create(nest, nloc, minOperand,
+                                                     mlir::ValueRange{});
+          else
+            scalar = mlir::arith::ConstantOp::create(rewriter, loc, minScalar);
+          if (srcElmType.isFloat())
+            val = mlir::arith::MaximumFOp::create(nest, nloc, val, scalar);
+          else if (srcElmType.isUnsignedInteger())
+            val = mlir::arith::MaxUIOp::create(nest, nloc, val, scalar);
+          else
+            val = mlir::arith::MaxSIOp::create(nest, nloc, val, scalar);
         }
 
-        // Apply upper bound clipping (val = min(val, maxScalar))
-        if (maxScalar) {
-          if (mlir::isa<mlir::FloatType>(elemType)) {
-            mlir::Value isGreater = mlir::arith::CmpFOp::create(
-                b, nestedLoc, mlir::arith::CmpFPredicate::OGT, val, maxScalar);
-            val = mlir::arith::SelectOp::create(b, nestedLoc, isGreater,
-                                                maxScalar, val);
-          } else if (mlir::isa<mlir::IntegerType>(elemType)) {
-            auto origInt = mlir::dyn_cast<mlir::IntegerType>(origElemType);
-            auto pred = (origInt && origInt.isUnsigned())
-                            ? mlir::arith::CmpIPredicate::ugt
-                            : mlir::arith::CmpIPredicate::sgt;
-            mlir::Value isGreater =
-                mlir::arith::CmpIOp::create(b, nestedLoc, pred, val, maxScalar);
-            val = mlir::arith::SelectOp::create(b, nestedLoc, isGreater,
-                                                maxScalar, val);
-          }
+        if (maxOperand || maxScalar) {
+          if (maxOperand)
+            scalar = mlir::tensor::ExtractOp::create(nest, nloc, maxOperand,
+                                                     mlir::ValueRange{});
+          else
+            scalar = mlir::arith::ConstantOp::create(rewriter, loc, maxScalar);
+          if (srcElmType.isFloat())
+            val = mlir::arith::MinimumFOp::create(nest, nloc, val, scalar);
+          else if (srcElmType.isUnsignedInteger())
+            val = mlir::arith::MinUIOp::create(nest, nloc, val, scalar);
+          else
+            val = mlir::arith::MinSIOp::create(nest, nloc, val, scalar);
         }
 
-        mlir::linalg::YieldOp::create(b, nestedLoc, val);
+        mlir::linalg::YieldOp::create(nest, nloc, val);
       });
 
   genericOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
-  mlir::Value output = genericOp.getResult(0);
 
-  rewriter.replaceOp(op, output);
+  rewriter.replaceOp(op, genericOp);
 
   return mlir::success();
 }
