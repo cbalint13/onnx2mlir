@@ -72,10 +72,9 @@ OnnxToLinalg_SoftmaxOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
            << opName << " invalid 'axis' attribute type";
   auto attr_axis = axisInt.getInt();
-  if (attr_axis < -inputRank || attr_axis >= inputRank) {
+  if (attr_axis < -inputRank || attr_axis >= inputRank)
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
            << opName << " invalid axis: " << attr_axis;
-  }
 
   if (attr_axis < 0) {
     attr_axis = inputRank + attr_axis;
