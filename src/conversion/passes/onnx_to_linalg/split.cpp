@@ -176,8 +176,6 @@ OnnxToLinalg_SplitOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
     auto sliceOp = mlir::tensor::ExtractSliceOp::create(
         rewriter, loc, outDatType, opInput, offsets, sizes, strides);
 
-    sliceOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
-
     newOutputs.push_back(sliceOp);
   }
 

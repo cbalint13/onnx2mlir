@@ -207,8 +207,6 @@ OnnxToLinalg_GlobalPoolOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
     globalpoolOp = postGenericOp;
   }
 
-  globalpoolOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
-
   rewriter.replaceOp(op, globalpoolOp);
 
   return mlir::success();

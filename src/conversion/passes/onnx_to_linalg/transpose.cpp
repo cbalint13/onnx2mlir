@@ -105,8 +105,6 @@ OnnxToLinalg_TransposeOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
       rewriter, loc, opInput, outBuffer,
       rewriter.getDenseI64ArrayAttr(attr_perms));
 
-  transOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
-
   rewriter.replaceOp(op, transOp);
 
   return mlir::success();

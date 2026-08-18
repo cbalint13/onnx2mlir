@@ -364,9 +364,6 @@ OnnxToLinalg_ConvOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
     convOut = convRes.getResult(0);
   }
 
-  convOut.getDefiningOp()->setAttr("transform.target_tag",
-                                   rewriter.getStringAttr(opName));
-
   rewriter.replaceOp(op, convOut);
 
   return mlir::success();

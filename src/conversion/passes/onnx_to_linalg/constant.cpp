@@ -176,8 +176,6 @@ OnnxToLinalg_ConstantOfShapeOp(mlir::Operation *op,
       mlir::linalg::FillOp::create(rewriter, loc, mlir::ValueRange{scalarValue},
                                    mlir::ValueRange{initTensor});
 
-  fillOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
-
   rewriter.replaceOp(op, fillOp);
 
   return mlir::success();

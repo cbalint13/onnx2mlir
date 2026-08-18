@@ -52,8 +52,8 @@ OnnxToLinalg_CastOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
    * I/O Values
    */
 
-  mlir::Value opInput = convRewriter.getRemappedValue(op->getOperand(0));
-  mlir::Value opOutput = convRewriter.getRemappedValue(op->getResult(0));
+  auto opInput = convRewriter.getRemappedValue(op->getOperand(0));
+  auto opOutput = convRewriter.getRemappedValue(op->getResult(0));
 
   auto inpDatType = mlir::dyn_cast<mlir::RankedTensorType>(opInput.getType());
   auto outDatType = mlir::dyn_cast<mlir::RankedTensorType>(opOutput.getType());
@@ -203,8 +203,6 @@ OnnxToLinalg_CastOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
 
         mlir::linalg::YieldOp::create(nest, nloc, out);
       });
-
-  genericOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
 
   rewriter.replaceOp(op, genericOp);
 

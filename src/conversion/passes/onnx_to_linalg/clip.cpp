@@ -85,15 +85,14 @@ OnnxToLinalg_ClipOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
 
   auto opInput = convRewriter.getRemappedValue(op->getOperand(0));
   auto opOutput = convRewriter.getRemappedValue(op->getResult(0));
-
-  auto minOperand = (op->getNumOperands() > 1 &&
-                     !mlir::isa<mlir::NoneType>(op->getOperand(1).getType()))
-                        ? op->getOperand(1)
-                        : nullptr;
-  auto maxOperand = (op->getNumOperands() > 2 &&
-                     !mlir::isa<mlir::NoneType>(op->getOperand(2).getType()))
-                        ? op->getOperand(2)
-                        : nullptr;
+  auto opInpMin = (op->getNumOperands() > 1 &&
+                   !mlir::isa<mlir::NoneType>(op->getOperand(1).getType()))
+                      ? op->getOperand(1)
+                      : nullptr;
+  auto opInpMax = (op->getNumOperands() > 2 &&
+                   !mlir::isa<mlir::NoneType>(op->getOperand(2).getType()))
+                      ? op->getOperand(2)
+                      : nullptr;
 
   auto inpDatType = mlir::dyn_cast<mlir::RankedTensorType>(opInput.getType());
   auto outDatType = mlir::dyn_cast<mlir::RankedTensorType>(opOutput.getType());
@@ -102,17 +101,17 @@ OnnxToLinalg_ClipOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
       mlir::dyn_cast<mlir::RankedTensorType>(op->getOperand(0).getType());
 
   auto minDatType =
-      minOperand ? mlir::dyn_cast<mlir::RankedTensorType>(minOperand.getType())
-                 : nullptr;
+      opInpMin ? mlir::dyn_cast<mlir::RankedTensorType>(opInpMin.getType())
+               : nullptr;
   auto maxDatType =
-      maxOperand ? mlir::dyn_cast<mlir::RankedTensorType>(maxOperand.getType())
-                 : nullptr;
+      opInpMax ? mlir::dyn_cast<mlir::RankedTensorType>(opInpMax.getType())
+               : nullptr;
 
   // linalg type conversion
-  if (minOperand)
-    minOperand = convRewriter.getRemappedValue(op->getOperand(1));
-  if (maxOperand)
-    maxOperand = convRewriter.getRemappedValue(op->getOperand(2));
+  if (opInpMin)
+    opInpMin = convRewriter.getRemappedValue(op->getOperand(1));
+  if (opInpMax)
+    opInpMax = convRewriter.getRemappedValue(op->getOperand(2));
 
   // onnx original data types
   auto srcElmType = srcDatType.getElementType();
@@ -124,10 +123,10 @@ OnnxToLinalg_ClipOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
       mlir::dyn_cast<mlir::RankedTensorType>(outDatType).getShape())
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
            << opName << " input and output shapes are different";
-  if (minOperand && (!minDatType || minDatType.getRank() != 0))
+  if (opInpMin && (!minDatType || minDatType.getRank() != 0))
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
            << opName << " operand 'min' should be a tensor of rank zero";
-  if (maxOperand && (!maxDatType || maxDatType.getRank() != 0))
+  if (opInpMax && (!maxDatType || maxDatType.getRank() != 0))
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
            << opName << " operand 'min' should be a tensor of rank zero";
   if (minDatType && minDatType.getElementType() != srcElmType)
@@ -150,7 +149,7 @@ OnnxToLinalg_ClipOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
   auto maxScalar = getAttrScalar(rewriter, maxAttr, inpElmType);
 
   // no clipping identity
-  if (!minAttr && !maxAttr && !minOperand && !maxOperand) {
+  if (!minAttr && !maxAttr && !opInpMin && !opInpMax) {
     rewriter.replaceOp(op, opInput);
     return mlir::success();
   }
@@ -189,9 +188,9 @@ OnnxToLinalg_ClipOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
         mlir::Value scalar;
         mlir::Value val = args[0];
 
-        if (minOperand || minScalar) {
-          if (minOperand)
-            scalar = mlir::tensor::ExtractOp::create(nest, nloc, minOperand,
+        if (opInpMin || minScalar) {
+          if (opInpMin)
+            scalar = mlir::tensor::ExtractOp::create(nest, nloc, opInpMin,
                                                      mlir::ValueRange{});
           else
             scalar = mlir::arith::ConstantOp::create(rewriter, loc, minScalar);
@@ -203,9 +202,9 @@ OnnxToLinalg_ClipOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
             val = mlir::arith::MaxSIOp::create(nest, nloc, val, scalar);
         }
 
-        if (maxOperand || maxScalar) {
-          if (maxOperand)
-            scalar = mlir::tensor::ExtractOp::create(nest, nloc, maxOperand,
+        if (opInpMax || maxScalar) {
+          if (opInpMax)
+            scalar = mlir::tensor::ExtractOp::create(nest, nloc, opInpMax,
                                                      mlir::ValueRange{});
           else
             scalar = mlir::arith::ConstantOp::create(rewriter, loc, maxScalar);
@@ -219,8 +218,6 @@ OnnxToLinalg_ClipOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
 
         mlir::linalg::YieldOp::create(nest, nloc, val);
       });
-
-  genericOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
 
   rewriter.replaceOp(op, genericOp);
 

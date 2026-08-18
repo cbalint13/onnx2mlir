@@ -215,8 +215,6 @@ OnnxToLinalg_GemmOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
         mlir::linalg::YieldOp::create(nest, nloc, val);
       });
 
-  gemmOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
-
   rewriter.replaceOp(op, gemmOp);
 
   return mlir::success();

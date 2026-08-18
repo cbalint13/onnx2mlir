@@ -97,8 +97,6 @@ OnnxToLinalg_ConcatOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
   auto concatOp = mlir::tensor::ConcatOp::create(rewriter, loc, attr_axis,
                                                  remappedOperands);
 
-  concatOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
-
   rewriter.replaceOp(op, concatOp);
 
   return mlir::success();

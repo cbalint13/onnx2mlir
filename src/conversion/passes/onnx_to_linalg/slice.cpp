@@ -341,8 +341,6 @@ OnnxToLinalg_SliceOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
         mlir::linalg::YieldOp::create(nest, nloc, extracted.getResult());
       });
 
-  genericOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
-
   rewriter.replaceOp(op, genericOp);
 
   return mlir::success();

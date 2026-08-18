@@ -93,8 +93,6 @@ OnnxToLinalg_ReshapeOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
   auto reshapeOp = mlir::tensor::ReshapeOp::create(rewriter, loc, outDatType,
                                                    opInput, opInputShp);
 
-  reshapeOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
-
   rewriter.replaceOp(op, reshapeOp);
 
   return mlir::success();

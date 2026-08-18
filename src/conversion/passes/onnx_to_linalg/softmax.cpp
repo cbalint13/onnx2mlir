@@ -227,8 +227,6 @@ OnnxToLinalg_SoftmaxOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
         });
   }
 
-  genericOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
-
   rewriter.replaceOp(op, genericOp);
 
   return mlir::success();

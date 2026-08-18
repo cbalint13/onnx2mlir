@@ -104,8 +104,6 @@ OnnxToLinalg_ShapeOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
   auto shapeOp =
       mlir::tensor::FromElementsOp::create(rewriter, loc, tgtDatType, dimVals);
 
-  shapeOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
-
   rewriter.replaceOp(op, shapeOp);
 
   return mlir::success();

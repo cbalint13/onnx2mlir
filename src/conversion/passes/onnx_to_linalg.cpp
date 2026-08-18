@@ -32,6 +32,7 @@
 #include <mlir/Dialect/Func/Transforms/FuncConversions.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/Math/IR/Math.h>
+#include <mlir/Dialect/SCF/IR/SCF.h>
 #include <mlir/Dialect/Tensor/IR/Tensor.h>
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Transforms/DialectConversion.h>
@@ -153,6 +154,7 @@ struct LowerONNXToLINALGPass
     registry.insert<mlir::arith::ArithDialect>();
     registry.insert<mlir::func::FuncDialect>();
     registry.insert<mlir::linalg::LinalgDialect>();
+    registry.insert<mlir::scf::SCFDialect>();
     registry.insert<mlir::tensor::TensorDialect>();
     registry.insert<onnx::OnnxDialect>();
   }
@@ -160,6 +162,40 @@ struct LowerONNXToLINALGPass
   void runOnOperation() override {
     mlir::ModuleOp module = getOperation();
     mlir::MLIRContext *ctx = &getContext();
+
+    // region wrap all onnx ops
+    module.walk([&](mlir::Operation *op) {
+      if (op->getDialect() && op->getDialect()->getNamespace() == "onnx") {
+        if (!op->getBlock())
+          return;
+
+        mlir::OpBuilder builder(op);
+        auto loc = op->getLoc();
+        auto opName = op->getName().getStringRef();
+
+        auto resType = op->getResultTypes();
+        auto execOp = mlir::scf::ExecuteRegionOp::create(builder, loc, resType);
+        execOp->setAttr("onnx.name", builder.getStringAttr(opName));
+
+        if (auto nodeNameAttr = op->getAttr("onnx.node.name"))
+          execOp->setAttr("onnx.node.name", nodeNameAttr);
+
+        mlir::Block *body = builder.createBlock(&execOp.getRegion());
+        op->moveBefore(body, body->end());
+
+        builder.setInsertionPointToEnd(body);
+        mlir::scf::YieldOp::create(builder, loc, op->getResults());
+
+        for (auto [origRes, execRes] :
+             llvm::zip(op->getResults(), execOp.getResults())) {
+          origRes.replaceUsesWithIf(execRes, [&](mlir::OpOperand &use) {
+            return !execOp.getRegion().isAncestor(
+                use.getOwner()->getParentRegion());
+          });
+        }
+      }
+    });
+
     mlir::ConversionTarget target(*ctx);
 
     // legal dialects

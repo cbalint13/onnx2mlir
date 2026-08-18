@@ -113,8 +113,6 @@ OnnxToLinalg_SqueezeOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
         mlir::linalg::YieldOp::create(nest, nloc, args[0]);
       });
 
-  genericOp->setAttr("transform.target_tag", rewriter.getStringAttr(opName));
-
   rewriter.replaceOp(op, genericOp);
 
   return mlir::success();
