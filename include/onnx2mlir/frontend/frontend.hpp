@@ -64,7 +64,11 @@ public:
  */
 template <typename ConverterBackend> class Converter : public ConverterBackend {
 public:
-  // input file parser
+  // forward constructor
+  template <typename... Args>
+  explicit Converter(Args &&...args)
+      : ConverterBackend(std::forward<Args>(args)...) {}
+  // module converter
   void convertModule(mlir::ModuleOp module) {
     ConverterBackend::convert(&module);
   }
@@ -97,10 +101,16 @@ protected:
 // converter interface
 class FrontendConverter {
 public:
+  explicit FrontendConverter(const std::map<std::string, std::string> &options)
+      : opt_args(options) {}
+
   virtual ~FrontendConverter() = default;
 
 protected:
   virtual void convert(mlir::ModuleOp *module) = 0;
+
+  // converter options argument
+  std::map<std::string, std::string> opt_args;
 };
 
 } // namespace frontend

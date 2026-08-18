@@ -1,0 +1,195 @@
+/******************************************************************************
+ *
+ * ONNX2MLIR (ONNX dialect mappings for composable optimizations)
+ *
+ * Authors:
+ *     Cristian Balint <cristian dot balint at gmail dot com>
+ *
+ * Copyright (c) 2021,2025
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *
+ *****************************************************************************/
+
+/*!
+ * \file src/onnx2mlir.cpp
+ * \brief Onnx to Mlir compiler tool
+ */
+
+#include <llvm/Support/FileSystem.h>
+#include <llvm/Support/raw_ostream.h>
+#include <mlir/IR/MLIRContext.h>
+
+#include <iostream>
+#include <map>
+#include <regex>
+#include <string>
+
+#include "onnx2mlir/frontend/onnx.hpp"
+
+template <typename ModuleType>
+static bool saveModuleToFile(const ModuleType &module,
+                             const std::string &filename) {
+  std::error_code ec;
+  llvm::raw_fd_ostream outputStream(filename, ec, llvm::sys::fs::OF_None);
+  if (ec) {
+    std::cerr << "ERROR: Failed to open file '" << filename
+              << "' for writing: " << ec.message() << std::endl;
+    return false;
+  }
+  // export to file
+  mlir::OpPrintingFlags flags;
+  flags.printLargeElementsAttrWithHex();
+  module->print(outputStream, flags);
+  outputStream.flush();
+
+  return true;
+}
+
+template <typename ModuleType>
+static void printModule(const ModuleType &module) {
+  mlir::OpPrintingFlags flags;
+  flags.elideLargeElementsAttrs(16);
+  // flags.printLargeElementsAttrWithHex();
+  // flags.enableDebugInfo();
+  llvm::outs().enable_colors(true);
+  module->print(llvm::outs(), flags);
+  llvm::outs().enable_colors(false);
+}
+
+static void printUsage() {
+  std::cout << std::endl;
+  std::cout << "Usage: onnx2mlir <input_onnx_file>\n"
+            << "            [--export-onnx <filename>]\n"
+            << "            [--export-linalg <filename>]\n"
+            << "            [--onnx-convert-ops <int : (optional | default is "
+            << "max supported)>]\n"
+            << "            [--verbose]\n"
+            << "            [--help]\n"
+            << std::endl;
+}
+
+int main(int argc, char **argv) {
+  // command-line params
+  bool verbose = false;
+  std::string ONNXFilename = "";
+  std::string exportONNXFilename = "";
+  std::string exportLinalgFilename = "";
+  std::map<std::string, std::string> options;
+
+  // command-line parser
+  for (int i = 1; i < argc; i++) {
+    if (argv[i][0] == '-') {
+      const auto &arg = std::string(argv[i]);
+      if (arg == "--help") {
+        printUsage();
+        exit(0);
+      } else if (arg == "--onnx-convert-ops") {
+        options[argv[i]] = "";
+        if ((i + 1) < argc) {
+          bool isDigitsOnly =
+              std::regex_match(argv[i + 1], std::regex(R"(\d+)"));
+          if (isDigitsOnly) {
+            options[argv[i]] = argv[i + 1];
+            i++;
+          }
+        }
+        continue;
+      } else if (arg == "--verbose") {
+        options[argv[i]] = "";
+        verbose = true;
+      } else if (arg == "--export-onnx") {
+        if ((i + 1) < argc && argv[i + 1][0] != '-') {
+          exportONNXFilename = argv[++i];
+        } else {
+          std::cerr << "ERROR: --export-onnx requires a target filename."
+                    << std::endl;
+          printUsage();
+          exit(-1);
+        }
+      } else if (arg == "--export-linalg") {
+        if ((i + 1) < argc && argv[i + 1][0] != '-') {
+          exportLinalgFilename = argv[++i];
+        } else {
+          std::cerr << "ERROR: --export-linalg requires a target filename."
+                    << std::endl;
+          printUsage();
+          exit(-1);
+        }
+      } else {
+        std::cerr << "Unknown argument `" << arg << "`" << std::endl;
+        printUsage();
+        exit(-1);
+      }
+    } else {
+      if (!ONNXFilename.size()) {
+        ONNXFilename = argv[i];
+        continue;
+      }
+    }
+  }
+
+  // check input file
+  if (!ONNXFilename.size()) {
+    std::cout << "ERROR: missing onnx_file" << std::endl;
+    printUsage();
+    exit(-1);
+  }
+
+  auto ONNXLoader =
+      onnx2mlir::Importer<onnx2mlir::frontend::ONNXImporter>(options);
+  auto ONNXConverter =
+      onnx2mlir::Converter<onnx2mlir::frontend::ONNXConverter>(options);
+
+  std::cout << "Loading ONNX file: " << ONNXFilename << std::endl;
+
+  mlir::MLIRContext ctx;
+  ONNXLoader.importModule(ONNXFilename, &ctx);
+
+  auto module = ONNXLoader.getMLIRModule();
+
+  if (verbose)
+    printModule(module);
+
+  // export ONNX dialect
+  if (!exportONNXFilename.empty()) {
+    if (!saveModuleToFile(module, exportONNXFilename)) {
+      std::cerr << "ERROR: saving ONNX dialect IR" << std::endl;
+      exit(-1);
+    }
+    std::cout << "Saved ONNX dialect IR to: " << exportONNXFilename
+              << std::endl;
+  }
+
+  ONNXConverter.convertModule(ONNXLoader.getMLIRModule());
+
+  module = ONNXLoader.getMLIRModule();
+
+  if (verbose)
+    printModule(module);
+
+  // export Linalg dialect
+  if (!exportLinalgFilename.empty()) {
+    if (!saveModuleToFile(module, exportLinalgFilename)) {
+      std::cerr << "ERROR: saving Linalg dialect IR" << std::endl;
+      exit(-1);
+    }
+    std::cout << "Saved Linalg dialect IR to: " << exportLinalgFilename
+              << std::endl;
+  }
+
+  std::cout << "Program finished succesfully." << std::endl;
+
+  return 0;
+}

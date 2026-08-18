@@ -845,7 +845,7 @@ void ONNXImporter::import(const std::string &file_or_string,
   }
 
   if (verbose) {
-    llvm::outs() << "ONNX engine opset version: " << engine_opset_version;
+    llvm::outs() << "ONNX engine OPSet version: " << engine_opset_version;
     llvm::outs() << "\n\n";
   }
 
@@ -857,11 +857,9 @@ void ONNXImporter::import(const std::string &file_or_string,
       exit(-1);
     }
     if (verbose)
-      llvm::outs() << "Model data: " << file_or_string.length()
+      llvm::outs() << "ONNX model data: " << file_or_string.length()
                    << " bytes <serialized>\n";
   } else {
-    if (verbose)
-      llvm::outs() << "Model path: " << file_or_string << "\n";
     std::ifstream model_file(file_or_string, std::ios::binary);
     if (!model_file.is_open()) {
       onnx2mlir::error() << "Error opening file: " << file_or_string << "\n";
@@ -884,7 +882,8 @@ void ONNXImporter::import(const std::string &file_or_string,
   }
 
   if (verbose)
-    llvm::outs() << "Model IR version: " << model_import.ir_version() << "\n";
+    llvm::outs() << "ONNX model IR version: " << model_import.ir_version()
+                 << "\n";
 
   // convert model
   onnx::ModelProto model_proto;
@@ -897,7 +896,7 @@ void ONNXImporter::import(const std::string &file_or_string,
       exit(-1);
     }
     if (verbose)
-      llvm::outs() << "Model OPSet conversion: " << model_opset_version
+      llvm::outs() << "ONNX model OPSet conversion: " << model_opset_version
                    << " -> " << convert_version << "\n";
     try {
       model_proto = onnx::version_conversion::ConvertVersion(model_import,
@@ -909,7 +908,7 @@ void ONNXImporter::import(const std::string &file_or_string,
     model_proto = model_import;
   }
   if (verbose)
-    llvm::outs() << "Model OPSet version: " << model_opset_version << "\n";
+    llvm::outs() << "ONNX model OPSet version: " << model_opset_version << "\n";
 
   // infer shapes
   onnx::ShapeInferenceOptions iopts(
@@ -921,7 +920,8 @@ void ONNXImporter::import(const std::string &file_or_string,
 
   if (verbose) {
     llvm::outs() << "\n";
-    llvm::outs() << "Graph Name: " << graph_proto.name() << "\n";
+    llvm::outs() << "ONNX graph name: " << graph_proto.name() << "\n";
+    llvm::outs() << "\n";
   }
 
   /*

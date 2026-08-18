@@ -4,7 +4,7 @@ add_subdirectory(frontend)
 
 add_definitions(-DONNX_NAMESPACE=onnx -DONNX_ML=${ONNX_USE_ML})
 
-add_executable(onnx2mlir main.cpp)
+add_executable(onnx2mlir onnx2mlir.cpp)
 target_link_libraries(onnx2mlir
   PRIVATE
     onnx2mlir_importers

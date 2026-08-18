@@ -31,13 +31,27 @@
 
 #include <mlir/Pass/PassManager.h>
 
+#include <map>
+#include <string>
+
 #include "onnx2mlir/conversion/onnx_passes.hpp"
 #include "onnx2mlir/frontend/onnx.hpp"
 #include "onnx2mlir/support/support.hpp"
 
 namespace onnx2mlir::frontend {
 
+/*
+ *  ONNXConverter class
+ */
+
+ONNXConverter::ONNXConverter(const std::map<std::string, std::string> &options)
+    : FrontendConverter(options) {}
+
 void ONNXConverter::convert(mlir::ModuleOp *module) {
+  bool verbose = false;
+  if (opt_args.count("--verbose") > 0)
+    verbose = true;
+
   // context
   auto *ctx = module->getContext();
 
@@ -45,21 +59,16 @@ void ONNXConverter::convert(mlir::ModuleOp *module) {
   llvm::SourceMgr srcMgr;
   mlir::SourceMgrDiagnosticHandler sourceMgrHandler(srcMgr, ctx);
 
-  // DEBUG
-  mlir::OpPrintingFlags flags;
-  flags.elideLargeElementsAttrs(16);
-  llvm::outs().enable_colors(true);
-  module->print(llvm::outs(), flags);
-  llvm::outs().enable_colors(false);
-
   // create pass manager
   mlir::PassManager pm(ctx);
 
   // add Onnx to Linalg
   pm.addPass(::onnx2mlir::dialect::createLowerONNXToLINALGPass());
 
-  llvm::outs() << "\n";
-  llvm::outs() << "Run passes: ONNX to LINALG\n";
+  if (verbose) {
+    llvm::outs() << "\n";
+    llvm::outs() << "Run passes: ONNX to LINALG\n";
+  }
 
   // run all passes
   if (mlir::failed(pm.run(*module))) {

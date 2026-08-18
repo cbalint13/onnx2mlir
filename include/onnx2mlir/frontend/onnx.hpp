@@ -71,6 +71,9 @@ private:
  * ONNX converter to MLIR TOSA dialect
  */
 class ONNXConverter : public FrontendConverter {
+public:
+  explicit ONNXConverter(const std::map<std::string, std::string> &options);
+
 protected:
   void convert(mlir::ModuleOp *module) override;
 };
