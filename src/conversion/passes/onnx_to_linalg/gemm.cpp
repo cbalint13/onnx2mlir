@@ -74,14 +74,17 @@ OnnxToLinalg_GemmOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
   float attr_alpha = 1.0f;
   if (auto attr = op->getAttrOfType<mlir::FloatAttr>("alpha"))
     attr_alpha = attr.getValueAsDouble();
+
   // beta
   float attr_beta = 1.0f;
   if (auto attr = op->getAttrOfType<mlir::FloatAttr>("beta"))
     attr_beta = attr.getValueAsDouble();
+
   // transA
   int64_t attr_transA = 0;
   if (auto attr = op->getAttrOfType<mlir::IntegerAttr>("transA"))
     attr_transA = attr.getInt();
+
   // transB
   int64_t attr_transB = 0;
   if (auto attr = op->getAttrOfType<mlir::IntegerAttr>("transB"))
@@ -119,29 +122,8 @@ OnnxToLinalg_GemmOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
   if (opInputC) {
     auto cType = mlir::dyn_cast<mlir::RankedTensorType>(opInputC.getType());
     // use bias
-    if (cType.getShape() == outDatType.getShape() && attr_beta == 1.0f) {
-      mlir::SmallVector<mlir::AffineMap> indexingCMaps = {
-          rewriter.getMultiDimIdentityMap(outputRank),
-          rewriter.getMultiDimIdentityMap(outputRank)};
-
-      mlir::SmallVector<mlir::utils::IteratorType> iteratorsCTypes(
-          outputRank, mlir::utils::IteratorType::parallel);
-
-      auto out = mlir::tensor::EmptyOp::create(
-          rewriter, loc, outDatType.getShape(), outDatType.getElementType());
-      auto copyOp = mlir::linalg::GenericOp::create(
-          /*op_builder*/ rewriter, /*src_location*/ loc,
-          /*result_type*/ mlir::TypeRange{outDatType},
-          /*input_values*/ mlir::ValueRange{opInputC},
-          /*output_values*/ mlir::ValueRange{out},
-          /*affine_maps*/ indexingCMaps,
-          /*iter_types*/ iteratorsCTypes,
-          [&](/*op_builder*/ mlir::OpBuilder &nest,
-              /*src_location*/ mlir::Location nloc,
-              /*value_args*/ mlir::ValueRange args) {
-            mlir::linalg::YieldOp::create(nest, nloc, args[0]);
-          });
-      outBuffer = copyOp->getResult(0);
+    if ((cType.getShape() == outDatType.getShape()) && (attr_beta == 1.0f)) {
+      outBuffer = opInputC;
     } else {
       // use bias and beta
       mlir::SmallVector<mlir::AffineExpr> cExprs;
@@ -158,34 +140,35 @@ OnnxToLinalg_GemmOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
           outputRank, mlir::utils::IteratorType::parallel);
 
       auto out = mlir::tensor::EmptyOp::create(
-          rewriter, loc, outDatType.getShape(), outDatType.getElementType());
+          rewriter, loc, outDatType.getShape(), outElmType);
       auto broadcastOp = mlir::linalg::GenericOp::create(
           /*op_builder*/ rewriter, /*src_location*/ loc,
-          /*result_type*/ mlir::TypeRange{outDatType},
+          /*result_types*/ mlir::TypeRange{outDatType},
           /*input_values*/ mlir::ValueRange{opInputC},
-          /*ouptut_values*/ mlir::ValueRange{out},
+          /*output_values*/ mlir::ValueRange{out},
           /*affine_maps*/ indexingCMaps,
           /*iter_types*/ iteratorCTypes,
           [&](/*op_builder*/ mlir::OpBuilder &nest,
               /*src_location*/ mlir::Location nloc,
               /*value_args*/ mlir::ValueRange args) {
-            mlir::Value val;
+            mlir::Value val = args[0];
             if (attr_beta != 1.0f) {
               if (outElmType.isFloat()) {
                 auto beta = nest.getFloatAttr(outElmType, attr_beta);
                 auto bConst = mlir::arith::ConstantOp::create(nest, nloc, beta);
-                val = mlir::arith::MulFOp::create(nest, nloc, args[0], bConst);
+                val = mlir::arith::MulFOp::create(nest, nloc, val, bConst);
               } else {
                 auto beta = nest.getIntegerAttr(
                     outElmType, static_cast<int64_t>(attr_beta));
                 auto bConst = mlir::arith::ConstantOp::create(nest, nloc, beta);
-                val = mlir::arith::MulIOp::create(nest, nloc, args[0], bConst);
+                val = mlir::arith::MulIOp::create(nest, nloc, val, bConst);
               }
             }
             mlir::linalg::YieldOp::create(nest, nloc, val);
           });
       outBuffer = broadcastOp->getResult(0);
     }
+
   } else {
     // use zeros as bias
     auto out = mlir::tensor::EmptyOp::create(
