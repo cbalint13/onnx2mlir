@@ -414,7 +414,7 @@
   <rect x='681' y='1123' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
   <text x='748' y='1148' text-anchor='middle' font-weight='bold' class='op-text'>PRelu</text>
   <text x='748' y='1163' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>16 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
-  <rect x='1' y='1174' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <rect x='1' y='1174' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='68' y='1199' text-anchor='middle' font-weight='bold' class='op-text'>Pad</text>
   <text x='68' y='1214' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>2 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>18 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
   <rect x='137' y='1174' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>

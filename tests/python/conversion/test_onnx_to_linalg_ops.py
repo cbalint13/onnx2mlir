@@ -3120,7 +3120,7 @@ def test_onnx_slice_lower(ONNX_OPSET_VERSION, dtype_proto, shape, slice_config):
 # pylint: disable=too-many-branches,too-many-statements
 def test_onnx_clip_lower(ONNX_OPSET_VERSION, dtype_proto, shape, bounds):
     """
-    Test ONNX Clip operation lowering.
+    Test ONNX Clip operator lowering.
     """
 
     class Clip(OpRun):
@@ -3254,3 +3254,114 @@ def test_onnx_clip_lower(ONNX_OPSET_VERSION, dtype_proto, shape, bounds):
             atol = 1e-2 if np_dtype == np.float16 else 1e-5
             rtol = 1e-2 if np_dtype == np.float16 else 1e-5
             np.testing.assert_allclose(outputs[0], onnx_result, rtol=rtol, atol=atol)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OPSET_VERSION, dtype_proto, pads_val, mode",
+    [
+        (schema.since_version, dtype_proto, pads_val, mode)
+        for schema in get_all_schemas_with_history()
+        if "Pad" == schema.name
+        for dtype_proto in [
+            TensorProto.FLOAT,
+            TensorProto.FLOAT16,
+            TensorProto.INT8,
+            TensorProto.INT16,
+            TensorProto.INT32,
+            TensorProto.INT64,
+            TensorProto.UINT8,
+            TensorProto.UINT16,
+            TensorProto.UINT32,
+            TensorProto.UINT32,
+        ]
+        for mode in ["constant", "edge", "reflect", "wrap"]
+        for pads_val in [
+            [0, 0, 1, 1, 0, 0, 1, 1],  # Spatial 4D padding
+            [0, 0, 0, 0, 0, 0, 0, 0],  # Zero padding
+            [0, 0, 2, 2, 0, 0, 2, 2],  # Larger spatial padding
+        ]
+    ],
+)
+def test_onnx_pad_lower(ONNX_OPSET_VERSION, dtype_proto, pads_val, mode):
+    """
+    Test ONNX Pad operator lowering.
+    """
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
+
+    def create_onnx_model(np_array, dtype_proto, pads_val):
+        input_tensor = make_tensor_value_info("input", dtype_proto, np_array.shape)
+
+        out_shape = list(np_array.shape)
+        ndim = np_array.ndim
+        for i in range(ndim):
+            out_shape[i] += pads_val[i] + pads_val[i + ndim]
+
+        output_tensor = make_tensor_value_info("output", dtype_proto, out_shape)
+
+        if ONNX_OPSET_VERSION >= 11:
+            pads_tensor = make_tensor(
+                name="pads",
+                data_type=TensorProto.INT64,
+                dims=[len(pads_val)],
+                vals=pads_val,
+            )
+            pad_inputs = ["input", "pads"]
+            node_kwargs = {}
+            initializers = [pads_tensor]
+        else:
+            pad_inputs = ["input"]
+            initializers = []
+            # Opset 1 uses 'paddings', Opsets 2-10 use 'pads'
+            attr_name = "paddings" if ONNX_OPSET_VERSION == 1 else "pads"
+            node_kwargs = {attr_name: pads_val, "value": 0.0}
+
+        pad_node = make_node(
+            "Pad",
+            inputs=pad_inputs,
+            outputs=["output"],
+            mode=mode,
+            **node_kwargs,
+        )
+
+        graph = make_graph(
+            nodes=[pad_node],
+            name="pad_graph",
+            inputs=[input_tensor],
+            outputs=[output_tensor],
+            initializer=initializers,
+        )
+
+        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        model = make_model(graph, opset_imports=opset_imports)
+        check_model(model)
+        return model
+
+    np_array = _generate_dtype_random(np_dtype, shape=(1, 1, 2, 2), max_val=127)
+
+    onnx_model = create_onnx_model(np_array, dtype_proto, pads_val)
+
+    ref = ReferenceEvaluator(onnx_model)
+    onnx_result = ref.run(None, {"input": np_array})[0]
+
+    # pylint: disable=broad-exception-caught
+    with Context() as ctx, Location.unknown():
+        mlir_module = import_from_onnx(onnx_model, ctx, verify=False)
+        try:
+            mlir_module.operation.verify()
+        except Exception as e:
+            error_keywords = ["error", "must be", "but got"]
+            if all(kw in str(e) for kw in error_keywords):
+                pytest.skip(
+                    f"Pad V{ONNX_OPSET_VERSION} does not support "
+                    f"{TensorProto.DataType.Name(dtype_proto)}"
+                )
+            else:
+                raise
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        output = np.zeros_like(onnx_result)
+        outputs = runner(llvm_module, "main", [np_array], [output])
+
+        np.testing.assert_allclose(outputs[0], onnx_result, atol=1e-3)

@@ -104,6 +104,10 @@ OnnxToLinalg_MaxPoolOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
                        const mlir::TypeConverter *typeConverter);
 
 mlir::LogicalResult
+OnnxToLinalg_PadOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                   const mlir::TypeConverter *typeConverter);
+
+mlir::LogicalResult
 OnnxToLinalg_ReshapeOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
                        const mlir::TypeConverter *typeConverter);
 

@@ -96,6 +96,7 @@ static const std::unordered_map<std::string, LoweringFunc> &getLoweringMap() {
                 OnnxToLinalg_GlobalPoolOps);
     registerOps({"MatMul", "MatMulInteger"}, map, OnnxToLinalg_MatMulOp);
     registerOps({"MaxPool"}, map, OnnxToLinalg_MaxPoolOp);
+    registerOps({"Pad"}, map, OnnxToLinalg_PadOp);
     registerOps({"Reshape"}, map, OnnxToLinalg_ReshapeOp);
     registerOps({"Resize"}, map, OnnxToLinalg_ResizeOp);
     registerOps({"Shape"}, map, OnnxToLinalg_ShapeOp);
