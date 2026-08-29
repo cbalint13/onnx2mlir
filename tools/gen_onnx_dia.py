@@ -146,8 +146,8 @@ def get_mlir_attrs_from_str(attr):
     """
 
     onnx_to_mlir_attrs = {
-        "INT": "I64Attr",
-        "INTS": "I64ArrayAttr",
+        "INT": "SI64Attr",
+        "INTS": "SI64ArrayAttr",
         "FLOAT": "F32Attr",
         "FLOATS": "F32ArrayAttr",
         "STRING": "StrAttr",

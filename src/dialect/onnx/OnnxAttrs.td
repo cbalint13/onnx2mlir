@@ -32,4 +32,8 @@
 
 include "mlir/IR/AttrTypeBase.td"
 
+def SI64ArrayAttr : TypedArrayAttrBase<SI64Attr, "64-bit signed integer array attribute"> {
+  let constBuilderCall = "$_builder.getI64ArrayAttr($0)";
+}
+
 #endif // ONNX2MLIR_DIALECT_ONNX_ONNXATTR_TD_

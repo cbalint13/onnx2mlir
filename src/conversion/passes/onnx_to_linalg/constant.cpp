@@ -66,14 +66,36 @@ OnnxToLinalg_ConstantOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
    */
 
   // value
-  auto valueAttr = op->getAttr("value");
+  mlir::Attribute valueAttr = nullptr;
+  if (auto attr_value = op->getAttr("value")) {
+    valueAttr = attr_value;
+  } else if (auto attr_floats = op->getAttr("value_floats")) {
+    if (auto arr = mlir::dyn_cast<mlir::ArrayAttr>(attr_floats))
+      valueAttr = mlir::DenseElementsAttr::get(dstDatType, arr.getValue());
+  } else if (auto attr_ints = op->getAttr("value_ints")) {
+    if (auto arr = mlir::dyn_cast<mlir::ArrayAttr>(attr_ints))
+      valueAttr = mlir::DenseElementsAttr::get(dstDatType, arr.getValue());
+  } else if (auto attr_float = op->getAttr("value_float")) {
+    if (auto f = mlir::dyn_cast<mlir::FloatAttr>(attr_float))
+      valueAttr = mlir::DenseElementsAttr::get(dstDatType, f.getValue());
+  } else if (auto attr_int = op->getAttr("value_int")) {
+    if (auto i = mlir::dyn_cast<mlir::IntegerAttr>(attr_int))
+      valueAttr = mlir::DenseElementsAttr::get(dstDatType, i.getValue());
+  } else if (auto attr_strings = op->getAttr("value_strings")) {
+    if (auto arr = mlir::dyn_cast<mlir::ArrayAttr>(attr_strings))
+      valueAttr = mlir::DenseElementsAttr::get(dstDatType, arr.getValue());
+  } else if (auto attr_string = op->getAttr("value_string")) {
+    if (auto s = mlir::dyn_cast<mlir::StringAttr>(attr_string))
+      valueAttr = mlir::DenseElementsAttr::get(dstDatType, s.getValue());
+  }
+
   auto typedAttr = mlir::dyn_cast_or_null<mlir::TypedAttr>(valueAttr);
   if (!typedAttr)
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
-           << opName << " without a valid tensor 'value' attribute";
+           << opName << " without a valid constant value attribute";
   if (typedAttr.getType() != dstDatType)
     return mlir::emitError(Onnx2Mlir_SrcLoc(rewriter))
-           << opName << " 'value' attribute type does not match result type";
+           << opName << " constant attribute type does not match result type";
 
   bool isChanged = false;
   // convert value type to result type

@@ -127,8 +127,8 @@ static mlir::ArrayAttr getMlirArray(mlir::MLIRContext *ctx,
   llvm::SmallVector<mlir::Attribute> attrVec;
   for (const dat_T &value : data) {
     if constexpr (std::is_same_v<dat_T, int64_t>) {
-      attrVec.push_back(
-          mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 64), value));
+      attrVec.push_back(mlir::IntegerAttr::get(
+          mlir::IntegerType::get(ctx, 64, mlir::IntegerType::Signed), value));
     } else if constexpr (std::is_same_v<dat_T, float>) {
       attrVec.push_back(
           mlir::FloatAttr::get(mlir::Float32Type::get(ctx), value));
@@ -389,7 +389,9 @@ OnnxToMlir_Attr(const onnx::AttributeProto &attribute, mlir::MLIRContext *ctx,
   case onnx::AttributeProto::INT:
     return mlir::NamedAttribute(
         attribute.name(),
-        mlir::IntegerAttr::get(mlir::IntegerType::get(ctx, 64), attribute.i()));
+        mlir::IntegerAttr::get(
+            mlir::IntegerType::get(ctx, 64, mlir::IntegerType::Signed),
+            attribute.i()));
   case onnx::AttributeProto::STRING:
     return mlir::NamedAttribute(attribute.name(),
                                 mlir::StringAttr::get(ctx, attribute.s()));
@@ -591,9 +593,32 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
       auto nameVal = builder.getStringAttr(node.name());
       mlir::NamedAttribute label("onnx.node.name", nameVal);
       attrs.push_back(label);
-      // result type
-      auto types = std::vector<mlir::Type>(
-          {mlir::dyn_cast<mlir::ElementsAttr>(attr->getValue()).getType()});
+
+      mlir::Type attrType;
+      auto attrVal = attr->getValue();
+      if (auto elmAttr = mlir::dyn_cast<mlir::ElementsAttr>(attrVal)) {
+        // tensor attribute
+        attrType = elmAttr.getType();
+      } else if (auto arrAttr = mlir::dyn_cast<mlir::ArrayAttr>(attrVal)) {
+        // array attribute
+        if (!arrAttr.empty()) {
+          if (auto typedElem = mlir::dyn_cast<mlir::TypedAttr>(arrAttr[0]))
+            attrType = mlir::RankedTensorType::get(
+                {static_cast<int64_t>(arrAttr.size())}, typedElem.getType());
+        }
+      } else if (auto typedAttr = mlir::dyn_cast<mlir::TypedAttr>(attrVal)) {
+        // scalar attribute
+        attrType = mlir::RankedTensorType::get({}, typedAttr.getType());
+      }
+
+      if (!attrType) {
+        onnx2mlir::error() << "Attribute `" << node.attribute()[0].name()
+                           << "` in [" << opFullName
+                           << "] cannot be mapped to a tensor type.\n";
+        exit(-1);
+      }
+
+      auto types = std::vector<mlir::Type>({attrType});
 
       const auto cstFullName = get_versioned_name("Constant");
       auto *op = createOnnxOp(&builder, cstFullName, types, {}, attrs);
