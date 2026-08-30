@@ -274,16 +274,28 @@ struct LowerONNXToLINALGPass
      *
      */
 
-    // mark FuncOp legal based on typeConverter
+    // mark func.FuncOp legal based on typeConverter
     target.addDynamicallyLegalOp<mlir::func::FuncOp>(
         [&](mlir::func::FuncOp op) {
           return typeConverter.isSignatureLegal(op.getFunctionType()) &&
                  typeConverter.isLegal(&op.getBody());
         });
 
-    // mark ReturnOp legal based on typeConverter
+    // mark func.ReturnOp legal based on typeConverter
     target.addDynamicallyLegalOp<mlir::func::ReturnOp>(
         [&](mlir::func::ReturnOp op) { return typeConverter.isLegal(op); });
+
+    // mark scf.ExecuteRegion legal based on typeConverter
+    target.addDynamicallyLegalOp<mlir::scf::ExecuteRegionOp>(
+        [&](mlir::scf::ExecuteRegionOp op) {
+          return typeConverter.isLegal(op.getResultTypes());
+        });
+
+    // mark scf.YieldOp legal based on typeConverter
+    target.addDynamicallyLegalOp<mlir::scf::YieldOp>(
+        [&](mlir::scf::YieldOp op) {
+          return typeConverter.isLegal(op.getOperandTypes());
+        });
 
     /*
      * Rewriter patterns
@@ -296,10 +308,55 @@ struct LowerONNXToLINALGPass
     // add type converter
     patterns.add<ONNXToLINALGLowering>(typeConverter, ctx);
 
-    // add func & return converter
+    // add func.FuncOp & func.ReturnOp converter
     mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(
         patterns, typeConverter);
     mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
+
+    // scf.ExecuteRegion convert
+    struct ConvertExecuteRegionOpTypes
+        : public mlir::OpConversionPattern<mlir::scf::ExecuteRegionOp> {
+      using mlir::OpConversionPattern<
+          mlir::scf::ExecuteRegionOp>::OpConversionPattern;
+
+      mlir::LogicalResult matchAndRewrite(
+          mlir::scf::ExecuteRegionOp op, OpAdaptor adt,
+          mlir::ConversionPatternRewriter &rewriter) const override {
+        llvm::SmallVector<mlir::Type> newResultTypes;
+        if (mlir::failed(getTypeConverter()->convertTypes(op.getResultTypes(),
+                                                          newResultTypes)))
+          return mlir::failure();
+
+        auto exeOp = mlir::scf::ExecuteRegionOp::create(rewriter, op.getLoc(),
+                                                        newResultTypes);
+        rewriter.inlineRegionBefore(op.getRegion(), exeOp.getRegion(),
+                                    exeOp.getRegion().end());
+        rewriter.replaceOp(op, exeOp);
+        return mlir::success();
+      }
+    };
+
+    // scf.YieldOp convert
+    struct ConvertYieldOpTypes
+        : public mlir::OpConversionPattern<mlir::scf::YieldOp> {
+      using mlir::OpConversionPattern<mlir::scf::YieldOp>::OpConversionPattern;
+
+      mlir::LogicalResult matchAndRewrite(
+          mlir::scf::YieldOp op, OpAdaptor adt,
+          mlir::ConversionPatternRewriter &rewriter) const override {
+        rewriter.replaceOpWithNewOp<mlir::scf::YieldOp>(op, adt.getOperands());
+        return mlir::success();
+      }
+    };
+
+    // add scf.ExecuteRegion & scf.YieldOp converter
+    patterns.add<ConvertExecuteRegionOpTypes, ConvertYieldOpTypes>(
+        typeConverter, ctx);
+
+    /*
+     * Lower to Linalg
+     *
+     */
 
     // apply the partial conversion pattern
     if (mlir::failed(mlir::applyPartialConversion(module, target,
