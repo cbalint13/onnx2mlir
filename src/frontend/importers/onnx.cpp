@@ -504,7 +504,9 @@ namespace onnx2mlir::frontend {
 ONNXImporter::ONNXImporter(const std::map<std::string, std::string> &options)
     : FrontendImporter(options) {}
 
-const std::string ONNXImporter::get_versioned_name(const std::string &OpName) {
+const std::string
+ONNXImporter::get_versioned_name(const std::string &OpName,
+                                 bool max_with_subver = true) {
   // const 1,3,9,23
   // opset_ver = 11
   int maxversion = -1;
@@ -515,7 +517,7 @@ const std::string ONNXImporter::get_versioned_name(const std::string &OpName) {
     if (ver <= model_opset_version)
       subversion = ver;
   }
-  if (maxversion > model_opset_version)
+  if ((maxversion > model_opset_version) || max_with_subver)
     return OpName + "_V" + std::to_string(subversion);
   return OpName;
 }

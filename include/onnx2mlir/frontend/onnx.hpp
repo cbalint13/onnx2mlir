@@ -58,7 +58,8 @@ private:
   // parse the graph nodes
   void parse_graph_nodes(const onnx::GraphProto &graph_proto);
   // get versioned op name
-  const std::string get_versioned_name(const std::string &OpName);
+  const std::string get_versioned_name(const std::string &OpName,
+                                       bool max_with_subver);
   // imported opset
   int model_opset_version;
   // onnx opset version

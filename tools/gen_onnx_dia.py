@@ -222,12 +222,13 @@ def main():
     ## Operators
     ##
 
-    for schema in defs.get_all_schemas_with_history():
+    for schema in defs.get_all_schemas_with_history() + defs.get_all_schemas():
 
         opname = schema.name
-        # older Op versioning
-        if schema.since_version != max(ops_versions[schema.name]):
+        # op versioning
+        if int(schema.since_version) in ops_versions[schema.name]:
             opname += f"_V{schema.since_version}"
+            ops_versions[schema.name].remove(int(schema.since_version))
 
         opinterfaces = "Pure, OPCountInfo"
         if schema.name == "Constant":
