@@ -99,7 +99,7 @@
   <rect x='273' y='256' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='340' y='281' text-anchor='middle' font-weight='bold' class='op-text'>Ceil</text>
   <text x='340' y='296' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>]</text>
-  <rect x='409' y='256' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <rect x='409' y='256' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='476' y='281' text-anchor='middle' font-weight='bold' class='op-text'>Celu</text>
   <text x='476' y='296' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>28 </tspan>, <tspan fill='gray'>12 </tspan>]</text>
   <rect x='545' y='256' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
@@ -219,7 +219,7 @@
   <rect x='1' y='613' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
   <text x='68' y='638' text-anchor='middle' font-weight='bold' class='op-text'>GatherND</text>
   <text x='68' y='653' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>12 </tspan>]</text>
-  <rect x='137' y='613' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <rect x='137' y='613' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='204' y='638' text-anchor='middle' font-weight='bold' class='op-text'>Gelu</text>
   <text x='204' y='653' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>20 </tspan>]</text>
   <rect x='273' y='613' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
@@ -255,7 +255,7 @@
   <rect x='1' y='715' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
   <text x='68' y='740' text-anchor='middle' font-weight='bold' class='op-text'>HannWindow</text>
   <text x='68' y='755' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>17 </tspan>]</text>
-  <rect x='137' y='715' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <rect x='137' y='715' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='204' y='740' text-anchor='middle' font-weight='bold' class='op-text'>HardSigmoid</text>
   <text x='204' y='755' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>]</text>
   <rect x='273' y='715' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
@@ -297,7 +297,7 @@
   <rect x='273' y='817' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
   <text x='340' y='842' text-anchor='middle' font-weight='bold' class='op-text'>LayerNormalization</text>
   <text x='340' y='857' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>17 </tspan>]</text>
-  <rect x='409' y='817' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <rect x='409' y='817' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='476' y='842' text-anchor='middle' font-weight='bold' class='op-text'>LeakyRelu</text>
   <text x='476' y='857' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>16 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>]</text>
   <rect x='545' y='817' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
@@ -360,7 +360,7 @@
   <rect x='681' y='970' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
   <text x='748' y='995' text-anchor='middle' font-weight='bold' class='op-text'>Min</text>
   <text x='748' y='1010' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>8 </tspan>, <tspan fill='gray'>12 </tspan>]</text>
-  <rect x='1' y='1021' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <rect x='1' y='1021' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='68' y='1046' text-anchor='middle' font-weight='bold' class='op-text'>Mish</text>
   <text x='68' y='1061' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>18 </tspan>]</text>
   <rect x='137' y='1021' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
@@ -531,7 +531,7 @@
   <rect x='273' y='1480' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
   <text x='340' y='1505' text-anchor='middle' font-weight='bold' class='op-text'>ScatterND</text>
   <text x='340' y='1520' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>18 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>16 </tspan>]</text>
-  <rect x='409' y='1480' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <rect x='409' y='1480' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='476' y='1505' text-anchor='middle' font-weight='bold' class='op-text'>Selu</text>
   <text x='476' y='1520' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>]</text>
   <rect x='545' y='1480' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
@@ -624,7 +624,7 @@
   <rect x='409' y='1735' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
   <text x='476' y='1760' text-anchor='middle' font-weight='bold' class='op-text'>SwiGLU</text>
   <text x='476' y='1775' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>28 </tspan>]</text>
-  <rect x='545' y='1735' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <rect x='545' y='1735' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='612' y='1760' text-anchor='middle' font-weight='bold' class='op-text'>Swish</text>
   <text x='612' y='1775' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>24 </tspan>]</text>
   <rect x='681' y='1735' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>

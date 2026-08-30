@@ -73,8 +73,24 @@ OnnxToLinalg_UnaryOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
 
   // alpha
   double attr_alpha = 1.0;
+  if (opNameBeginsWith(opName, "Selu"))
+    attr_alpha = 1.6732632423543772;
+  if (opNameBeginsWith(opName, "HardSigmoid"))
+    attr_alpha = 0.2;
+  if (opNameBeginsWith(opName, "LeakyRelu"))
+    attr_alpha = 0.01;
   if (auto attr = op->getAttrOfType<mlir::FloatAttr>("alpha"))
     attr_alpha = attr.getValueAsDouble();
+  // beta
+  double attr_beta = 1.0;
+  if (opNameBeginsWith(opName, "HardSigmoid"))
+    attr_beta = 0.5;
+  if (auto attr = op->getAttrOfType<mlir::FloatAttr>("beta"))
+    attr_beta = attr.getValueAsDouble();
+  // approximate
+  llvm::StringRef attr_approximate = "none";
+  if (auto attr = op->getAttrOfType<mlir::StringAttr>("approximate"))
+    attr_approximate = attr.getValue();
   // detect_positive
   int64_t attr_detect_pos = 1;
   if (auto attr = op->getAttrOfType<mlir::IntegerAttr>("detect_positive"))
@@ -83,6 +99,10 @@ OnnxToLinalg_UnaryOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
   int64_t attr_detect_neg = 1;
   if (auto attr = op->getAttrOfType<mlir::IntegerAttr>("detect_negative"))
     attr_detect_neg = attr.getInt();
+  // gamma
+  double attr_gamma = 1.0507009873554805;
+  if (auto attr = op->getAttrOfType<mlir::FloatAttr>("gamma"))
+    attr_gamma = attr.getValueAsDouble();
 
   /*
    *  Affine mappings
@@ -130,6 +150,38 @@ OnnxToLinalg_UnaryOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
       out = mlir::math::AtanhOp::create(nest, nloc, inp);
     if (opNameBeginsWith(opName, "Ceil"))
       out = mlir::math::CeilOp::create(nest, nloc, inp);
+    if (opNameBeginsWith(opName, "Celu")) {
+      if (inpElmType.isFloat()) {
+        auto c0 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(inpElmType, 0.0));
+        auto c1 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(inpElmType, 1.0));
+        auto cA = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(inpElmType, attr_alpha));
+        auto cnd = mlir::arith::CmpFOp::create(
+            nest, nloc, mlir::arith::CmpFPredicate::OGE, inp, c0);
+        auto xDivAlpha = mlir::arith::DivFOp::create(nest, nloc, inp, cA);
+        auto expVal = mlir::math::ExpOp::create(nest, nloc, xDivAlpha);
+        auto sub1 = mlir::arith::SubFOp::create(nest, nloc, expVal, c1);
+        auto negB = mlir::arith::MulFOp::create(nest, nloc, cA, sub1);
+        out = mlir::arith::SelectOp::create(nest, nloc, cnd, inp, negB);
+      } else {
+        auto c0 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getIntegerAttr(inpElmType, 0));
+        auto c1 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getIntegerAttr(inpElmType, 1));
+        auto cA = mlir::arith::ConstantOp::create(
+            nest, nloc,
+            nest.getIntegerAttr(inpElmType, static_cast<int64_t>(attr_alpha)));
+        auto cnd = mlir::arith::CmpIOp::create(
+            nest, nloc, mlir::arith::CmpIPredicate::sge, inp, c0);
+        auto xDivAlpha = mlir::arith::DivSIOp::create(nest, nloc, inp, cA);
+        auto expVal = mlir::math::ExpOp::create(nest, nloc, xDivAlpha);
+        auto sub1 = mlir::arith::SubIOp::create(nest, nloc, expVal, c1);
+        auto negB = mlir::arith::MulIOp::create(nest, nloc, cA, sub1);
+        out = mlir::arith::SelectOp::create(nest, nloc, cnd, inp, negB);
+      }
+    }
     if (opNameBeginsWith(opName, "Cos"))
       out = mlir::math::CosOp::create(nest, nloc, inp);
     if (opNameBeginsWith(opName, "Cosh"))
@@ -170,6 +222,83 @@ OnnxToLinalg_UnaryOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
       out = mlir::math::ExpOp::create(nest, nloc, inp);
     if (opNameBeginsWith(opName, "Floor"))
       out = mlir::math::FloorOp::create(nest, nloc, inp);
+    if (opNameBeginsWith(opName, "Gelu")) {
+      if (inpElmType.isFloat()) {
+        auto c0_5 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(inpElmType, 0.5));
+        auto c1 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(inpElmType, 1.0));
+        if (attr_approximate == "tanh") {
+          auto cSqrt2OverPi = mlir::arith::ConstantOp::create(
+              nest, nloc, nest.getFloatAttr(inpElmType, 0.7978845608028654));
+          auto cCoeff = mlir::arith::ConstantOp::create(
+              nest, nloc, nest.getFloatAttr(inpElmType, 0.044715));
+          auto x2 = mlir::arith::MulFOp::create(nest, nloc, inp, inp);
+          auto x3 = mlir::arith::MulFOp::create(nest, nloc, x2, inp);
+          auto coeffX3 = mlir::arith::MulFOp::create(nest, nloc, cCoeff, x3);
+          auto poly = mlir::arith::AddFOp::create(nest, nloc, inp, coeffX3);
+          auto tanhArg =
+              mlir::arith::MulFOp::create(nest, nloc, cSqrt2OverPi, poly);
+          auto tanhVal = mlir::math::TanhOp::create(nest, nloc, tanhArg);
+          auto onePlusTanh =
+              mlir::arith::AddFOp::create(nest, nloc, c1, tanhVal);
+          auto xMulTanh =
+              mlir::arith::MulFOp::create(nest, nloc, inp, onePlusTanh);
+          out = mlir::arith::MulFOp::create(nest, nloc, c0_5, xMulTanh);
+        } else {
+          auto cInvSqrt2 = mlir::arith::ConstantOp::create(
+              nest, nloc, nest.getFloatAttr(inpElmType, 0.7071067811865475));
+          auto xScaled =
+              mlir::arith::MulFOp::create(nest, nloc, inp, cInvSqrt2);
+          auto erfVal = mlir::math::ErfOp::create(nest, nloc, xScaled);
+          auto onePlusErf = mlir::arith::AddFOp::create(nest, nloc, c1, erfVal);
+          auto xMulErf =
+              mlir::arith::MulFOp::create(nest, nloc, inp, onePlusErf);
+          out = mlir::arith::MulFOp::create(nest, nloc, c0_5, xMulErf);
+        }
+      }
+    }
+    if (opNameBeginsWith(opName, "HardSigmoid")) {
+      if (inpElmType.isFloat()) {
+        auto c0 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(inpElmType, 0.0));
+        auto c1 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(inpElmType, 1.0));
+        auto cA = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(inpElmType, attr_alpha));
+        auto cB = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(inpElmType, attr_beta));
+        auto alphaX = mlir::arith::MulFOp::create(nest, nloc, cA, inp);
+        auto linear = mlir::arith::AddFOp::create(nest, nloc, alphaX, cB);
+        auto condGt0 = mlir::arith::CmpFOp::create(
+            nest, nloc, mlir::arith::CmpFPredicate::OGT, linear, c0);
+        auto max0 =
+            mlir::arith::SelectOp::create(nest, nloc, condGt0, linear, c0);
+        auto condLt1 = mlir::arith::CmpFOp::create(
+            nest, nloc, mlir::arith::CmpFPredicate::OLT, max0, c1);
+        out = mlir::arith::SelectOp::create(nest, nloc, condLt1, max0, c1);
+      } else {
+        auto c0 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getIntegerAttr(inpElmType, 0));
+        auto c1 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getIntegerAttr(inpElmType, 1));
+        auto cA = mlir::arith::ConstantOp::create(
+            nest, nloc,
+            nest.getIntegerAttr(inpElmType, static_cast<int64_t>(attr_alpha)));
+        auto cB = mlir::arith::ConstantOp::create(
+            nest, nloc,
+            nest.getIntegerAttr(inpElmType, static_cast<int64_t>(attr_beta)));
+        auto alphaX = mlir::arith::MulIOp::create(nest, nloc, cA, inp);
+        auto linear = mlir::arith::AddIOp::create(nest, nloc, alphaX, cB);
+        auto condGt0 = mlir::arith::CmpIOp::create(
+            nest, nloc, mlir::arith::CmpIPredicate::sgt, linear, c0);
+        auto max0 =
+            mlir::arith::SelectOp::create(nest, nloc, condGt0, linear, c0);
+        auto condLt1 = mlir::arith::CmpIOp::create(
+            nest, nloc, mlir::arith::CmpIPredicate::slt, max0, c1);
+        out = mlir::arith::SelectOp::create(nest, nloc, condLt1, max0, c1);
+      }
+    }
     if (opNameBeginsWith(opName, "HardSwish")) {
       if (inpElmType.isFloat()) {
         auto c0 = mlir::arith::ConstantOp::create(
@@ -246,8 +375,49 @@ OnnxToLinalg_UnaryOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
     if (opNameBeginsWith(opName, "IsNaN"))
       out = mlir::arith::CmpFOp::create(
           nest, nloc, mlir::arith::CmpFPredicate::UNO, inp, inp);
+    if (opNameBeginsWith(opName, "LeakyRelu")) {
+      if (inpElmType.isFloat()) {
+        auto c0 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(inpElmType, 0.0));
+        auto cA = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(inpElmType, attr_alpha));
+        auto cnd = mlir::arith::CmpFOp::create(
+            nest, nloc, mlir::arith::CmpFPredicate::OGE, inp, c0);
+        auto negB = mlir::arith::MulFOp::create(nest, nloc, cA, inp);
+        out = mlir::arith::SelectOp::create(nest, nloc, cnd, inp, negB);
+      } else {
+        auto c0 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getIntegerAttr(inpElmType, 0));
+        auto cA = mlir::arith::ConstantOp::create(
+            nest, nloc,
+            nest.getIntegerAttr(inpElmType, static_cast<int64_t>(attr_alpha)));
+        auto cnd = mlir::arith::CmpIOp::create(
+            nest, nloc, mlir::arith::CmpIPredicate::sge, inp, c0);
+        auto negB = mlir::arith::MulIOp::create(nest, nloc, cA, inp);
+        out = mlir::arith::SelectOp::create(nest, nloc, cnd, inp, negB);
+      }
+    }
     if (opNameBeginsWith(opName, "Log"))
       out = mlir::math::LogOp::create(nest, nloc, inp);
+    if (opNameBeginsWith(opName, "Mish")) {
+      if (inpElmType.isFloat()) {
+        auto c1 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(inpElmType, 1.0));
+        auto expX = mlir::math::ExpOp::create(nest, nloc, inp);
+        auto logArg = mlir::arith::AddFOp::create(nest, nloc, c1, expX);
+        auto softplus = mlir::math::LogOp::create(nest, nloc, logArg);
+        auto tanhSoftplus = mlir::math::TanhOp::create(nest, nloc, softplus);
+        out = mlir::arith::MulFOp::create(nest, nloc, inp, tanhSoftplus);
+      } else if (inpElmType.isInteger()) {
+        auto c1 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getIntegerAttr(inpElmType, 1));
+        auto expX = mlir::math::ExpOp::create(nest, nloc, inp);
+        auto logArg = mlir::arith::AddIOp::create(nest, nloc, c1, expX);
+        auto softplus = mlir::math::LogOp::create(nest, nloc, logArg);
+        auto tanhSoftplus = mlir::math::TanhOp::create(nest, nloc, softplus);
+        out = mlir::arith::MulIOp::create(nest, nloc, inp, tanhSoftplus);
+      }
+    }
     if (opNameBeginsWith(opName, "Neg")) {
       if (inpElmType.isFloat()) {
         out = mlir::arith::NegFOp::create(nest, nloc, inp);
@@ -290,6 +460,45 @@ OnnxToLinalg_UnaryOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
     }
     if (opNameBeginsWith(opName, "Round"))
       out = mlir::math::RoundOp::create(nest, nloc, inp);
+    if (opNameBeginsWith(opName, "Selu")) {
+      if (inpElmType.isFloat()) {
+        auto c0 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(inpElmType, 0.0));
+        auto c1 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(inpElmType, 1.0));
+        auto cA = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(inpElmType, attr_alpha));
+        auto cG = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(inpElmType, attr_gamma));
+        auto cnd = mlir::arith::CmpFOp::create(
+            nest, nloc, mlir::arith::CmpFPredicate::OGE, inp, c0);
+        auto posB = mlir::arith::MulFOp::create(nest, nloc, cG, inp);
+        auto expX = mlir::math::ExpOp::create(nest, nloc, inp);
+        auto sub = mlir::arith::SubFOp::create(nest, nloc, expX, c1);
+        auto mulA = mlir::arith::MulFOp::create(nest, nloc, cA, sub);
+        auto negB = mlir::arith::MulFOp::create(nest, nloc, cG, mulA);
+        out = mlir::arith::SelectOp::create(nest, nloc, cnd, posB, negB);
+      } else {
+        auto c0 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getIntegerAttr(inpElmType, 0));
+        auto c1 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getIntegerAttr(inpElmType, 1));
+        auto cA = mlir::arith::ConstantOp::create(
+            nest, nloc,
+            nest.getIntegerAttr(inpElmType, static_cast<int64_t>(attr_alpha)));
+        auto cG = mlir::arith::ConstantOp::create(
+            nest, nloc,
+            nest.getIntegerAttr(inpElmType, static_cast<int64_t>(attr_gamma)));
+        auto cnd = mlir::arith::CmpIOp::create(
+            nest, nloc, mlir::arith::CmpIPredicate::sge, inp, c0);
+        auto posB = mlir::arith::MulIOp::create(nest, nloc, cG, inp);
+        auto expX = mlir::math::ExpOp::create(nest, nloc, inp);
+        auto sub = mlir::arith::SubIOp::create(nest, nloc, expX, c1);
+        auto mulAlpha = mlir::arith::MulIOp::create(nest, nloc, cA, sub);
+        auto negB = mlir::arith::MulIOp::create(nest, nloc, cG, mulAlpha);
+        out = mlir::arith::SelectOp::create(nest, nloc, cnd, posB, negB);
+      }
+    }
     if (opNameBeginsWith(opName, "Sigmoid")) {
       if (inpElmType.isFloat()) {
         auto c1 = mlir::arith::ConstantOp::create(
@@ -374,6 +583,34 @@ OnnxToLinalg_UnaryOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
     }
     if (opNameBeginsWith(opName, "Sqrt"))
       out = mlir::math::SqrtOp::create(nest, nloc, inp);
+    if (opNameBeginsWith(opName, "Swish")) {
+      if (inpElmType.isFloat()) {
+        auto c1 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(inpElmType, 1.0));
+        auto cB = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(inpElmType, attr_beta));
+        auto betaX = mlir::arith::MulFOp::create(nest, nloc, cB, inp);
+        auto negBetaX = mlir::arith::NegFOp::create(nest, nloc, betaX);
+        auto expNegBetaX = mlir::math::ExpOp::create(nest, nloc, negBetaX);
+        auto denom = mlir::arith::AddFOp::create(nest, nloc, c1, expNegBetaX);
+        auto sigmoidVal = mlir::arith::DivFOp::create(nest, nloc, c1, denom);
+        out = mlir::arith::MulFOp::create(nest, nloc, inp, sigmoidVal);
+      } else if (inpElmType.isInteger()) {
+        auto c1 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getIntegerAttr(inpElmType, 1));
+        auto c0 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getIntegerAttr(inpElmType, 0));
+        auto cB = mlir::arith::ConstantOp::create(
+            nest, nloc,
+            nest.getIntegerAttr(inpElmType, static_cast<int64_t>(attr_beta)));
+        auto betaX = mlir::arith::MulIOp::create(nest, nloc, cB, inp);
+        auto negBetaX = mlir::arith::SubIOp::create(nest, nloc, c0, betaX);
+        auto expNegBetaX = mlir::math::ExpOp::create(nest, nloc, negBetaX);
+        auto denom = mlir::arith::AddIOp::create(nest, nloc, c1, expNegBetaX);
+        auto sigmoidVal = mlir::arith::DivSIOp::create(nest, nloc, c1, denom);
+        out = mlir::arith::MulIOp::create(nest, nloc, inp, sigmoidVal);
+      }
+    }
     if (opNameBeginsWith(opName, "Tan"))
       out = mlir::math::TanOp::create(nest, nloc, inp);
     if (opNameBeginsWith(opName, "Tanh"))
