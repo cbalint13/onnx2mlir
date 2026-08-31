@@ -93,17 +93,10 @@ mlir::LogicalResult
 OnnxToLinalg_GlobalPoolOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
                            const mlir::TypeConverter *typeConverter);
 
-mlir::LogicalResult OnnxToLinalg_HardmaxOp(mlir::Operation *op,
-                                           mlir::PatternRewriter &rewriter);
-
 mlir::LogicalResult
 OnnxToLinalg_LayerNormalizationOp(mlir::Operation *op,
                                   mlir::PatternRewriter &rewriter,
                                   const mlir::TypeConverter *typeConverter);
-
-mlir::LogicalResult
-OnnxToLinalg_LogSoftmaxOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
-                          const mlir::TypeConverter *typeConverter);
 
 mlir::LogicalResult
 OnnxToLinalg_MatMulOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
@@ -134,8 +127,8 @@ OnnxToLinalg_SliceOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
                      const mlir::TypeConverter *typeConverter);
 
 mlir::LogicalResult
-OnnxToLinalg_SoftmaxOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
-                       const mlir::TypeConverter *typeConverter);
+OnnxToLinalg_SoftmaxOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                        const mlir::TypeConverter *typeConverter);
 
 mlir::LogicalResult
 OnnxToLinalg_SplitOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,

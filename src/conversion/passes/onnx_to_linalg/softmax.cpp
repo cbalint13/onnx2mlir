@@ -41,8 +41,8 @@
 namespace onnx2mlir::dialect {
 
 mlir::LogicalResult
-OnnxToLinalg_SoftmaxOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
-                       const mlir::TypeConverter *typeConverter) {
+OnnxToLinalg_SoftmaxOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
+                        const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
   auto opName = op->getName().getStringRef();
 

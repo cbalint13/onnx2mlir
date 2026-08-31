@@ -104,7 +104,7 @@ static const std::unordered_map<std::string, LoweringFunc> &getLoweringMap() {
     registerOps({"Shape"}, map, OnnxToLinalg_ShapeOp);
     registerOps({"Slice"}, map, OnnxToLinalg_SliceOp);
     registerOps({"Hardmax", "LogSoftmax", "Softmax"}, map,
-                OnnxToLinalg_SoftmaxOp);
+                OnnxToLinalg_SoftmaxOps);
     registerOps({"Split"}, map, OnnxToLinalg_SplitOp);
     registerOps({"Squeeze"}, map, OnnxToLinalg_SqueezeOp);
     registerOps({"Transpose"}, map, OnnxToLinalg_TransposeOp);
