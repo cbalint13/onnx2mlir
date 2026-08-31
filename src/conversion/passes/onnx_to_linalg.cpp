@@ -84,7 +84,7 @@ static const std::unordered_map<std::string, LoweringFunc> &getLoweringMap() {
                 map, OnnxToLinalg_BinaryOps);
     registerOps({"Cast"}, map, OnnxToLinalg_CastOp);
     registerOps({"Clip"}, map, OnnxToLinalg_ClipOp);
-    registerOps({"Equal", "Greater", "GreatherOrEqual", "Less", "LessOrEqual"},
+    registerOps({"Equal", "Greater", "GreaterOrEqual", "Less", "LessOrEqual"},
                 map, OnnxToLinalg_CompBinaryOps);
     registerOps({"Concat"}, map, OnnxToLinalg_ConcatOp);
     registerOps({"Constant"}, map, OnnxToLinalg_ConstantOp);

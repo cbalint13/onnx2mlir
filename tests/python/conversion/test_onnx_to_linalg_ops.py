@@ -790,7 +790,7 @@ def test_onnx_transpose_lower(ONNX_OPSET_VERSION, dtype_proto):
     [
         (schema.name, schema.since_version, dtype_proto, shapes)
         for schema in get_all_schemas_with_history()
-        if schema.name in ["Greather", "GreatherOrEqual", "Less", "LessOrEqual"]
+        if schema.name in ["Greather", "GreaterOrEqual", "Less", "LessOrEqual"]
         for dtype_proto in [
             TensorProto.FLOAT,
             TensorProto.FLOAT16,
