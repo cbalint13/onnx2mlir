@@ -95,6 +95,14 @@ static inline mlir::Type OnnxToMlir_dType(const int32_t data_type_int,
     return mlir::Float8E8M0FNUType::get(ctx);
 #endif
 #endif
+#if ONNX2MLIR_ONNX_VERSION >= 123
+#if ONNX2MLIR_MLIR_VERSION >= 220
+  case onnx::TensorProto_DataType_FLOAT6E2M3:
+    return mlir::Float6E2M3FNType::get(ctx);
+  case onnx::TensorProto_DataType_FLOAT6E3M2:
+    return mlir::Float6E3M2FNType::get(ctx);
+#endif
+#endif
   case onnx::TensorProto_DataType_FLOAT4E2M1:
     return mlir::Float4E2M1FNType::get(ctx);
   case onnx::TensorProto_DataType_COMPLEX64:

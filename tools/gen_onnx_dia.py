@@ -85,6 +85,8 @@ def get_mlir_types_from_str(type_strs, schema_constraints, option=None):
         "float8e5m2": "F8E5M2",
         "float8e5m2fnuz": "F8E5M2FNUZ",
         "float8e8m0": "F8E8M0FNU",
+        "float6e2m3": "F6E2M3FN",
+        "float6e3m2": "F6E3M2FN",
         "float4e2m1": "F4E2M1FN",
         "complex64": "Complex<F32>",
         "complex128": "Complex<F64>",
