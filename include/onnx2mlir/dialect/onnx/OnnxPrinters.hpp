@@ -43,6 +43,6 @@ parseOnnxDictAsmPrinter(mlir::OpAsmParser &parser,
                         mlir::DenseSet<mlir::StringRef> orderedAttrs = {},
                         const bool masked = false);
 
-#endif // INCLUDE_ONNX2MLIR_DIALECT_ONNX_ONNXPRINTERS_HPP_
-
 } // namespace onnx2mlir::dialect::onnx
+
+#endif // INCLUDE_ONNX2MLIR_DIALECT_ONNX_ONNXPRINTERS_HPP_
