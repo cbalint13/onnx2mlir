@@ -3406,11 +3406,11 @@ def test_onnx_pad_lower(ONNX_OPSET_VERSION, dtype_proto, pads_val, mode):
     ],
 )
 # pylint: disable=too-many-statements
-def test_onnx_batch_normalization_lower(
+def test_onnx_batchnormalization_lower(
     ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape
 ):
     """
-    Test ONNX BatchNormalization operator lowering.
+    Test ONNX normalization operators lowering.
     """
 
     class BatchNormalization(OpRun):
@@ -3519,6 +3519,110 @@ def test_onnx_batch_normalization_lower(
             llvm_module,
             "main",
             [inp_x, inp_scale, inp_b, inp_mean, inp_var],
+            [res_array],
+        )
+
+        rtol = 1e-2 if dtype_proto == TensorProto.FLOAT16 else 1e-5
+        atol = 1e-2 if dtype_proto == TensorProto.FLOAT16 else 1e-5
+        np.testing.assert_allclose(outputs[0], onnx_result, rtol=rtol, atol=atol)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape, axis",
+    [
+        (schema.name, schema.since_version, dtype_proto, shape, axis)
+        for schema in get_all_schemas_with_history()
+        if schema.name == "LayerNormalization"
+        for dtype_proto in [
+            TensorProto.FLOAT16,
+            TensorProto.FLOAT,
+            TensorProto.DOUBLE,
+        ]
+        for shape in [
+            (2, 3, 4),
+            (2, 3, 4, 5),
+        ]
+        for axis in [-1, -2, 1]
+    ],
+)
+# pylint: disable=too-many-statements
+def test_onnx_layernormalization_lower(
+    ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape, axis
+):
+    """
+    Test ONNX LayerNormalization operator lowering.
+    """
+
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
+
+    norm_axis = axis if axis >= 0 else axis + len(shape)
+    param_shape = shape[norm_axis:]
+
+    inp_x = _generate_dtype_random(np_dtype, shape=shape, max_val=10)
+    inp_scale = _generate_dtype_random(np_dtype, shape=param_shape, max_val=5)
+    inp_b = _generate_dtype_random(np_dtype, shape=param_shape, max_val=5)
+
+    x_info = make_tensor_value_info("X", dtype_proto, shape)
+    scale_info = make_tensor_value_info("scale", dtype_proto, param_shape)
+    b_info = make_tensor_value_info("B", dtype_proto, param_shape)
+    y_info = make_tensor_value_info("Y", dtype_proto, shape)
+
+    node_inputs = ["X", "scale", "B"]
+    node_outputs = ["Y"]
+
+    epsilon = 1e-05
+    node_kwargs = {"axis": axis, "epsilon": epsilon}
+
+    ln_node = make_node(
+        ONNX_OP_NAME,
+        node_inputs,
+        node_outputs,
+        **node_kwargs,
+    )
+
+    graph = make_graph(
+        nodes=[ln_node],
+        name="layer_norm_graph",
+        inputs=[x_info, scale_info, b_info],
+        outputs=[y_info],
+        initializer=[],
+    )
+    opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+    onnx_model = make_model(graph, opset_imports=opset_imports)
+
+    check_model(onnx_model)
+
+    feed_dict = {
+        "X": inp_x,
+        "scale": inp_scale,
+        "B": inp_b,
+    }
+
+    with Context() as ctx, Location.unknown():
+        mlir_module = import_from_onnx(onnx_model, ctx, verify=False)
+        try:
+            mlir_module.operation.verify()
+        except MLIRError as e:
+            error_keywords = ["error", "op operand", "must be"]
+            if all(kw in str(e) for kw in error_keywords):
+                pytest.skip(
+                    f"{ONNX_OP_NAME} V{ONNX_OPSET_VERSION} does not support"
+                    f" {TensorProto.DataType.Name(dtype_proto)}"
+                )
+            else:
+                raise
+
+        ref = ReferenceEvaluator(onnx_model)
+        onnx_result = ref.run(None, feed_dict)[0]
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        res_array = np.zeros_like(onnx_result)
+        outputs = runner(
+            llvm_module,
+            "main",
+            [inp_x, inp_scale, inp_b],
             [res_array],
         )
 

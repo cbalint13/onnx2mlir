@@ -97,6 +97,11 @@ mlir::LogicalResult OnnxToLinalg_HardmaxOp(mlir::Operation *op,
                                            mlir::PatternRewriter &rewriter);
 
 mlir::LogicalResult
+OnnxToLinalg_LayerNormalizationOp(mlir::Operation *op,
+                                  mlir::PatternRewriter &rewriter,
+                                  const mlir::TypeConverter *typeConverter);
+
+mlir::LogicalResult
 OnnxToLinalg_LogSoftmaxOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
                           const mlir::TypeConverter *typeConverter);
 
