@@ -533,6 +533,7 @@ def test_onnx_arith_binary_lower(
             "Asinh",
             "Atan",
             "Atanh",
+            "Bernoulli",
             "Binarizer",
             "Ceil",
             "Celu",
@@ -581,6 +582,10 @@ def test_onnx_arith_unary_lower(
     """
     Test ONNX arith unary operators lowering.
     """
+
+    if ONNX_OP_NAME == "Bernoulli":
+        pytest.skip(f"{ONNX_OP_NAME} statistical behaviour cannot be tested as unary.")
+
     np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
 
     is_bool_output_op = ONNX_OP_NAME in ["IsInf", "IsNaN"]

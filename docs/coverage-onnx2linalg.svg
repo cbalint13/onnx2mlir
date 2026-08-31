@@ -54,7 +54,7 @@
   <rect x='681' y='103' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='748' y='128' text-anchor='middle' font-weight='bold' class='op-text'>BatchNormalization</text>
   <text x='748' y='143' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>15 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>9 </tspan>, <tspan fill='gray'>14 </tspan>]</text>
-  <rect x='1' y='154' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <rect x='1' y='154' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='68' y='179' text-anchor='middle' font-weight='bold' class='op-text'>Bernoulli</text>
   <text x='68' y='194' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>15 </tspan>]</text>
   <rect x='137' y='154' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>

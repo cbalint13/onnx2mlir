@@ -103,6 +103,10 @@ OnnxToLinalg_UnaryOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
   double attr_gamma = 1.0507009873554805;
   if (auto attr = op->getAttrOfType<mlir::FloatAttr>("gamma"))
     attr_gamma = attr.getValueAsDouble();
+  // seed
+  float attr_seed = 0.0f;
+  if (auto attr = op->getAttrOfType<mlir::FloatAttr>("seed"))
+    attr_seed = attr.getValueAsDouble();
   // threshold
   double attr_threshold = 0.0;
   if (auto attr = op->getAttrOfType<mlir::FloatAttr>("threshold"))
@@ -152,6 +156,66 @@ OnnxToLinalg_UnaryOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
       out = mlir::math::AtanOp::create(nest, nloc, inp);
     if (opNameBeginsWith(opName, "Atanh"))
       out = mlir::math::AtanhOp::create(nest, nloc, inp);
+    if (opNameBeginsWith(opName, "Bernoulli")) {
+      auto i32Type = nest.getI32Type();
+      auto f32Type = nest.getF32Type();
+      mlir::Type outElmType = outDatType.getElementType();
+      // unique per-element hash seed from spatial iteration indices
+      int64_t seedInt = static_cast<int32_t>(attr_seed * 10000.0f);
+      mlir::Value elementHash = mlir::arith::ConstantOp::create(
+          nest, nloc, nest.getI32IntegerAttr(seedInt));
+      int64_t rank = inpDatType.getRank();
+      int32_t strideMultiplier = 31;
+      int32_t currentMultiplier = 1;
+      for (int64_t i = 0; i < rank; ++i) {
+        auto idx = mlir::linalg::IndexOp::create(nest, nloc, i);
+        auto idxI32 =
+            mlir::arith::IndexCastOp::create(nest, nloc, i32Type, idx);
+        auto multCst = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getI32IntegerAttr(currentMultiplier));
+        auto scaledIdx =
+            mlir::arith::MulIOp::create(nest, nloc, idxI32, multCst);
+        elementHash =
+            mlir::arith::AddIOp::create(nest, nloc, elementHash, scaledIdx);
+        currentMultiplier *= strideMultiplier;
+      }
+      // advance state = (hash * 1664525 + 1013904223)
+      auto cA = mlir::arith::ConstantOp::create(
+          nest, nloc, nest.getI32IntegerAttr(1664525));
+      auto cC = mlir::arith::ConstantOp::create(
+          nest, nloc, nest.getI32IntegerAttr(1013904223));
+      mlir::Value state =
+          mlir::arith::MulIOp::create(nest, nloc, elementHash, cA);
+      state = mlir::arith::AddIOp::create(nest, nloc, state, cC);
+      // normalize integer state to uniform float u in range [0.0, 1.0)
+      auto mask = mlir::arith::ConstantOp::create(
+          nest, nloc, nest.getI32IntegerAttr(0x7FFFFFFF));
+      auto positiveState = mlir::arith::AndIOp::create(nest, nloc, state, mask);
+      auto floatState =
+          mlir::arith::SIToFPOp::create(nest, nloc, f32Type, positiveState);
+      auto cMax = mlir::arith::ConstantOp::create(
+          nest, nloc, nest.getFloatAttr(f32Type, 2147483648.0f));
+      auto rndUni = mlir::arith::DivFOp::create(nest, nloc, floatState, cMax);
+      mlir::Value prob = inp;
+      if (!inpElmType.isF32())
+        prob = mlir::arith::ExtFOp::create(nest, nloc, f32Type, inp);
+      // condition: u < p
+      auto cond = mlir::arith::CmpFOp::create(
+          nest, nloc, mlir::arith::CmpFPredicate::OLT, rndUni, prob);
+      mlir::Value val1, val0;
+      if (outElmType.isFloat()) {
+        val1 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(outElmType, 1.0));
+        val0 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(outElmType, 0.0));
+      } else {
+        val1 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getIntegerAttr(outElmType, 1));
+        val0 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getIntegerAttr(outElmType, 0));
+      }
+      out = mlir::arith::SelectOp::create(nest, nloc, cond, val1, val0);
+    }
     if (opNameBeginsWith(opName, "Binarizer")) {
       if (inpElmType.isFloat()) {
         auto c0 = mlir::arith::ConstantOp::create(
