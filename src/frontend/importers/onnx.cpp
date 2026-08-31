@@ -511,13 +511,15 @@ ONNXImporter::get_versioned_name(const std::string &OpName,
   // opset_ver = 11
   int maxversion = -1;
   int subversion = -1;
-  for (const int &ver : ops_versions[OpName]) {
+  const auto &domain = ops_versions[OpName].first;
+  const auto &versions = ops_versions[OpName].second;
+  for (const int &ver : versions) {
     if (maxversion < ver)
       maxversion = ver;
-    if (ver <= model_opset_version)
+    if (ver <= model_opset_versions[domain])
       subversion = ver;
   }
-  if ((maxversion > model_opset_version) || max_with_subver)
+  if ((maxversion > model_opset_versions[domain]) || max_with_subver)
     return OpName + "_V" + std::to_string(subversion);
   return OpName;
 }
@@ -868,7 +870,9 @@ void ONNXImporter::import(const std::string &file_or_string,
   for (const auto &schema : all_schemas) {
     if (engine_opset_version < schema.SinceVersion())
       engine_opset_version = schema.SinceVersion();
-    ops_versions[schema.Name()].push_back(schema.SinceVersion());
+    auto &entry = ops_versions[schema.Name()];
+    entry.first = schema.domain();
+    entry.second.push_back(schema.SinceVersion());
   }
 
   if (verbose) {
@@ -898,15 +902,9 @@ void ONNXImporter::import(const std::string &file_or_string,
     }
   }
 
-  model_opset_version = -1;
-  // see https://github.com/onnx/onnx/blob/main/onnx/docs/Versioning.md
-  for (auto it = model_import.opset_import().begin();
-       it != model_import.opset_import().end(); ++it) {
-    if (it->domain() == "" || it->domain() == "ai.onnx") {
-      model_opset_version = it->version();
-      break;
-    }
-  }
+  // see https://github.com/onnx/onnx/blob/main/docs/Versioning.md
+  for (const auto &opset : model_import.opset_import())
+    model_opset_versions[opset.domain()] = opset.version();
 
   if (verbose)
     llvm::outs() << "ONNX model IR version: " << model_import.ir_version()
@@ -916,26 +914,36 @@ void ONNXImporter::import(const std::string &file_or_string,
   onnx::ModelProto model_proto;
   if (opt_args.count("--onnx-convert-ops") > 0) {
     int convert_version = engine_opset_version;
-    if (opt_args["--onnx-convert-ops"].size() > 0)
+    if (opt_args["--onnx-convert-ops"].empty())
       convert_version = std::stoi(opt_args["--onnx-convert-ops"]);
-    if (convert_version <= model_opset_version) {
+    // default domain key
+    std::string default_domain_key = "";
+    if (model_opset_versions.count("ai.onnx")) {
+      default_domain_key = "ai.onnx";
+    }
+    const int model_current_version = model_opset_versions[default_domain_key];
+    if (convert_version <= model_current_version) {
       onnx2mlir::error() << "Model cannot be downgraded.\n";
       exit(-1);
     }
     if (verbose)
-      llvm::outs() << "ONNX model OPSet conversion: " << model_opset_version
+      llvm::outs() << "ONNX model OPSet conversion: " << model_current_version
                    << " -> " << convert_version << "\n";
     try {
       model_proto = onnx::version_conversion::ConvertVersion(model_import,
                                                              convert_version);
-      model_opset_version = convert_version;
+      model_opset_versions[default_domain_key] = convert_version;
     } catch (const std::exception &e) {
     }
   } else {
     model_proto = model_import;
   }
-  if (verbose)
-    llvm::outs() << "ONNX model OPSet version: " << model_opset_version << "\n";
+  if (verbose) {
+    for (const auto &[domain, version] : model_opset_versions) {
+      llvm::outs() << "ONNX model OPSet version: " << version;
+      llvm::outs() << (domain.empty() ? "\n" : " @ [" + domain + "]\n");
+    }
+  }
 
   // infer shapes
   onnx::ShapeInferenceOptions iopts(

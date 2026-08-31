@@ -34,6 +34,7 @@
 
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "onnx2mlir/frontend/frontend.hpp"
@@ -61,11 +62,11 @@ private:
   const std::string get_versioned_name(const std::string &OpName,
                                        bool max_with_subver);
   // imported opset
-  int model_opset_version;
+  std::map<std::string, int> model_opset_versions;
   // onnx opset version
   int engine_opset_version;
   // onnx ops versioning catalog
-  std::map<std::string, std::vector<int>> ops_versions;
+  std::map<std::string, std::pair<std::string, std::vector<int>>> ops_versions;
 };
 
 /*
