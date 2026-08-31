@@ -3372,3 +3372,142 @@ def test_onnx_pad_lower(ONNX_OPSET_VERSION, dtype_proto, pads_val, mode):
         outputs = runner(llvm_module, "main", [np_array], [output])
 
         np.testing.assert_allclose(outputs[0], onnx_result, atol=1e-3)
+
+
+@pytest.mark.parametrize(
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape",
+    [
+        (schema.name, schema.since_version, dtype_proto, shape)
+        for schema in get_all_schemas_with_history()
+        if schema.name == "BatchNormalization"
+        for dtype_proto in [
+            TensorProto.FLOAT16,
+            TensorProto.FLOAT,
+            TensorProto.DOUBLE,
+        ]
+        for shape in [
+            (2, 3, 4),
+            (2, 3, 4, 5),
+        ]
+    ],
+)
+# pylint: disable=too-many-statements
+def test_onnx_batch_normalization_lower(
+    ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto, shape
+):
+    """
+    Test ONNX BatchNormalization operator lowering.
+    """
+
+    class BatchNormalization(OpRun):
+        """
+        ONNX BatchNormalization operator.
+        Computes: Y = (X - mean) / sqrt(var + epsilon) * scale + B
+        """
+
+        # pylint: disable=arguments-differ,too-many-arguments,too-many-positional-arguments
+        def _run(self, x, scale, b, mean, var, epsilon=1e-05, **kwargs):
+            broadcast_shape = [1] * len(x.shape)
+            broadcast_shape[1] = scale.shape[0]
+
+            orig_dtype = x.dtype
+            x_f32 = x.astype(np.float32)
+            scale_f32 = scale.reshape(broadcast_shape).astype(np.float32)
+            b_f32 = b.reshape(broadcast_shape).astype(np.float32)
+            mean_f32 = mean.reshape(broadcast_shape).astype(np.float32)
+            var_f32 = var.reshape(broadcast_shape).astype(np.float32)
+
+            res = scale_f32 * (x_f32 - mean_f32) / np.sqrt(var_f32 + epsilon) + b_f32
+            return (res.astype(orig_dtype),)
+
+    np_dtype = tensor_dtype_to_np_dtype(dtype_proto)
+    c_dim = shape[1]
+
+    inp_x = _generate_dtype_random(np_dtype, shape=shape, max_val=10)
+    inp_scale = _generate_dtype_random(np_dtype, shape=(c_dim,), max_val=5)
+    inp_b = _generate_dtype_random(np_dtype, shape=(c_dim,), max_val=5)
+    inp_mean = _generate_dtype_random(np_dtype, shape=(c_dim,), max_val=5)
+    inp_var = np.abs(
+        _generate_dtype_random(np_dtype, shape=(c_dim,), max_val=5)
+    ) + np.array(0.1, dtype=np_dtype)
+
+    x_info = make_tensor_value_info("X", dtype_proto, shape)
+    scale_info = make_tensor_value_info("scale", dtype_proto, (c_dim,))
+    b_info = make_tensor_value_info("B", dtype_proto, (c_dim,))
+    mean_info = make_tensor_value_info("mean", dtype_proto, (c_dim,))
+    var_info = make_tensor_value_info("var", dtype_proto, (c_dim,))
+    y_info = make_tensor_value_info("Y", dtype_proto, shape)
+
+    node_inputs = ["X", "scale", "B", "mean", "var"]
+    node_outputs = ["Y"]
+
+    epsilon = 1e-05
+    node_kwargs = {"epsilon": epsilon}
+
+    if ONNX_OPSET_VERSION == 1:
+        node_kwargs["consumed_inputs"] = [0, 0, 0, 0, 0]
+
+    if ONNX_OPSET_VERSION in [1, 6]:
+        node_kwargs["is_test"] = 1
+    elif ONNX_OPSET_VERSION >= 14:
+        node_kwargs["training_mode"] = 0
+
+    bn_node = make_node(
+        ONNX_OP_NAME,
+        node_inputs,
+        node_outputs,
+        **node_kwargs,
+    )
+
+    graph = make_graph(
+        nodes=[bn_node],
+        name="batch_norm_graph",
+        inputs=[x_info, scale_info, b_info, mean_info, var_info],
+        outputs=[y_info],
+        initializer=[],
+    )
+    opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+    onnx_model = make_model(graph, opset_imports=opset_imports)
+
+    check_model(onnx_model)
+
+    feed_dict = {
+        "X": inp_x,
+        "scale": inp_scale,
+        "B": inp_b,
+        "mean": inp_mean,
+        "var": inp_var,
+    }
+
+    with Context() as ctx, Location.unknown():
+        mlir_module = import_from_onnx(onnx_model, ctx, verify=False)
+        try:
+            mlir_module.operation.verify()
+        except MLIRError as e:
+            error_keywords = ["error", "op operand", "must be"]
+            if all(kw in str(e) for kw in error_keywords):
+                pytest.skip(
+                    f"{ONNX_OP_NAME} V{ONNX_OPSET_VERSION} does not support"
+                    f" {TensorProto.DataType.Name(dtype_proto)}"
+                )
+            else:
+                raise
+
+        new_ops = [BatchNormalization] if ONNX_OPSET_VERSION in [1, 7, 9] else []
+        ref = ReferenceEvaluator(onnx_model, new_ops=new_ops)
+        onnx_result = ref.run(None, feed_dict)[0]
+
+        llvm_module = llvm_lower_pipeline(mlir_module)
+        llvm_module.operation.verify()
+
+        res_array = np.zeros_like(onnx_result)
+        outputs = runner(
+            llvm_module,
+            "main",
+            [inp_x, inp_scale, inp_b, inp_mean, inp_var],
+            [res_array],
+        )
+
+        rtol = 1e-2 if dtype_proto == TensorProto.FLOAT16 else 1e-5
+        atol = 1e-2 if dtype_proto == TensorProto.FLOAT16 else 1e-5
+        np.testing.assert_allclose(outputs[0], onnx_result, rtol=rtol, atol=atol)

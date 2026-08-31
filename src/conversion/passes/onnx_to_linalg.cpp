@@ -78,6 +78,7 @@ static void registerOps(const std::vector<std::string> &opNames,
 static const std::unordered_map<std::string, LoweringFunc> &getLoweringMap() {
   static const auto loweringMap = [] {
     std::unordered_map<std::string, LoweringFunc> map;
+    registerOps({"BatchNormalization"}, map, OnnxToLinalg_BatchNormalizationOp);
     registerOps({"Add", "And", "BitwiseAnd", "BitwiseOr", "BitwiseXor", "Div",
                  "Mod", "Mul", "Or", "Pow", "Sub", "Xor"},
                 map, OnnxToLinalg_BinaryOps);

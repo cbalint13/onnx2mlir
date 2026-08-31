@@ -47,11 +47,11 @@
   <text x='340' y='143' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>9 </tspan>]</text>
   <rect x='409' y='103' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
   <text x='476' y='128' text-anchor='middle' font-weight='bold' class='op-text'>Attention</text>
-  <text x='476' y='143' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>24 </tspan>, <tspan fill='gray'>23 </tspan>]</text>
+  <text x='476' y='143' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
   <rect x='545' y='103' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
   <text x='612' y='128' text-anchor='middle' font-weight='bold' class='op-text'>AveragePool</text>
   <text x='612' y='143' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>10 </tspan>, <tspan fill='gray'>11 </tspan>, <tspan fill='gray'>19 </tspan>]</text>
-  <rect x='681' y='103' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
+  <rect x='681' y='103' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='748' y='128' text-anchor='middle' font-weight='bold' class='op-text'>BatchNormalization</text>
   <text x='748' y='143' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>15 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>7 </tspan>, <tspan fill='gray'>9 </tspan>, <tspan fill='gray'>14 </tspan>]</text>
   <rect x='1' y='154' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
@@ -83,7 +83,7 @@
   <text x='340' y='245' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>17 </tspan>]</text>
   <rect x='409' y='205' width='135' height='50' fill='#ccffcc' stroke='black' stroke-width='2'/>
   <text x='476' y='230' text-anchor='middle' font-weight='bold' class='op-text'>Cast</text>
-  <text x='476' y='245' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>9 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
+  <text x='476' y='245' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>28 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>6 </tspan>, <tspan fill='gray'>9 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>, <tspan fill='gray'>25 </tspan>]</text>
   <rect x='545' y='205' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
   <text x='612' y='230' text-anchor='middle' font-weight='bold' class='op-text'>CastLike</text>
   <text x='612' y='245' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>15 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
@@ -158,7 +158,7 @@
   <text x='476' y='449' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>13 </tspan>, <tspan fill='gray'>1 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
   <rect x='545' y='409' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
   <text x='612' y='434' text-anchor='middle' font-weight='bold' class='op-text'>DequantizeLinear</text>
-  <text x='612' y='449' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>10 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
+  <text x='612' y='449' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>28 </tspan>, <tspan fill='gray'>10 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>, <tspan fill='gray'>25 </tspan>]</text>
   <rect x='681' y='409' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
   <text x='748' y='434' text-anchor='middle' font-weight='bold' class='op-text'>Det</text>
   <text x='748' y='449' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>22 </tspan>, <tspan fill='gray'>11 </tspan>]</text>
@@ -428,7 +428,7 @@
   <text x='476' y='1214' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>21 </tspan>, <tspan fill='gray'>10 </tspan>]</text>
   <rect x='545' y='1174' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
   <text x='612' y='1199' text-anchor='middle' font-weight='bold' class='op-text'>QuantizeLinear</text>
-  <text x='612' y='1214' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>25 </tspan>, <tspan fill='gray'>10 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>]</text>
+  <text x='612' y='1214' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>28 </tspan>, <tspan fill='gray'>10 </tspan>, <tspan fill='gray'>13 </tspan>, <tspan fill='gray'>19 </tspan>, <tspan fill='gray'>21 </tspan>, <tspan fill='gray'>23 </tspan>, <tspan fill='gray'>24 </tspan>, <tspan fill='gray'>25 </tspan>]</text>
   <rect x='681' y='1174' width='135' height='50' fill='#ffcccc' stroke='black' stroke-width='2'/>
   <text x='748' y='1199' text-anchor='middle' font-weight='bold' class='op-text'>RMSNormalization</text>
   <text x='748' y='1214' text-anchor='middle' class='op-text ver-text'>[<tspan fill='blue'>23 </tspan>]</text>

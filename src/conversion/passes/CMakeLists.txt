@@ -16,6 +16,7 @@ add_mlir_conversion_library(onnx2mlir_onnx_linalg_pass
     onnx_to_linalg/globalpool.cpp
     onnx_to_linalg/matmul.cpp
     onnx_to_linalg/maxpool.cpp
+    onnx_to_linalg/norm.cpp
     onnx_to_linalg/pad.cpp
     onnx_to_linalg/reshape.cpp
     onnx_to_linalg/resize.cpp
