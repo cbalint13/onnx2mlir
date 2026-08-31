@@ -103,6 +103,10 @@ OnnxToLinalg_UnaryOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
   double attr_gamma = 1.0507009873554805;
   if (auto attr = op->getAttrOfType<mlir::FloatAttr>("gamma"))
     attr_gamma = attr.getValueAsDouble();
+  // threshold
+  double attr_threshold = 0.0;
+  if (auto attr = op->getAttrOfType<mlir::FloatAttr>("threshold"))
+    attr_threshold = attr.getValueAsDouble();
 
   /*
    *  Affine mappings
@@ -148,6 +152,31 @@ OnnxToLinalg_UnaryOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
       out = mlir::math::AtanOp::create(nest, nloc, inp);
     if (opNameBeginsWith(opName, "Atanh"))
       out = mlir::math::AtanhOp::create(nest, nloc, inp);
+    if (opNameBeginsWith(opName, "Binarizer")) {
+      if (inpElmType.isFloat()) {
+        auto c0 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(inpElmType, 0.0));
+        auto c1 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(inpElmType, 1.0));
+        auto cThresh = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getFloatAttr(inpElmType, attr_threshold));
+        auto cnd = mlir::arith::CmpFOp::create(
+            nest, nloc, mlir::arith::CmpFPredicate::OGT, inp, cThresh);
+        out = mlir::arith::SelectOp::create(nest, nloc, cnd, c1, c0);
+      } else if (inpElmType.isInteger()) {
+        auto c0 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getIntegerAttr(inpElmType, 0));
+        auto c1 = mlir::arith::ConstantOp::create(
+            nest, nloc, nest.getIntegerAttr(inpElmType, 1));
+        auto cThresh = mlir::arith::ConstantOp::create(
+            nest, nloc,
+            nest.getIntegerAttr(inpElmType,
+                                static_cast<int64_t>(attr_threshold)));
+        auto cnd = mlir::arith::CmpIOp::create(
+            nest, nloc, mlir::arith::CmpIPredicate::sgt, inp, cThresh);
+        out = mlir::arith::SelectOp::create(nest, nloc, cnd, c1, c0);
+      }
+    }
     if (opNameBeginsWith(opName, "Ceil"))
       out = mlir::math::CeilOp::create(nest, nloc, inp);
     if (opNameBeginsWith(opName, "Celu")) {

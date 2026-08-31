@@ -107,16 +107,17 @@ static const std::unordered_map<std::string, LoweringFunc> &getLoweringMap() {
     registerOps({"Split"}, map, OnnxToLinalg_SplitOp);
     registerOps({"Squeeze"}, map, OnnxToLinalg_SqueezeOp);
     registerOps({"Transpose"}, map, OnnxToLinalg_TransposeOp);
-    registerOps({"Abs",      "Acos",     "Acosh",       "Asin",      "Asinh",
-                 "Atan",     "Atanh",    "BitwiseNot",  "Ceil",      "Celu",
-                 "Cos",      "Cosh",     "Elu",         "Erf",       "Exp",
-                 "Floor",    "Gelu",     "HardSigmoid", "HardSwish", "Identity",
-                 "IsInf",    "IsNaN",    "LeakyRelu",   "Log",       "Mish",
-                 "Neg",      "Not",      "Reciprocal",  "Relu",      "Round",
-                 "Selu",     "Sign",     "Sigmoid",     "Sin",       "Sinh",
-                 "Softplus", "Softsign", "Sqrt",        "Swish",     "Tan",
-                 "Tanh"},
-                map, OnnxToLinalg_UnaryOps);
+    registerOps(
+        {"Abs",      "Acos",     "Acosh",      "Asin",        "Asinh",
+         "Atan",     "Atanh",    "BitwiseNot", "Binarizer",   "Ceil",
+         "Celu",     "Cos",      "Cosh",       "Elu",         "Erf",
+         "Exp",      "Floor",    "Gelu",       "HardSigmoid", "HardSwish",
+         "Identity", "IsInf",    "IsNaN",      "LeakyRelu",   "Log",
+         "Mish",     "Neg",      "Not",        "Reciprocal",  "Relu",
+         "Round",    "Selu",     "Sign",       "Sigmoid",     "Sin",
+         "Sinh",     "Softplus", "Softsign",   "Sqrt",        "Swish",
+         "Tan",      "Tanh"},
+        map, OnnxToLinalg_UnaryOps);
     registerOps({"Unsqueeze"}, map, OnnxToLinalg_UnsqueezeOp);
     registerOps({"Where"}, map, OnnxToLinalg_WhereOp);
     return map;

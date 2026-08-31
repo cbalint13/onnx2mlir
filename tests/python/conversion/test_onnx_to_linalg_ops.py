@@ -520,9 +520,9 @@ def test_onnx_arith_binary_lower(
 
 
 @pytest.mark.parametrize(
-    "ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto",
+    "ONNX_OP_NAME, ONNX_OPSET_VERSION, ONNX_OPSET_DOMAIN, dtype_proto",
     [
-        (schema.name, schema.since_version, dtype_proto)
+        (schema.name, schema.since_version, schema.domain, dtype_proto)
         for schema in get_all_schemas_with_history()
         if schema.name
         in [
@@ -533,6 +533,7 @@ def test_onnx_arith_binary_lower(
             "Asinh",
             "Atan",
             "Atanh",
+            "Binarizer",
             "Ceil",
             "Celu",
             "Cos",
@@ -574,7 +575,9 @@ def test_onnx_arith_binary_lower(
         ]
     ],
 )
-def test_onnx_arith_unary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto):
+def test_onnx_arith_unary_lower(
+    ONNX_OP_NAME, ONNX_OPSET_VERSION, ONNX_OPSET_DOMAIN, dtype_proto
+):
     """
     Test ONNX arith unary operators lowering.
     """
@@ -585,23 +588,22 @@ def test_onnx_arith_unary_lower(ONNX_OP_NAME, ONNX_OPSET_VERSION, dtype_proto):
     out_np_dtype = np.bool_ if is_bool_output_op else np_dtype
 
     def create_onnx_model(np_array, inp_dtype_proto, out_dtype_proto):
-        input_tensor = make_tensor_value_info("input", inp_dtype_proto, np_array.shape)
-        output_tensor = make_tensor_value_info(
-            "output", out_dtype_proto, np_array.shape
-        )
-        cast_node = make_node(
+        inp_tensor = make_tensor_value_info("input", inp_dtype_proto, np_array.shape)
+        out_tensor = make_tensor_value_info("output", out_dtype_proto, np_array.shape)
+        arith_node = make_node(
             ONNX_OP_NAME,
-            ["input"],
-            ["output"],
+            inputs=["input"],
+            outputs=["output"],
+            domain=ONNX_OPSET_DOMAIN,
         )
         graph = make_graph(
-            nodes=[cast_node],
+            nodes=[arith_node],
             name="arith_graph",
-            inputs=[input_tensor],
-            outputs=[output_tensor],
+            inputs=[inp_tensor],
+            outputs=[out_tensor],
             initializer=[],
         )
-        opset_imports = [make_opsetid("", ONNX_OPSET_VERSION)]
+        opset_imports = [make_opsetid(ONNX_OPSET_DOMAIN, ONNX_OPSET_VERSION)]
         model = make_model(graph, opset_imports=opset_imports)
         check_model(model)
         return model
