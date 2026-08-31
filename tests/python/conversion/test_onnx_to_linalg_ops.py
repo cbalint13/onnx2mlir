@@ -56,40 +56,47 @@ from onnx2mlir.pipeline import llvm_lower_pipeline, runner
 
 
 def _generate_dtype_random(
-    dtype: np.dtype, shape: Tuple[int, ...], max_val=1e3
+    dtype: np.dtype,
+    shape: Tuple[int, ...],
+    max_val=1e3,
+    min_val=None,
 ) -> np.ndarray:
     """
-    Generates a numpy array of a given shape and data type.
+    Generates a numpy array of a given shape and data type within [min_val, max_val].
 
     Parameters:
         dtype (np.dtype): Target dtype (e.g., np.float64, np.complex64).
         shape (Tuple[int, ...]): Desired shape of the output array.
+        max_val (float/int): Upper bound for values.
+        min_val (float/int): Lower bound for values, default is -max_val
 
     Returns:
         np.ndarray: Array of specified shape and dtype filled with random numbers.
     """
     rng = np.random.default_rng(42)
 
-    if np.issubdtype(np.dtype(dtype), np.integer):
+    if min_val is None:
+        min_val = -max_val
+
+    if np.issubdtype(dtype, np.integer):
         info = np.iinfo(dtype)
-        low = int(np.sign(info.min) * max_val)
-        high = int(np.sign(info.max) * max_val)
-        return rng.integers(low, high, size=shape, dtype=dtype, endpoint=False)
+        low = max(int(min_val), info.min)
+        high = min(int(max_val), info.max)
+        if low >= high:
+            low = info.min
+            high = min(int(max_val), info.max) if max_val > info.min else info.max
+        return rng.integers(low, high, size=shape, dtype=dtype, endpoint=True)
 
-    if np.issubdtype(np.dtype(dtype), np.floating):
-        raw_uniform = rng.uniform(-1.0, 1.0, size=shape)
-        scaled = raw_uniform * max_val
-        return scaled.astype(dtype)
+    if np.issubdtype(dtype, np.floating):
+        return rng.uniform(min_val, max_val, size=shape).astype(dtype)
 
-    if np.issubdtype(np.dtype(dtype), np.complexfloating):
+    if np.issubdtype(dtype, np.complexfloating):
         if dtype == np.complex64:
             float_dtype = np.float32
-        elif dtype == np.complex128:
-            float_dtype = np.float64
         else:
             float_dtype = np.float64
-        real_part = (rng.uniform(-1.0, 1.0, size=shape) * max_val).astype(float_dtype)
-        imag_part = (rng.uniform(-1.0, 1.0, size=shape) * max_val).astype(float_dtype)
+        real_part = rng.uniform(min_val, max_val, size=shape).astype(float_dtype)
+        imag_part = rng.uniform(min_val, max_val, size=shape).astype(float_dtype)
         return (real_part + 1j * imag_part).astype(dtype)
 
     if dtype == np.dtype(bool):
