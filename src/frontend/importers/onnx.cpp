@@ -526,13 +526,11 @@ ONNXImporter::get_versioned_name(const std::string &OpName,
 
 void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
   // i/o map storage
-  std::map<std::string, std::shared_ptr<onnx::ValueInfoProto>> vis;
+  std::map<std::string, onnx::ValueInfoProto> vis;
 
   // map inferred value infos
-  for (const auto &vi : graph_proto.value_info()) {
-    auto vi_ptr = std::make_shared<onnx::ValueInfoProto>(vi);
-    vis.insert({vi.name(), vi_ptr});
-  }
+  for (const auto &vi : graph_proto.value_info())
+    vis.insert({vi.name(), vi});
 
   /*
    * Main function
@@ -544,27 +542,23 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
   auto *block = func.addEntryBlock();
 
   // args storage
-  std::map<std::string, std::shared_ptr<mlir::Value>> func_inputs;
-  std::map<std::string, std::shared_ptr<mlir::Type>> func_outputs;
+  std::map<std::string, mlir::Value> func_inputs;
+  std::map<std::string, mlir::Type> func_outputs;
 
   // map func inputs argument
   for (unsigned int i = 0; i < func.getNumArguments(); i++) {
     mlir::Value arg = block->getArgument(i);
     auto attr = func.getArgAttrOfType<mlir::StringAttr>(i, "onnx.name");
-    if (attr.size()) {
-      auto arg_ptr = std::make_shared<mlir::Value>(arg);
-      func_inputs.insert({attr.getValue().str(), arg_ptr});
-    }
+    if (attr.size())
+      func_inputs.insert({attr.getValue().str(), arg});
   }
 
   // map func results argument
   for (unsigned int i = 0; i < func.getNumResults(); i++) {
     mlir::Type res = func.getFunctionType().getResult(i);
     auto attr = func.getResultAttrOfType<mlir::StringAttr>(i, "onnx.name");
-    if (attr.size()) {
-      auto res_ptr = std::make_shared<mlir::Type>(res);
-      func_outputs.insert({attr.getValue().str(), res_ptr});
-    }
+    if (attr.size())
+      func_outputs.insert({attr.getValue().str(), res});
   }
 
   /*
@@ -574,9 +568,9 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
   mlir::OpBuilder builder(mlirCtx);
 
   // map mlir ops i/o
-  std::map<std::string, std::shared_ptr<mlir::Operation *>> ops_by_name;
-  std::multimap<std::string, std::shared_ptr<mlir::Operation *>> ops_by_inputs;
-  std::multimap<std::string, std::shared_ptr<mlir::Value>> res_by_outputs;
+  std::map<const onnx::NodeProto *, mlir::Operation *> ops_by_node;
+  std::multimap<std::string, mlir::Operation *> ops_by_inputs;
+  std::multimap<std::string, mlir::Value> res_by_outputs;
 
   // Step 1, add constant nodes
   for (const auto &node : graph_proto.node()) {
@@ -629,8 +623,7 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
 
       block->push_back(op);
       // store output
-      auto res_ptr = std::make_shared<mlir::Value>(op->getResult(0));
-      res_by_outputs.insert({node.output()[0], res_ptr});
+      res_by_outputs.insert({node.output()[0], op->getResult(0)});
     }
   }
 
@@ -653,8 +646,7 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
 
     block->push_back(op);
     // map to i/o
-    auto res_ptr = std::make_shared<mlir::Value>(op->getResult(0));
-    res_by_outputs.insert({initializer.name(), res_ptr});
+    res_by_outputs.insert({initializer.name(), op->getResult(0)});
   }
 
   // Step 3, add a NoneType constant
@@ -705,13 +697,13 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
         // lookup in vis table
         auto it = vis.find(out);
         if (it != vis.end()) {
-          auto type = OnnxToMlir_Type(*(it->second), mlirCtx);
+          auto type = OnnxToMlir_Type(it->second, mlirCtx);
           types.push_back(type);
         } else {
           // lookup neighbour outputs
           auto oitr = ops_by_inputs.find(out);
           if (oitr != ops_by_inputs.end()) {
-            auto *oadj = *oitr->second;
+            auto *oadj = oitr->second;
             // oadj->print(llvm::errs());
             // TODO(cbalint13): which result ?!
             types.push_back(oadj->getResults()[0].getType());
@@ -719,7 +711,7 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
           // lookup main func outputs
           auto fitr = func_outputs.find(out);
           if (fitr != func_outputs.end()) {
-            auto fadj = *fitr->second;
+            auto fadj = fitr->second;
             // fadj.print(llvm::errs());
             types.push_back(fadj);
           }
@@ -738,14 +730,11 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
       auto *op = createOnnxOp(&builder, opFullName, types, operands, attrs);
       block->push_back(op);
       // Pass 5, map the operation by i/o
-      auto op_ptr = std::make_shared<mlir::Operation *>(op);
       for (const auto &inp : node.input())
-        ops_by_inputs.insert({inp, op_ptr});
-      for (int idx = 0; idx < node.output().size(); ++idx) {
-        auto res_ptr = std::make_shared<mlir::Value>(op->getResult(idx));
-        res_by_outputs.insert({node.output()[idx], res_ptr});
-      }
-      ops_by_name.insert({node.name(), op_ptr});
+        ops_by_inputs.insert({inp, op});
+      for (int idx = 0; idx < node.output().size(); ++idx)
+        res_by_outputs.insert({node.output()[idx], op->getResult(idx)});
+      ops_by_node.insert({&node, op});
     }
   }
 
@@ -755,7 +744,7 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
     if (node.input().size() == 0)
       continue;
     // set all operands by inputs
-    auto *node_op = *ops_by_name[node.name()];
+    auto *node_op = ops_by_node[&node];
     for (int idx = 0; idx < node.input().size(); ++idx) {
       // unused one
       if (node.input()[idx].size() == 0)
@@ -763,13 +752,13 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
       // map node input to main func input
       auto f_it = func_inputs.find(node.input()[idx]);
       if (f_it != func_inputs.end()) {
-        mlir::Value arg = *(f_it->second);
+        mlir::Value arg = f_it->second;
         node_op->setOperand(idx, arg);
       }
       // map node input to upper node output
       auto r_it = res_by_outputs.find(node.input()[idx]);
       if (r_it != res_by_outputs.end()) {
-        auto res = *(r_it->second);
+        auto res = r_it->second;
         node_op->setOperand(idx, res);
         continue;
       }
@@ -781,7 +770,7 @@ void ONNXImporter::parse_graph_nodes(const onnx::GraphProto &graph_proto) {
   for (const auto &out : func_outputs) {
     auto r_it = res_by_outputs.find(out.first);
     if (r_it != res_by_outputs.end()) {
-      auto res = *(r_it->second);
+      auto res = r_it->second;
       ret_vals.push_back(res);
     }
   }
