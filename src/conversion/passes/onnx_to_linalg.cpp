@@ -49,6 +49,7 @@
 #include "onnx2mlir/common/onnx.hpp"
 #include "onnx2mlir/conversion/onnx_passes.hpp"
 #include "onnx2mlir/dialect/onnx/Onnx.hpp"
+#include "onnx2mlir/support/support.hpp"
 
 #include "onnx_to_linalg.hpp" // NOLINT
 

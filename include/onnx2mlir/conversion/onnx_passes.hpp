@@ -56,11 +56,6 @@ std::unique_ptr<mlir::Pass> createLowerONNXToLINALGPass();
  *
  */
 
-bool opNameBeginsWith(const llvm::StringRef &opName, llvm::StringRef match);
-
-bool opNameBeginsWith(const llvm::StringRef &opName,
-                      llvm::ArrayRef<llvm::StringRef> matches);
-
 mlir::RankedTensorType getBroadcastShape(mlir::RankedTensorType lhsType,
                                          mlir::RankedTensorType rhsType);
 

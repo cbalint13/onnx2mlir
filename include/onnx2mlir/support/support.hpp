@@ -33,6 +33,8 @@
 #include <llvm/Support/WithColor.h>
 #include <mlir/IR/Builders.h>
 
+#include <regex>
+#include <string>
 #include <source_location>
 
 inline mlir::Location Onnx2Mlir_SrcLoc(
@@ -44,11 +46,29 @@ inline mlir::Location Onnx2Mlir_SrcLoc(
 
 namespace onnx2mlir {
 
+// logging helpers
 inline llvm::raw_ostream &
 error(const std::source_location loc = std::source_location::current()) {
   llvm::errs() << loc.file_name() << ":" << loc.line() << ":" << loc.column()
                << " ";
   return llvm::WithColor::error(llvm::errs());
+}
+
+// op name helpers
+static inline bool opNameBeginsWith(const llvm::StringRef &opName,
+                                    llvm::StringRef match) {
+  auto rExpr = std::regex("^onnx." + match.str() + "(_.*)?$");
+  return std::regex_match(opName.str(), rExpr);
+}
+
+static inline bool opNameBeginsWith(const llvm::StringRef &opName,
+                                    llvm::ArrayRef<llvm::StringRef> matches) {
+  for (const auto &match : matches) {
+    auto rExpr = std::regex("^onnx." + match.str() + "(_.*)?$");
+    if (opNameBeginsWith(opName, match))
+      return true;
+  }
+  return false;
 }
 
 } // namespace onnx2mlir

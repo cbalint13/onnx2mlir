@@ -31,27 +31,8 @@
 #include <mlir/IR/BuiltinTypes.h>
 
 #include <algorithm>
-#include <regex>
-#include <string>
-#include <vector>
 
 namespace onnx2mlir::dialect {
-
-bool opNameBeginsWith(const llvm::StringRef &opName, llvm::StringRef match) {
-  return std::regex_match(opName.str(),
-                          std::regex("^onnx." + match.str() + "(_.*)?$"));
-}
-
-bool opNameBeginsWith(const llvm::StringRef &opName,
-                      llvm::ArrayRef<llvm::StringRef> matches) {
-  for (const auto &match : matches) {
-    if (std::regex_match(opName.str(),
-                         std::regex("^onnx." + match.str() + "(_.*)?$"))) {
-      return true;
-    }
-  }
-  return false;
-}
 
 mlir::RankedTensorType getBroadcastShape(mlir::RankedTensorType lhsType,
                                          mlir::RankedTensorType rhsType) {
