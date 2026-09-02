@@ -30,6 +30,7 @@
 #include <llvm/Support/SourceMgr.h>
 
 #include <mlir/Pass/PassManager.h>
+#include <mlir/Transforms/Passes.h>
 
 #include <map>
 #include <string>
@@ -49,8 +50,15 @@ ONNXConverter::ONNXConverter(const std::map<std::string, std::string> &options)
 
 void ONNXConverter::convert(mlir::ModuleOp *module) {
   bool verbose = false;
+  bool canonicalize = false;
+  bool onnx2linalg = false;
+
   if (opt_args.count("--verbose") > 0)
     verbose = true;
+  if (opt_args.count("--canonicalize") > 0)
+    canonicalize = true;
+  if (opt_args.count("--onnx2linalg") > 0)
+    onnx2linalg = true;
 
   // context
   auto *ctx = module->getContext();
@@ -62,12 +70,19 @@ void ONNXConverter::convert(mlir::ModuleOp *module) {
   // create pass manager
   mlir::PassManager pm(ctx);
 
-  // add Onnx to Linalg
-  pm.addPass(::onnx2mlir::dialect::createLowerONNXToLINALGPass());
-
-  if (verbose) {
+  if (verbose)
     llvm::outs() << "\n";
-    llvm::outs() << "Run passes: ONNX to LINALG\n";
+
+  if (canonicalize) {
+    pm.addPass(mlir::createCanonicalizerPass());
+    if (verbose)
+      llvm::outs() << "Run passes: Canonicalizer\n";
+  }
+
+  if (onnx2linalg) {
+    pm.addPass(::onnx2mlir::dialect::createLowerONNXToLINALGPass());
+    if (verbose)
+      llvm::outs() << "Run passes: ONNX to LINALG\n";
   }
 
   // run all passes

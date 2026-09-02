@@ -39,6 +39,7 @@ def Onnx_Dialect : Dialect {
   let cppNamespace = "::onnx2mlir::dialect::onnx";
   let useDefaultTypePrinterParser = 1;
   let useDefaultAttributePrinterParser = 0;
+  let hasConstantMaterializer = 1;
   let extraClassDeclaration = [{
     private:
       void registerOps();

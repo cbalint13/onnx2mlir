@@ -23,39 +23,37 @@
  *****************************************************************************/
 
 /*!
- * \file include/onnx2mlir/dialect/onnx/OnnxOps.hpp
- * \brief Onnx dialect operations declaration
+ * \file src/dialect/onnx/support/onnx_materialize.cpp
+ * \brief Onnx dialect materialization implementation
  */
 
-#ifndef INCLUDE_ONNX2MLIR_DIALECT_ONNX_ONNXOPS_HPP_
-#define INCLUDE_ONNX2MLIR_DIALECT_ONNX_ONNXOPS_HPP_
-
-#include <mlir/Bytecode/BytecodeOpInterface.h>
+#include <mlir/IR/Builders.h>
+#include <mlir/IR/BuiltinAttributes.h>
 #include <mlir/IR/BuiltinTypes.h>
-#include <mlir/IR/Dialect.h>
-#include <mlir/IR/OpDefinition.h>
-#include <mlir/Interfaces/InferTypeOpInterface.h>
-#include <mlir/Interfaces/SideEffectInterfaces.h>
+#include <mlir/IR/Value.h>
+
+#include "onnx2mlir/dialect/onnx/Onnx.hpp"
 
 namespace onnx2mlir::dialect::onnx {
 
-// fold operation helpers
-mlir::OpFoldResult foldONNXOp(::mlir::Operation *op,
-                              ::llvm::ArrayRef<::mlir::Attribute> operands);
+mlir::Operation *OnnxDialect::materializeConstant(mlir::OpBuilder &builder,
+                                                  mlir::Attribute value,
+                                                  mlir::Type type,
+                                                  mlir::Location loc) {
+  llvm::StringRef valueKey;
+  if (llvm::isa<mlir::DenseElementsAttr>(value))
+    valueKey = "value";
+  else if (llvm::isa<mlir::SparseElementsAttr>(value))
+    valueKey = "sparse_value";
+  else
+    return nullptr;
 
-mlir::OpFoldResult foldONNXOp(::mlir::Operation *op,
-                              ::mlir::DictionaryAttr attrs);
+  mlir::NamedAttribute attrs[] = {
+      builder.getNamedAttr(valueKey, value),
+      builder.getNamedAttr("onnx.origin",
+                           builder.getStringAttr("materializer"))};
 
-template <typename Adaptor>
-inline auto foldONNXOp(mlir::Operation *op, Adaptor adaptor)
-    -> decltype(adaptor.getAttributes(), ::mlir::OpFoldResult()) {
-  return foldONNXOp(op, adaptor.getAttributes());
+  return ConstantOp::create(builder, loc, type, mlir::ValueRange{}, attrs);
 }
 
 } // namespace onnx2mlir::dialect::onnx
-
-#define GET_OP_CLASSES
-#include "dialect/onnx/Onnx.h.inc"
-#undef GET_OP_CLASSES
-
-#endif // INCLUDE_ONNX2MLIR_DIALECT_ONNX_ONNXOPS_HPP_

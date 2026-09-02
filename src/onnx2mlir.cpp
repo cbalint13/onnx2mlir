@@ -71,8 +71,9 @@ static void printModule(const ModuleType &module) {
 static void printUsage() {
   std::cout << std::endl;
   std::cout << "Usage: onnx2mlir <input_onnx_file>\n"
-            << "            [--export-onnx <filename>]\n"
-            << "            [--export-linalg <filename>]\n"
+            << "            [--export-mlir <filename>]\n"
+            << "            [--canonicalize]\n"
+            << "            [--onnx2linalg]\n"
             << "            [--onnx-convert-ops <int : (optional | default is "
             << "max supported)>]\n"
             << "            [--verbose]\n"
@@ -84,8 +85,7 @@ int main(int argc, char **argv) {
   // command-line params
   bool verbose = false;
   std::string ONNXFilename = "";
-  std::string exportONNXFilename = "";
-  std::string exportLinalgFilename = "";
+  std::string exportMLIRFilename = "";
   std::map<std::string, std::string> options;
 
   // command-line parser
@@ -109,24 +109,17 @@ int main(int argc, char **argv) {
       } else if (arg == "--verbose") {
         options[argv[i]] = "";
         verbose = true;
-      } else if (arg == "--export-onnx") {
+      } else if (arg == "--export-mlir") {
         if ((i + 1) < argc && argv[i + 1][0] != '-') {
-          exportONNXFilename = argv[++i];
+          exportMLIRFilename = argv[++i];
         } else {
-          std::cerr << "ERROR: --export-onnx requires a target filename."
+          std::cerr << "ERROR: --export-mlir requires a target filename."
                     << std::endl;
           printUsage();
           exit(-1);
         }
-      } else if (arg == "--export-linalg") {
-        if ((i + 1) < argc && argv[i + 1][0] != '-') {
-          exportLinalgFilename = argv[++i];
-        } else {
-          std::cerr << "ERROR: --export-linalg requires a target filename."
-                    << std::endl;
-          printUsage();
-          exit(-1);
-        }
+      } else if ((arg == "--canonicalize") || (arg == "--onnx2linalg")) {
+        options[argv[i]] = "";
       } else {
         std::cerr << "Unknown argument `" << arg << "`" << std::endl;
         printUsage();
@@ -158,34 +151,19 @@ int main(int argc, char **argv) {
   ONNXLoader.importModule(ONNXFilename, &ctx);
 
   auto module = ONNXLoader.getMLIRModule();
-
-  if (verbose)
-    printModule(module);
-
-  // export ONNX dialect
-  if (!exportONNXFilename.empty()) {
-    if (!saveModuleToFile(module, exportONNXFilename)) {
-      std::cerr << "ERROR: saving ONNX dialect IR" << std::endl;
-      exit(-1);
-    }
-    std::cout << "Saved ONNX dialect IR to: " << exportONNXFilename
-              << std::endl;
-  }
-
-  ONNXConverter.convertModule(ONNXLoader.getMLIRModule());
-
+  ONNXConverter.convertModule(module);
   module = ONNXLoader.getMLIRModule();
 
   if (verbose)
     printModule(module);
 
   // export Linalg dialect
-  if (!exportLinalgFilename.empty()) {
-    if (!saveModuleToFile(module, exportLinalgFilename)) {
-      std::cerr << "ERROR: saving Linalg dialect IR" << std::endl;
+  if (!exportMLIRFilename.empty()) {
+    if (!saveModuleToFile(module, exportMLIRFilename)) {
+      std::cerr << "ERROR: saving MLIR dialect IR" << std::endl;
       exit(-1);
     }
-    std::cout << "Saved Linalg dialect IR to: " << exportLinalgFilename
+    std::cout << "Saved MLIR dialect IR to: " << exportMLIRFilename
               << std::endl;
   }
 

@@ -402,6 +402,9 @@ def main():
         inc.write(f"    int getDefinedResultCount() {{\n")
         inc.write(f"      return %i;\n" % def_results)
         inc.write(f"    }}\n")
+        inc.write(f"    ::mlir::OpFoldResult fold(FoldAdaptor adaptor) {{\n")
+        inc.write(f"      return foldONNXOp(getOperation(), adaptor);\n")
+        inc.write(f"    }}\n")
         inc.write(f"  }}];\n")
 
         inc.write(f"}}\n")

@@ -34,8 +34,8 @@
 #include <mlir/IR/Builders.h>
 
 #include <regex>
-#include <string>
 #include <source_location>
+#include <string>
 
 inline mlir::Location Onnx2Mlir_SrcLoc(
     mlir::OpBuilder &builder,
