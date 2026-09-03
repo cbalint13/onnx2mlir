@@ -58,9 +58,10 @@ static bool saveModuleToFile(const ModuleType &module,
 }
 
 template <typename ModuleType>
-static void printModule(const ModuleType &module) {
+static void printModule(const ModuleType &module, bool elide = true) {
   mlir::OpPrintingFlags flags;
-  flags.elideLargeElementsAttrs(16);
+  if (elide)
+    flags.elideLargeElementsAttrs(16);
   // flags.printLargeElementsAttrWithHex();
   // flags.enableDebugInfo();
   llvm::outs().enable_colors(true);
@@ -76,6 +77,7 @@ static void printUsage() {
             << "            [--onnx2linalg]\n"
             << "            [--onnx-convert-ops <int : (optional | default is "
             << "max supported)>]\n"
+            << "            [--no-elide]\n"
             << "            [--verbose]\n"
             << "            [--help]\n"
             << std::endl;
@@ -83,6 +85,7 @@ static void printUsage() {
 
 int main(int argc, char **argv) {
   // command-line params
+  bool elide = true;
   bool verbose = false;
   std::string ONNXFilename = "";
   std::string exportMLIRFilename = "";
@@ -109,6 +112,8 @@ int main(int argc, char **argv) {
       } else if (arg == "--verbose") {
         options[argv[i]] = "";
         verbose = true;
+      } else if (arg == "--no-elide") {
+        elide = false;
       } else if (arg == "--export-mlir") {
         if ((i + 1) < argc && argv[i + 1][0] != '-') {
           exportMLIRFilename = argv[++i];
@@ -155,7 +160,7 @@ int main(int argc, char **argv) {
   module = ONNXLoader.getMLIRModule();
 
   if (verbose)
-    printModule(module);
+    printModule(module, elide);
 
   // export Linalg dialect
   if (!exportMLIRFilename.empty()) {

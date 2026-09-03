@@ -119,7 +119,9 @@ def main():
         "<style>.op-text { font-family: sans-serif; font-size: 10px; } .ver-text { font-size: 7px; }</style>\n"
         "<style>.domain-text { font-family: sans-serif; font-size: 14px; font-weight: bold; }</style>\n"
     )
-    svg.write("<rect width='100%' height='100%' fill='white' fill-opacity='1.0' stroke='gray' stroke-width='2'/>\n")
+    svg.write(
+        "<rect width='100%' height='100%' fill='white' fill-opacity='1.0' stroke='gray' stroke-width='2'/>\n"
+    )
 
     col_width = 100 // OPS_PER_ROW
     y_offset = SVG_SPACING

@@ -372,10 +372,6 @@ def test_onnx_cast_lower(ONNX_OPSET_VERSION, src_dtype_proto, tgt_dtype_proto, s
             node_kwargs["to"] = str(TensorProto.DataType.Name(tgt_dtype_proto))
         else:
             node_kwargs["to"] = int(tgt_dtype_proto)
-        if ONNX_OPSET_VERSION >= 19:
-            node_kwargs["saturate"] = 1
-        if ONNX_OPSET_VERSION >= 24:
-            node_kwargs["round_mode"] = "up"
 
         cast_node = make_node(
             "Cast", inputs=["input"], outputs=["output"], **node_kwargs
