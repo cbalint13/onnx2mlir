@@ -34,7 +34,7 @@ add_mlir_doc(Onnx OnnxAttrs onnx/ -gen-attrdef-doc)
 add_mlir_doc(Onnx OnnxAttrsInterfaces onnx/ -gen-attr-interface-docs)
 
 # Onnx dialect ops gen
-set(ONNX_MLIR_OPS_GEN "${CMAKE_SOURCE_DIR}/tools/gen_onnx_dia.py")
+set(ONNX_MLIR_OPS_GEN "${CMAKE_SOURCE_DIR}/tools/gen_onnx_dialect.py")
 set(ONNX_MLIR_OPS_TD "${CMAKE_CURRENT_SOURCE_DIR}/OnnxOps.td")
 set(ONNX_MLIR_OPS_INC "${CMAKE_CURRENT_SOURCE_DIR}/OnnxOps.td.inc")
 set(ONNX_MLIR_OPS_CPP "${CMAKE_CURRENT_SOURCE_DIR}/ir/onnx_ops.cpp")
@@ -47,7 +47,7 @@ add_custom_command(
   COMMAND ${CMAKE_COMMAND}
   ARGS -E touch ${ONNX_MLIR_OPS_CPP}
   DEPENDS ${ONNX_MLIR_OPS_GEN}
-  COMMENT "Generating ONNX MLIR Ops using gen_onnx_dia.py"
+  COMMENT "Generating ONNX MLIR Ops using gen_onnx_dialect.py"
 )
 add_custom_target(generate_onnx_ops
   DEPENDS ${ONNX_MLIR_OPS_INC}

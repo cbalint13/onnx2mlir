@@ -146,7 +146,7 @@ add_custom_target(docs
   COMMAND ${CMAKE_COMMAND} -E env
     "PYTHONPATH=${CMAKE_BINARY_DIR}/python:${CMAKE_SOURCE_DIR}/python"
     "PYTHONDONTWRITEBYTECODE=ON"
-    ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/gen_onnx_cov.py
+    ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/gen_onnx_coverge.py
     coverage-onnx2linalg
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/docs
   DEPENDS
