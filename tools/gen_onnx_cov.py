@@ -54,9 +54,11 @@ def main():
     ops_versions = {}
     # map Ops versions
     for schema in defs.get_all_schemas_with_history():
-        if schema.name not in ops_versions:
-            ops_versions[schema.name] = []
-        ops_versions[schema.name].append(int(schema.since_version))
+        domain = schema.domain if schema.domain else "ai.onnx"
+        key = (domain, schema.name)
+        if key not in ops_versions:
+            ops_versions[key] = []
+        ops_versions[key].append(int(schema.since_version))
 
     ##
     ## Operators
@@ -67,23 +69,30 @@ def main():
 
     for schema in defs.get_all_schemas_with_history():
 
+        domain = schema.domain if schema.domain else "ai.onnx"
         opname = schema.name
-        if opname not in onnx_ops:
-            onnx_ops[opname] = [max(ops_versions[schema.name])]
+        key = (domain, opname)
+
+        if domain not in onnx_ops:
+            onnx_ops[domain] = {}
+
+        if opname not in onnx_ops[domain]:
+            onnx_ops[domain][opname] = [max(ops_versions[key])]
 
         # older Op versioning
-        if schema.since_version != max(ops_versions[schema.name]):
-            onnx_ops[opname].append(schema.since_version)
+        if schema.since_version != max(ops_versions[key]):
+            onnx_ops[domain][opname].append(schema.since_version)
 
     ###
-    ### HTML Table
+    ### HTM & SVG Table
     ###
 
     OPS_PER_ROW = 6
     HTM_BOX_HEIGHT = "50px"
     SVG_BOX_WIDTH = 135
     SVG_BOX_HEIGHT = 50
-    SVG_SPACING = 1
+    SVG_SPACING = 0
+    SVG_HEADER_HEIGHT = 35
 
     htm.write("<html><body style='font-family: sans-serif; padding: 20px;'>\n")
 
@@ -96,80 +105,110 @@ def main():
     )
     htm.write("</font></div>\n")
 
-    htm.write(
-        "<table border=2px align=center style='border-collapse: collapse; text-align: center; width: 65%; table-layout: fixed;'>\n"
-    )
-    htm.write("<tr>\n")
-
-    sorted_ops = sorted(onnx_ops.keys())
-    total_rows = (len(sorted_ops) + OPS_PER_ROW - 1) // OPS_PER_ROW
     svg_width = OPS_PER_ROW * (SVG_BOX_WIDTH + SVG_SPACING) + SVG_SPACING
-    svg_height = total_rows * (SVG_BOX_HEIGHT + SVG_SPACING) + SVG_SPACING
+    svg_height = SVG_SPACING
+    for domain in sorted(onnx_ops.keys()):
+        domain_rows = (len(onnx_ops[domain]) + OPS_PER_ROW - 1) // OPS_PER_ROW
+        svg_height += SVG_HEADER_HEIGHT + domain_rows * (SVG_BOX_HEIGHT + SVG_SPACING)
+
     svg.write(
         "<svg width='%i' height='%i' xmlns='http://www.w3.org/2000/svg'>\n"
         % (svg_width, svg_height)
     )
     svg.write(
         "<style>.op-text { font-family: sans-serif; font-size: 10px; } .ver-text { font-size: 7px; }</style>\n"
+        "<style>.domain-text { font-family: sans-serif; font-size: 14px; font-weight: bold; }</style>\n"
     )
+    svg.write("<rect width='100%' height='100%' fill='white' fill-opacity='1.0' stroke='gray' stroke-width='2'/>\n")
 
     col_width = 100 // OPS_PER_ROW
+    y_offset = SVG_SPACING
 
-    for i, op in enumerate(sorted_ops):
-        if i > 0 and i % OPS_PER_ROW == 0:
-            htm.write("</tr>\n<tr>")
+    htm.write(
+        "<table border=2px align=center style='border-collapse: collapse; text-align: center; width: 65%; table-layout: fixed;'>\n"
+    )
 
-        col = i % OPS_PER_ROW
-        row = i // OPS_PER_ROW
-        x = SVG_SPACING + col * (SVG_BOX_WIDTH + SVG_SPACING)
-        y = SVG_SPACING + row * (SVG_BOX_HEIGHT + SVG_SPACING)
-
-        bg_color = "#ccffcc" if op in onnx_lowerable else "#ffcccc"
-
+    for domain in sorted(onnx_ops.keys()):
         htm.write(
-            "  <td style='border: 2px solid gray; width: %i%%; height: %s; vertical-align: middle; word-wrap: break-word; background-color: %s'>\n"
-            % (col_width, HTM_BOX_HEIGHT, bg_color)
+            "<tr><td colspan='%i' style='border: 2px solid gray; background-color: #a2d6ee; padding: 10px;'><b><font size=3>%s</font></b></td></tr>\n"
+            % (OPS_PER_ROW, domain)
         )
-        htm.write("  <font size=2><b>%s</b></font><br>" % op)
+        htm.write("<tr>\n")
 
+        header_width = OPS_PER_ROW * (SVG_BOX_WIDTH + SVG_SPACING) - SVG_SPACING
         svg.write(
-            "  <rect x='%i' y='%i' width='%i' height='%i' fill='%s' stroke='black' stroke-width='2'/>\n"
-            % (x, y, SVG_BOX_WIDTH, SVG_BOX_HEIGHT, bg_color)
+            "  <rect x='%i' y='%i' width='%i' height='%i' fill='#a2d6ee' stroke='gray' stroke-width='2'/>\n"
+            % (SVG_SPACING, y_offset, header_width, SVG_HEADER_HEIGHT - SVG_SPACING)
         )
         svg.write(
-            "  <text x='%i' y='%i' text-anchor='middle' font-weight='bold' class='op-text'>%s</text>\n"
-            % (x + SVG_BOX_WIDTH / 2, y + 25, op)
+            "  <text x='%i' y='%i' text-anchor='middle' class='domain-text'>%s</text>\n"
+            % (svg_width / 2, y_offset + 22, domain)
         )
+        y_offset += SVG_HEADER_HEIGHT
 
-        vers = onnx_ops[op]
-        vers_htm = "<font size=1 color='gray'>[</font>"
-        vers_svg = "["
-        for idx, ver in enumerate(vers):
-            color = "blue" if idx == 0 else "gray"
-            vers_htm += "<font size=1 color='%s'>%s</font>" % (color, ver)
-            vers_svg += "<tspan fill='%s'>%s </tspan>" % (color, ver)
-            if idx < len(vers) - 1:
-                vers_htm += ",&nbsp"
-                vers_svg += ", "
-        vers_htm += "<font size=1 color='gray'>]</font>"
-        vers_svg += "]"
+        sorted_ops = sorted(onnx_ops[domain].keys())
 
-        htm.write("  <sub>%s</sub>\n" % vers_htm)
-        htm.write("  </td>\n")
+        for i, op in enumerate(sorted_ops):
+            if i > 0 and i % OPS_PER_ROW == 0:
+                htm.write("</tr>\n<tr>")
 
-        svg.write(
-            "  <text x='%i' y='%i' text-anchor='middle' class='op-text ver-text'>%s</text>\n"
-            % (x + SVG_BOX_WIDTH / 2, y + 40, vers_svg)
-        )
+            col = i % OPS_PER_ROW
+            row = i // OPS_PER_ROW
+            x = SVG_SPACING + col * (SVG_BOX_WIDTH + SVG_SPACING)
+            y = y_offset + row * (SVG_BOX_HEIGHT + SVG_SPACING)
 
-    remaining = (OPS_PER_ROW - (len(sorted_ops) % OPS_PER_ROW)) % OPS_PER_ROW
-    for _ in range(remaining):
-        htm.write(
-            "  <td style='width: %i%%; height: %s;'></td>\n"
-            % (col_width, HTM_BOX_HEIGHT)
-        )
+            bg_color = "#ccffcc" if op in onnx_lowerable else "#ffcccc"
 
-    htm.write("</tr>\n</table>\n</body></html>\n")
+            htm.write(
+                "  <td style='border: 2px solid gray; width: %i%%; height: %s; vertical-align: middle; word-wrap: break-word; background-color: %s'>\n"
+                % (col_width, HTM_BOX_HEIGHT, bg_color)
+            )
+            htm.write("  <font size=2><b>%s</b></font><br>" % op)
+
+            svg.write(
+                "  <rect x='%i' y='%i' width='%i' height='%i' fill='%s' stroke='gray' stroke-width='2'/>\n"
+                % (x, y, SVG_BOX_WIDTH, SVG_BOX_HEIGHT, bg_color)
+            )
+            svg.write(
+                "  <text x='%i' y='%i' text-anchor='middle' font-weight='bold' class='op-text'>%s</text>\n"
+                % (x + SVG_BOX_WIDTH / 2, y + 25, op)
+            )
+
+            vers = onnx_ops[domain][op]
+            vers_htm = "<font size=1 color='gray'>[</font>"
+            vers_svg = "["
+            for idx, ver in enumerate(vers):
+                color = "blue" if idx == 0 else "gray"
+                vers_htm += "<font size=1 color='%s'>%s</font>" % (color, ver)
+                vers_svg += "<tspan fill='%s'>%s</tspan>" % (color, ver)
+                if idx < len(vers) - 1:
+                    vers_htm += ",&nbsp"
+                    vers_svg += ", "
+            vers_htm += "<font size=1 color='gray'>]</font>"
+            vers_svg += "]"
+
+            htm.write("  <sub>%s</sub>\n" % vers_htm)
+            htm.write("  </td>\n")
+
+            svg.write(
+                "  <text x='%i' y='%i' text-anchor='middle' class='op-text ver-text'>%s</text>\n"
+                % (x + SVG_BOX_WIDTH / 2, y + 40, vers_svg)
+            )
+
+        remaining = (OPS_PER_ROW - (len(sorted_ops) % OPS_PER_ROW)) % OPS_PER_ROW
+        for _ in range(remaining):
+            htm.write(
+                "  <td style='border: none; width: %i%%; height: %s;'></td>\n"
+                % (col_width, HTM_BOX_HEIGHT)
+            )
+
+        htm.write("</tr>\n")
+
+        domain_rows = (len(sorted_ops) + OPS_PER_ROW - 1) // OPS_PER_ROW
+        y_offset += domain_rows * (SVG_BOX_HEIGHT + SVG_SPACING)
+
+    htm.write("</table>\n")
+    htm.write("</body></html>\n")
     svg.write("</svg>\n")
 
 
