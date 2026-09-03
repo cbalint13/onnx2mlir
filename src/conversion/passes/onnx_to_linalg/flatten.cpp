@@ -48,7 +48,6 @@ mlir::LogicalResult
 OnnxToLinalg_FlattenOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
                        const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
-  auto opName = op->getName().getStringRef();
 
   auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 

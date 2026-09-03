@@ -48,7 +48,6 @@ OnnxToLinalg_BatchNormalizationOp(mlir::Operation *op,
                                   mlir::PatternRewriter &rewriter,
                                   const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
-  auto opName = op->getName().getStringRef();
 
   auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 
@@ -66,10 +65,8 @@ OnnxToLinalg_BatchNormalizationOp(mlir::Operation *op,
 
   auto inXDatType = mlir::dyn_cast<mlir::RankedTensorType>(opInputX.getType());
   auto outDatType = mlir::dyn_cast<mlir::RankedTensorType>(opOutput.getType());
-  auto orgDatType = mlir::dyn_cast<mlir::RankedTensorType>(opResult.getType());
 
   auto outElmType = outDatType.getElementType();
-  auto orgElmType = orgDatType.getElementType();
 
   int64_t inputXRank = inXDatType.getRank();
 
@@ -188,7 +185,6 @@ OnnxToLinalg_LayerNormalizationOp(mlir::Operation *op,
                                   mlir::PatternRewriter &rewriter,
                                   const mlir::TypeConverter *typeConverter) {
   auto loc = op->getLoc();
-  auto opName = op->getName().getStringRef();
 
   auto &convRewriter = mlir::cast<mlir::ConversionPatternRewriter>(rewriter);
 
@@ -207,12 +203,10 @@ OnnxToLinalg_LayerNormalizationOp(mlir::Operation *op,
 
   auto inXDatType = mlir::dyn_cast<mlir::RankedTensorType>(opInputX.getType());
   auto outDatType = mlir::dyn_cast<mlir::RankedTensorType>(opOutput.getType());
-  auto orgDatType = mlir::dyn_cast<mlir::RankedTensorType>(opResult.getType());
   auto sclDatType =
       mlir::dyn_cast<mlir::RankedTensorType>(opInpScale.getType());
 
   auto outElmType = outDatType.getElementType();
-  auto orgElmType = orgDatType.getElementType();
 
   int64_t inputXRank = inXDatType.getRank();
   int64_t scaleRank = sclDatType.getRank();
