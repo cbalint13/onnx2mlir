@@ -247,10 +247,13 @@ struct LowerONNXToLINALGPass
       }
       // shaped integer type convert (ui/si -> signless)
       if (auto shapedType = mlir::dyn_cast<mlir::ShapedType>(type)) {
-        mlir::Type elementType = shapedType.getElementType();
-        mlir::Type signlessElt = getSignlessType(elementType);
-        if (signlessElt != elementType) {
-          return shapedType.clone(signlessElt);
+        if (auto intType = mlir::dyn_cast<mlir::IntegerType>(
+                shapedType.getElementType())) {
+          if (!intType.isSignless()) {
+            mlir::Type signlessElt = mlir::IntegerType::get(
+                intType.getContext(), intType.getWidth());
+            return shapedType.clone(signlessElt);
+          }
         }
       }
       // default

@@ -101,7 +101,8 @@ OnnxToLinalg_ConstantOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
   // convert value type to result type
   if (outDatType != typedAttr.getType()) {
     isChanged = true;
-    typedAttr = changeAttrType(valueAttr, outDatType);
+    if (auto denseAttr = mlir::dyn_cast<mlir::DenseElementsAttr>(typedAttr))
+      typedAttr = denseAttr.bitcast(outDatType.getElementType());
   }
 
   /*

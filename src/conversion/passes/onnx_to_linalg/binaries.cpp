@@ -30,6 +30,7 @@
 #include <mlir/Dialect/Arith/IR/Arith.h>
 #include <mlir/Dialect/Linalg/IR/Linalg.h>
 #include <mlir/Dialect/Math/IR/Math.h>
+#include <mlir/Dialect/Traits.h>
 #include <mlir/Dialect/Transform/IR/TransformOps.h>
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Support/LogicalResult.h>
@@ -62,7 +63,8 @@ OnnxToLinalg_BinaryOps(mlir::Operation *op, mlir::PatternRewriter &rewriter,
   auto outDatType = mlir::dyn_cast<mlir::RankedTensorType>(opOutput.getType());
 
   auto dstDatType = mlir::dyn_cast<mlir::RankedTensorType>(opResult.getType());
-  auto bcastShpType = getBroadcastShape(lhsDatType, rhsDatType);
+  auto bcastShpType = mlir::dyn_cast_or_null<mlir::RankedTensorType>(
+      mlir::OpTrait::util::getBroadcastedType(lhsDatType, rhsDatType));
 
   int64_t outputRank = outDatType.getRank();
 
