@@ -1,3 +1,6 @@
+set(LLVM_REQUIRES_EH ON)
+add_definitions(-DONNX_NAMESPACE=onnx -DONNX_ML=${ONNX_USE_ML})
+
 # Onnx tablegen ops, types, attrs
 set(LLVM_TARGET_DEFINITIONS Onnx.td)
 mlir_tablegen(Onnx.h.inc -gen-op-decls -attrdefs-dialect=onnx)

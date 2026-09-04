@@ -39,16 +39,25 @@
 
 namespace onnx2mlir::dialect::onnx {
 
-// fold operation helpers
-mlir::OpFoldResult foldONNXOp(::mlir::Operation *op,
-                              ::llvm::ArrayRef<::mlir::Attribute> operands);
+/*
+ * Shape inference helper
+ */
 
-mlir::OpFoldResult foldONNXOp(::mlir::Operation *op,
-                              ::mlir::DictionaryAttr attrs);
+void inferONNXOpShape(mlir::Operation *op, llvm::StringRef onnxOpName,
+                      int opsetVersion);
+
+/*
+ * Fold operation helpers
+ */
+
+mlir::OpFoldResult foldONNXOp(mlir::Operation *op,
+                              llvm::ArrayRef<mlir::Attribute> operands);
+
+mlir::OpFoldResult foldONNXOp(mlir::Operation *op, mlir::DictionaryAttr attrs);
 
 template <typename Adaptor>
 inline auto foldONNXOp(mlir::Operation *op, Adaptor adaptor)
-    -> decltype(adaptor.getAttributes(), ::mlir::OpFoldResult()) {
+    -> decltype(adaptor.getAttributes(), mlir::OpFoldResult()) {
   return foldONNXOp(op, adaptor.getAttributes());
 }
 

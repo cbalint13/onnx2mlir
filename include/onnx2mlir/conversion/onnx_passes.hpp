@@ -38,6 +38,7 @@
 #include <vector>
 
 namespace mlir {
+#define GEN_PASS_DEF_INFERONNXSHAPESPASS
 #define GEN_PASS_DEF_LOWERONNXTOLINALGPASS
 #include "conversion/Passes.h.inc"
 } // namespace mlir
@@ -48,23 +49,17 @@ namespace onnx2mlir::dialect {
  *  Onnx to Linalg
  *
  */
+
 std::vector<std::string> registerLowerONNXToLINALGPass();
 std::unique_ptr<mlir::Pass> createLowerONNXToLINALGPass();
 
 /*
- * Common utilities
+ *  Onnx shapes inference
  *
  */
 
-mlir::RankedTensorType getBroadcastShape(mlir::RankedTensorType lhsType,
-                                         mlir::RankedTensorType rhsType);
-
-mlir::Type getSignlessType(mlir::Type type);
-
-mlir::TypedAttr changeAttrType(mlir::Attribute attr, mlir::Type dstType);
-
-mlir::Value createArithConstant(mlir::OpBuilder &builder, mlir::Location loc,
-                                mlir::Type type, mlir::Attribute attr);
+void registerInferONNXShapesPass();
+std::unique_ptr<mlir::Pass> createInferONNXShapesPass();
 
 } // namespace onnx2mlir::dialect
 

@@ -45,4 +45,19 @@ def OPCountInfo : OpInterface<"OPCountInfo"> {
   ];
 }
 
+def ShapeInferenceOpInterface : OpInterface<"ShapeInferenceOpInterface"> {
+  let description = [{
+    Interface to implement shape inference for ONNX operations.
+  }];
+
+  let cppNamespace = "::onnx2mlir::dialect::onnx";
+
+  let methods = [
+    InterfaceMethod<
+      "Infer dynamic shapes and update result types",
+      "void", "inferShapes", (ins)
+    >
+  ];
+}
+
 #endif // ONNX2MLIR_DIALECT_ONNX_ONNXINTERFACES_TD_

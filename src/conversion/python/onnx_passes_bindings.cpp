@@ -45,4 +45,9 @@ NB_MODULE(_onnx2mlirOnnxPasses, m) {
         return s;
       },
       "Registers the ONNX to Linalg conversion pass.");
+
+  m.def(
+      "register_onnx_infer_shapes_pass",
+      []() { onnx2mlir::dialect::registerInferONNXShapesPass(); },
+      "Registers the ONNX shapes inference pass.");
 }

@@ -21,6 +21,7 @@ if(BUILD_PYTHON_BINDINGS)
       ${PY_OUTPUT_PATH}
     LINK_LIBS
       onnx2mlir_onnx_dialect
+      onnx2mlir_onnx_infershapes_pass
       onnx2mlir_onnx_linalg_pass
       MLIRPythonCAPI
   )

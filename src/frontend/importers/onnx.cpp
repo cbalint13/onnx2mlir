@@ -880,6 +880,7 @@ void ONNXImporter::import(const std::string &file_or_string,
       llvm::outs() << "ONNX model data: " << file_or_string.length()
                    << " bytes <serialized>\n";
   } else {
+    llvm::outs() << "ONNX model loading: " << file_or_string << "\n";
     std::ifstream model_file(file_or_string, std::ios::binary);
     if (!model_file.is_open()) {
       onnx2mlir::error() << "Error opening file: " << file_or_string << "\n";
@@ -942,11 +943,8 @@ void ONNXImporter::import(const std::string &file_or_string,
 
   const onnx::GraphProto &graph_proto = model_proto.graph();
 
-  if (verbose) {
-    llvm::outs() << "\n";
+  if (verbose)
     llvm::outs() << "ONNX graph name: " << graph_proto.name() << "\n";
-    llvm::outs() << "\n";
-  }
 
   /*
    * MLIR ONNX

@@ -24,7 +24,7 @@
 
 /*!
  * \file src/conversion/onnx_to_linalg.cpp
- * \brief Onnx to Linalg dialect conversion
+ * \brief ONNX to Linalg dialect conversion
  */
 
 #include <mlir/Dialect/Arith/IR/Arith.h>
@@ -46,7 +46,6 @@
 #include <utility>
 #include <vector>
 
-#include "onnx2mlir/common/onnx.hpp"
 #include "onnx2mlir/conversion/onnx_passes.hpp"
 #include "onnx2mlir/dialect/onnx/Onnx.hpp"
 #include "onnx2mlir/support/support.hpp"

@@ -41,4 +41,13 @@ def LowerONNXToLINALGPass : Pass<"lower-onnx-to-linalg", "ModuleOp"> {
   let constructor = "createLowerONNXToLINALGPass()";
 }
 
+def InferONNXShapesPass : Pass<"infer-onnx-shapes", "ModuleOp"> {
+  let summary = "Infer ONNX operations unknown shapes";
+  let description = [{
+    This pass infers ONNX operations having unknown shapes.
+  }];
+
+  let constructor = "createInferONNXShapesPass()";
+}
+
 #endif // ONNX2MLIR_CONVERSION_PASSES_TD_

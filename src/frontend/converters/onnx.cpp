@@ -51,12 +51,15 @@ ONNXConverter::ONNXConverter(const std::map<std::string, std::string> &options)
 void ONNXConverter::convert(mlir::ModuleOp *module) {
   bool verbose = false;
   bool canonicalize = false;
+  bool infershapes = false;
   bool onnx2linalg = false;
 
   if (opt_args.count("--verbose") > 0)
     verbose = true;
   if (opt_args.count("--canonicalize") > 0)
     canonicalize = true;
+  if (opt_args.count("--infershapes") > 0)
+    infershapes = true;
   if (opt_args.count("--onnx2linalg") > 0)
     onnx2linalg = true;
 
@@ -76,13 +79,19 @@ void ONNXConverter::convert(mlir::ModuleOp *module) {
   if (canonicalize) {
     pm.addPass(mlir::createCanonicalizerPass());
     if (verbose)
-      llvm::outs() << "Run passes: Canonicalizer\n";
+      llvm::outs() << "Run pass: ONNX canonicalizer\n";
+  }
+
+  if (infershapes) {
+    pm.addPass(::onnx2mlir::dialect::createInferONNXShapesPass());
+    if (verbose)
+      llvm::outs() << "Run pass: ONNX shape inference\n";
   }
 
   if (onnx2linalg) {
     pm.addPass(::onnx2mlir::dialect::createLowerONNXToLINALGPass());
     if (verbose)
-      llvm::outs() << "Run passes: ONNX to LINALG\n";
+      llvm::outs() << "Run pass: ONNX to Linalg lowering\n";
   }
 
   // run all passes

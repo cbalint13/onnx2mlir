@@ -6,6 +6,7 @@ add_library(onnx2mlir_converters
 target_link_libraries(onnx2mlir_converters
   PRIVATE
     onnx2mlir_onnx_linalg_pass
+    onnx2mlir_onnx_infershapes_pass
   PUBLIC
     MLIR
     LLVM

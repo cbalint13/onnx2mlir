@@ -24,11 +24,11 @@
 
 /*!
  * \file src/conversion/onnx_to_linalg.hpp
- * \brief MLIR to Linalg operators conversion
+ * \brief ONNX to Linalg operators conversion
  */
 
-#ifndef SRC_CONVERSION_PASSES_ONNX_TO_LINALG_HPP_
-#define SRC_CONVERSION_PASSES_ONNX_TO_LINALG_HPP_
+#ifndef SRC_CONVERSION_PASSES_ONNX_TO_LINALG_ONNX_TO_LINALG_HPP_
+#define SRC_CONVERSION_PASSES_ONNX_TO_LINALG_ONNX_TO_LINALG_HPP_
 
 #include <mlir/IR/PatternMatch.h>
 
@@ -156,4 +156,4 @@ OnnxToLinalg_WhereOp(mlir::Operation *op, mlir::PatternRewriter &rewriter,
 
 } // namespace onnx2mlir::dialect
 
-#endif // SRC_CONVERSION_PASSES_ONNX_TO_LINALG_HPP_
+#endif // SRC_CONVERSION_PASSES_ONNX_TO_LINALG_ONNX_TO_LINALG_HPP_

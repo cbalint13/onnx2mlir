@@ -30,7 +30,6 @@
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinAttributes.h>
 #include <mlir/IR/BuiltinTypes.h>
-#include <mlir/IR/Value.h>
 
 #include "onnx2mlir/dialect/onnx/Onnx.hpp"
 

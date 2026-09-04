@@ -236,6 +236,9 @@ def main():
         if schema.name == "Constant":
             opinterfaces += ", ConstantLike"
 
+        if schema.has_type_and_shape_inference_function:
+            opinterfaces += ", ShapeInferenceOpInterface"
+
         if any(
             inp.option == defs.OpSchema.FormalParameterOption.Optional
             for inp in schema.inputs
@@ -405,6 +408,13 @@ def main():
         inc.write(f"    ::mlir::OpFoldResult fold(FoldAdaptor adaptor) {{\n")
         inc.write(f"      return foldONNXOp(getOperation(), adaptor);\n")
         inc.write(f"    }}\n")
+        if schema.has_type_and_shape_inference_function:
+            inc.write(f"    void inferShapes() {{\n")
+            inc.write(
+                f'      return inferONNXOpShape(getOperation(), "%s", %i);\n'
+                % (schema.name, schema.since_version)
+            )
+            inc.write(f"    }}\n")
         inc.write(f"  }}];\n")
 
         inc.write(f"}}\n")

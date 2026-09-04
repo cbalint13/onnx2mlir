@@ -44,8 +44,8 @@ static bool saveModuleToFile(const ModuleType &module,
   std::error_code ec;
   llvm::raw_fd_ostream outputStream(filename, ec, llvm::sys::fs::OF_None);
   if (ec) {
-    std::cerr << "ERROR: Failed to open file '" << filename
-              << "' for writing: " << ec.message() << std::endl;
+    llvm::errs() << "ERROR: Failed to open file '" << filename
+                 << "' for writing: " << ec.message() << "\n";
     return false;
   }
   // export to file
@@ -64,23 +64,26 @@ static void printModule(const ModuleType &module, bool elide = true) {
     flags.elideLargeElementsAttrs(16);
   // flags.printLargeElementsAttrWithHex();
   // flags.enableDebugInfo();
+  llvm::outs() << "\n";
   llvm::outs().enable_colors(true);
   module->print(llvm::outs(), flags);
   llvm::outs().enable_colors(false);
 }
 
 static void printUsage() {
-  std::cout << std::endl;
-  std::cout << "Usage: onnx2mlir <input_onnx_file>\n"
-            << "            [--export-mlir <filename>]\n"
-            << "            [--canonicalize]\n"
-            << "            [--onnx2linalg]\n"
-            << "            [--onnx-convert-ops <int : (optional | default is "
-            << "max supported)>]\n"
-            << "            [--no-elide]\n"
-            << "            [--verbose]\n"
-            << "            [--help]\n"
-            << std::endl;
+  llvm::outs() << "\n";
+  llvm::outs()
+      << "Usage: onnx2mlir <input_onnx_file>\n"
+      << "            [--export-mlir <filename>]\n"
+      << "            [--canonicalize]\n"
+      << "            [--infershapes]\n"
+      << "            [--onnx2linalg]\n"
+      << "            [--onnx-convert-ops <int : (optional | default is "
+      << "max supported)>]\n"
+      << "            [--no-elide]\n"
+      << "            [--verbose]\n"
+      << "            [--help]\n"
+      << "\n";
 }
 
 int main(int argc, char **argv) {
@@ -118,15 +121,15 @@ int main(int argc, char **argv) {
         if ((i + 1) < argc && argv[i + 1][0] != '-') {
           exportMLIRFilename = argv[++i];
         } else {
-          std::cerr << "ERROR: --export-mlir requires a target filename."
-                    << std::endl;
+          llvm::errs() << "ERROR: --export-mlir requires a target filename.\n";
           printUsage();
           exit(-1);
         }
-      } else if ((arg == "--canonicalize") || (arg == "--onnx2linalg")) {
+      } else if ((arg == "--canonicalize") || (arg == "--infershapes") ||
+                 (arg == "--onnx2linalg")) {
         options[argv[i]] = "";
       } else {
-        std::cerr << "Unknown argument `" << arg << "`" << std::endl;
+        llvm::errs() << "ERROR: Unknown argument `" << arg << "`" << "\n";
         printUsage();
         exit(-1);
       }
@@ -140,7 +143,7 @@ int main(int argc, char **argv) {
 
   // check input file
   if (!ONNXFilename.size()) {
-    std::cout << "ERROR: missing onnx_file" << std::endl;
+    llvm::errs() << "ERROR: missing onnx_file\n";
     printUsage();
     exit(-1);
   }
@@ -149,8 +152,6 @@ int main(int argc, char **argv) {
       onnx2mlir::Importer<onnx2mlir::frontend::ONNXImporter>(options);
   auto ONNXConverter =
       onnx2mlir::Converter<onnx2mlir::frontend::ONNXConverter>(options);
-
-  std::cout << "Loading ONNX file: " << ONNXFilename << std::endl;
 
   mlir::MLIRContext ctx;
   ONNXLoader.importModule(ONNXFilename, &ctx);
@@ -162,17 +163,17 @@ int main(int argc, char **argv) {
   if (verbose)
     printModule(module, elide);
 
-  // export Linalg dialect
+  // export MLIR IR
   if (!exportMLIRFilename.empty()) {
     if (!saveModuleToFile(module, exportMLIRFilename)) {
-      std::cerr << "ERROR: saving MLIR dialect IR" << std::endl;
+      llvm::errs() << "ERROR: Saving MLIR IR\n";
       exit(-1);
     }
-    std::cout << "Saved MLIR dialect IR to: " << exportMLIRFilename
-              << std::endl;
+    llvm::outs() << "Saved MLIR IR to: " << exportMLIRFilename << "\n";
   }
 
-  std::cout << "Program finished succesfully." << std::endl;
+  llvm::outs() << "\n";
+  llvm::outs() << "Program finished successfully.\n";
 
   return 0;
 }

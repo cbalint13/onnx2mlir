@@ -38,6 +38,13 @@
 #include <algorithm>
 #include <string>
 
+#include "onnx2mlir/dialect/onnx/OnnxTypes.hpp"
+#include "onnx2mlir/support/support.hpp"
+
+/*
+ *  Onnx to Mlir
+ */
+
 static inline mlir::Type OnnxToMlir_dType(const int32_t data_type_int,
                                           mlir::MLIRContext *ctx) {
   switch (data_type_int) {
@@ -74,7 +81,7 @@ static inline mlir::Type OnnxToMlir_dType(const int32_t data_type_int,
   case onnx::TensorProto_DataType_UINT64:
     return mlir::IntegerType::get(ctx, 64, mlir::IntegerType::Unsigned);
   case onnx::TensorProto_DataType_STRING:
-    return mlir::NoneType::get(ctx);
+    return onnx2mlir::dialect::onnx::OnnxStringType::get(ctx);
   case onnx::TensorProto_DataType_FLOAT16:
     return mlir::Float16Type::get(ctx);
   case onnx::TensorProto_DataType_DOUBLE:
@@ -113,8 +120,8 @@ static inline mlir::Type OnnxToMlir_dType(const int32_t data_type_int,
     return mlir::NoneType::get(ctx);
 
   default:
-    llvm::errs() << "ERROR: Unknown ONNX data type integer value: "
-                 << data_type_int << "\n";
+    onnx2mlir::error() << "Unknown ONNX data type integer value: "
+                       << data_type_int << "\n";
     exit(-1);
   }
 
@@ -128,12 +135,104 @@ static inline mlir::Type OnnxToMlir_dType(const std::string data_type_str,
                  [](unsigned char c) { return std::tolower(c); });
   auto data_type_int = onnx::PrimitiveTypeNameMap::Lookup(lcase_str);
   if (data_type_int == onnx::TensorProto_DataType_UNDEFINED) {
-    llvm::errs() << "ERROR: Unsupported ONNX data type string: '"
-                 << data_type_str << "'\n";
+    onnx2mlir::error() << "Unsupported ONNX data type string: '"
+                       << data_type_str << "'\n";
     exit(-1);
   }
 
   return OnnxToMlir_dType(data_type_int, ctx);
+}
+
+/*
+ *  Mlir to Onnx
+ */
+
+static inline int32_t MlirToOnnx_dType(mlir::Type type) {
+  if (type.isF32())
+    return onnx::TensorProto_DataType_FLOAT;
+  if (type.isF64())
+    return onnx::TensorProto_DataType_DOUBLE;
+  if (type.isF16())
+    return onnx::TensorProto_DataType_FLOAT16;
+  if (type.isBF16())
+    return onnx::TensorProto_DataType_BFLOAT16;
+  if (llvm::isa<mlir::Float8E4M3FNType>(type))
+    return onnx::TensorProto_DataType_FLOAT8E4M3FN;
+  if (llvm::isa<mlir::Float8E4M3FNUZType>(type))
+    return onnx::TensorProto_DataType_FLOAT8E4M3FNUZ;
+  if (llvm::isa<mlir::Float8E5M2Type>(type))
+    return onnx::TensorProto_DataType_FLOAT8E5M2;
+  if (llvm::isa<mlir::Float8E5M2FNUZType>(type))
+    return onnx::TensorProto_DataType_FLOAT8E5M2FNUZ;
+#if ONNX2MLIR_ONNX_VERSION >= 120
+#if ONNX2MLIR_MLIR_VERSION >= 220
+  if (llvm::isa<mlir::Float8E8M0FNUType>(type))
+    return onnx::TensorProto_DataType_FLOAT8E8M0;
+#endif
+#endif
+#if ONNX2MLIR_ONNX_VERSION >= 123
+#if ONNX2MLIR_MLIR_VERSION >= 220
+  if (llvm::isa<mlir::Float6E2M3FNType>(type))
+    return onnx::TensorProto_DataType_FLOAT6E2M3;
+  if (llvm::isa<mlir::Float6E3M2FNType>(type))
+    return onnx::TensorProto_DataType_FLOAT6E3M2;
+#endif
+#endif
+  if (llvm::isa<mlir::Float4E2M1FNType>(type))
+    return onnx::TensorProto_DataType_FLOAT4E2M1;
+  if (auto complexType = llvm::dyn_cast<mlir::ComplexType>(type)) {
+    auto elementType = complexType.getElementType();
+    if (elementType.isF32())
+      return onnx::TensorProto_DataType_COMPLEX64;
+    if (elementType.isF64())
+      return onnx::TensorProto_DataType_COMPLEX128;
+  }
+  if (type.isInteger(1))
+    return onnx::TensorProto_DataType_BOOL;
+#if ONNX2MLIR_ONNX_VERSION >= 121
+  if (type.isInteger(2))
+    return type.isSignedInteger() ? onnx::TensorProto_DataType_INT2
+                                  : onnx::TensorProto_DataType_UINT2;
+#endif
+  if (type.isInteger(4))
+    return type.isSignedInteger() ? onnx::TensorProto_DataType_INT4
+                                  : onnx::TensorProto_DataType_UINT4;
+  if (type.isInteger(8))
+    return type.isSignedInteger() ? onnx::TensorProto_DataType_INT8
+                                  : onnx::TensorProto_DataType_UINT8;
+  if (type.isInteger(16))
+    return type.isSignedInteger() ? onnx::TensorProto_DataType_INT16
+                                  : onnx::TensorProto_DataType_UINT16;
+  if (type.isInteger(32))
+    return type.isSignedInteger() ? onnx::TensorProto_DataType_INT32
+                                  : onnx::TensorProto_DataType_UINT32;
+  if (type.isInteger(64))
+    return type.isSignedInteger() ? onnx::TensorProto_DataType_INT64
+                                  : onnx::TensorProto_DataType_UINT64;
+
+  onnx2mlir::error() << "Unknown Mlir to Onnx data type conversion: " << type
+                     << "\n";
+  exit(-1);
+}
+
+static inline void MlirToOnnx_dType(mlir::Type mlirType,
+                                    onnx::TypeProto &onnxType) {
+  auto tensorType = llvm::dyn_cast<mlir::TensorType>(mlirType);
+  if (!tensorType)
+    return;
+
+  auto *tensorProto = onnxType.mutable_tensor_type();
+  tensorProto->set_elem_type(MlirToOnnx_dType(tensorType.getElementType()));
+
+  if (tensorType.hasRank()) {
+    auto *shapeProto = tensorProto->mutable_shape();
+    for (int64_t dim : tensorType.getShape()) {
+      auto *dimProto = shapeProto->add_dim();
+      if (dim >= 0) {
+        dimProto->set_dim_value(dim);
+      }
+    }
+  }
 }
 
 #endif // INCLUDE_ONNX2MLIR_COMMON_ONNX_HPP_
